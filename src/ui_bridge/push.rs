@@ -14,8 +14,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     let network = &state.network;
     let at = |id| state.positions.get(&id).copied().unwrap_or_default();
     let view = |d: &Device, dimmed| {
-        let role = convert::role_label(&labels, &d.role);
-        convert::device_view(d, role, network.icon(d), at(d.id), dimmed)
+        let role = convert::role_label(&labels, network, &d.role);
+        convert::device_view(network, d, role, at(d.id), dimmed)
     };
 
     let nodes = network.devices().iter().map(|d| {
@@ -43,12 +43,12 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_selection(&bridge, &labels, state);
 }
 
-/// The role dropdown's names and the Roles tab's rows.
+/// The role dropdown's names, the Roles tab's rows and the groups they can be in.
 fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, network: &Network) {
     let roles = network.roles();
     let names: Vec<SharedString> = roles
         .iter()
-        .map(|r| convert::role_label(labels, r))
+        .map(|r| convert::role_label(labels, network, r))
         .collect();
     let rows = roles
         .iter()
@@ -61,6 +61,18 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, network: &Network) {
     if let Some(model) = sync(&bridge.get_roles(), names) {
         bridge.set_roles(model);
     }
+    bridge.set_roles_restorable(network.standard_roles_changed());
+
+    let groups = convert::group_views(network);
+    let choices = std::iter::once(labels.invoke_no_group())
+        .chain(groups.iter().map(|g| g.name.clone()))
+        .collect();
+    if let Some(model) = sync(&bridge.get_group_choices(), choices) {
+        bridge.set_group_choices(model);
+    }
+    if let Some(model) = sync(&bridge.get_groups(), groups) {
+        bridge.set_groups(model);
+    }
 }
 
 fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
@@ -72,7 +84,7 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
             bridge.set_name_draft(device.name.as_str().into());
             bridge.set_notes_draft(device.notes.as_str().into());
         }
-        let role = convert::role_label(labels, &device.role);
+        let role = convert::role_label(labels, &state.network, &device.role);
         bridge.set_details(convert::details(&state.network, device, role));
         let roles = state.network.roles();
         let index = roles

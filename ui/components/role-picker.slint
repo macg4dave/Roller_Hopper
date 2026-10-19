@@ -1,13 +1,12 @@
-import { Button, ComboBox, LineEdit } from "std-widgets.slint";
-import { Bridge, DeviceKind } from "../bridge.slint";
+import { Button, ComboBox } from "std-widgets.slint";
+import { Bridge } from "../bridge.slint";
 import { Theme } from "../theme.slint";
-import { IconPicker } from "icon-picker.slint";
+import { NewRole } from "new-role.slint";
 
 // Role dropdown for the selected device, with a way to add a custom role and pick its icon.
 // The role decides the icon the device is shown with.
 export component RolePicker inherits VerticalLayout {
     property <bool> adding;
-    property <DeviceKind> new-icon;
 
     horizontal-stretch: 1;
     spacing: Theme.space-xs;
@@ -26,46 +25,17 @@ export component RolePicker inherits VerticalLayout {
             colorize-icon: true;
             accessible-label: @tr("role-picker.add-custom");
             enabled: !adding;
-            clicked => {
-                // Start from the icon the device was detected with.
-                new-icon = Bridge.details.kind;
-                adding = true;
-            }
+            clicked => { adding = true; }
         }
     }
 
-    if adding: VerticalLayout {
-        spacing: Theme.space-xs;
-        HorizontalLayout {
-            spacing: Theme.space-xs;
-            new-role := LineEdit {
-                placeholder-text: @tr("role-picker.new-role");
-                min-width: 100px;
-                init => { self.focus(); }
-                accepted(text) => {
-                    Bridge.add-role(text, new-icon);
-                    adding = false;
-                }
-            }
-            Button {
-                text: @tr("role-picker.add");
-                primary: true;
-                enabled: new-role.text != "";
-                clicked => {
-                    Bridge.add-role(new-role.text, new-icon);
-                    adding = false;
-                }
-            }
-            Button {
-                icon: @image-url("../icons/close.svg");
-                colorize-icon: true;
-                accessible-label: @tr("role-picker.cancel");
-                clicked => { adding = false; }
-            }
+    if adding: NewRole {
+        // Start from the icon the device was detected with.
+        icon: Bridge.details.kind;
+        add(name, icon) => {
+            Bridge.choose-new-role(name, icon);
+            adding = false;
         }
-        IconPicker {
-            selected: new-icon;
-            picked(icon) => { new-icon = icon; }
-        }
+        cancel => { adding = false; }
     }
 }

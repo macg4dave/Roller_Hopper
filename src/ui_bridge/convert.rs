@@ -4,8 +4,8 @@
 use slint::SharedString;
 
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, Network, Point, Positions, Role, Status,
-    StatusFilter, route,
+    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Network, Point, Positions, Role,
+    Status, StatusFilter, route,
 };
 use crate::ui::{self, Labels};
 
@@ -20,6 +20,11 @@ const PAD_BOTTOM: f32 = 80.0;
 pub(super) fn ui_id(id: DeviceId) -> i32 {
     // Ids come from our own data and stay far below i32::MAX; -1 means "no device" to the UI.
     i32::try_from(id.0).unwrap_or(-1)
+}
+
+/// A list index from the UI; a negative one is out of range of every list.
+pub(super) fn index(index: i32) -> usize {
+    usize::try_from(index).unwrap_or(usize::MAX)
 }
 
 pub(super) fn device_id(id: i32) -> Option<DeviceId> {
@@ -61,7 +66,7 @@ fn kind(kind: DeviceKind) -> ui::DeviceKind {
     }
 }
 
-/// The icon picked for a new custom role.
+/// An icon picked in the UI.
 pub(super) fn kind_from_ui(kind: ui::DeviceKind) -> DeviceKind {
     match kind {
         ui::DeviceKind::Router => DeviceKind::Router,
@@ -89,8 +94,11 @@ fn status(status: Status) -> ui::DeviceStatus {
     }
 }
 
-/// The role as shown to the user: translated for standard roles, as typed for custom ones.
-pub(super) fn role_label(labels: &Labels<'_>, role: &Role) -> SharedString {
+/// The role as shown to the user: as typed if the user named it, otherwise translated.
+pub(super) fn role_label(labels: &Labels<'_>, network: &Network, role: &Role) -> SharedString {
+    if let Some(name) = network.role_name(role) {
+        return name.into();
+    }
     let standard = match role {
         Role::Router => ui::RoleKind::Router,
         Role::Switch => ui::RoleKind::Switch,
@@ -109,10 +117,35 @@ pub(super) fn role_label(labels: &Labels<'_>, role: &Role) -> SharedString {
     labels.invoke_role(standard)
 }
 
+fn colour(colour: Option<GroupColour>) -> ui::GroupColour {
+    match colour {
+        None => ui::GroupColour::None,
+        Some(GroupColour::Red) => ui::GroupColour::Red,
+        Some(GroupColour::Orange) => ui::GroupColour::Orange,
+        Some(GroupColour::Yellow) => ui::GroupColour::Yellow,
+        Some(GroupColour::Green) => ui::GroupColour::Green,
+        Some(GroupColour::Blue) => ui::GroupColour::Blue,
+        Some(GroupColour::Purple) => ui::GroupColour::Purple,
+    }
+}
+
+/// A colour picked in the UI; `None` takes the group's colour away.
+pub(super) fn colour_from_ui(colour: ui::GroupColour) -> Option<GroupColour> {
+    match colour {
+        ui::GroupColour::None => None,
+        ui::GroupColour::Red => Some(GroupColour::Red),
+        ui::GroupColour::Orange => Some(GroupColour::Orange),
+        ui::GroupColour::Yellow => Some(GroupColour::Yellow),
+        ui::GroupColour::Green => Some(GroupColour::Green),
+        ui::GroupColour::Blue => Some(GroupColour::Blue),
+        ui::GroupColour::Purple => Some(GroupColour::Purple),
+    }
+}
+
 pub(super) fn device_view(
+    network: &Network,
     device: &Device,
     role: SharedString,
-    icon: DeviceKind,
     at: Point,
     dimmed: bool,
 ) -> ui::DeviceView {
@@ -122,7 +155,8 @@ pub(super) fn device_view(
         name: device.name.trim().into(),
         ip: device.ip.to_string().into(),
         role,
-        icon: kind(icon),
+        icon: kind(network.icon(device)),
+        colour: colour(network.colour(device)),
         status: status(device.status),
         x: at.x,
         y: at.y,
@@ -133,13 +167,17 @@ pub(super) fn device_view(
 /// A role for the Roles tab, with `label` as shown in the role dropdown.
 pub(super) fn role_view(network: &Network, role: &Role, label: SharedString) -> ui::RoleView {
     let icon = network.role_icon(role);
-    let devices = network.devices().iter().filter(|d| d.role == *role).count();
+    // Choice 0 in the group dropdown is "no group"; the groups follow in order.
+    let group = network.role_group(role).and_then(|group| {
+        let position = network.groups().iter().position(|(id, _)| id == group)?;
+        i32::try_from(position + 1).ok()
+    });
     ui::RoleView {
         name: label,
         icon: kind(icon.unwrap_or(DeviceKind::Unknown)),
         has_icon: icon.is_some(),
-        devices: i32::try_from(devices).unwrap_or(i32::MAX),
-        custom: matches!(role, Role::Custom(_)),
+        deletable: *role != Role::Other,
+        group: group.unwrap_or(0),
     }
 }
 
@@ -168,6 +206,18 @@ pub(super) fn details(network: &Network, device: &Device, role: SharedString) ->
         uplink_inferred: uplink.is_some_and(|(_, inferred)| inferred),
         services: services.join(", ").into(),
     }
+}
+
+/// The Groups tab's rows, in order.
+pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
+    let groups = network.groups();
+    groups
+        .iter()
+        .map(|(id, name)| ui::GroupView {
+            name: name.into(),
+            colour: colour(groups.colour(id)),
+        })
+        .collect()
 }
 
 /// SVG path commands for every connection, grouped by line style.

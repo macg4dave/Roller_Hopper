@@ -1,0 +1,45 @@
+import { GroupColour } from "../bridge.slint";
+import { Labels } from "../labels.slint";
+import { Theme } from "../theme.slint";
+
+// A row of colour dots. Picking the chosen dot again takes the colour away. Reports the choice
+// through `picked` and leaves applying it to the owner.
+export component ColourPicker inherits HorizontalLayout {
+    in property <GroupColour> selected;
+    callback picked(GroupColour);
+    property <length> dot: 16px;
+    property <[GroupColour]> colours: [
+        GroupColour.red, GroupColour.orange, GroupColour.yellow,
+        GroupColour.green, GroupColour.blue, GroupColour.purple,
+    ];
+
+    spacing: Theme.space-xs;
+    alignment: start;
+
+    for colour in colours: Rectangle {
+        property <bool> chosen: colour == selected;
+        property <GroupColour> next: chosen ? GroupColour.none : colour;
+        width: dot + 6px;
+        height: self.width;
+        border-radius: self.width / 2;
+        // A ring around the chosen dot, so the choice does not rely on colour alone.
+        border-width: chosen ? 1.5px : touch.has-hover ? 1px : 0;
+        border-color: chosen ? Theme.text : Theme.border;
+        accessible-role: button;
+        accessible-label: Labels.group-colour(colour);
+        accessible-checkable: true;
+        accessible-checked: chosen;
+        accessible-action-default => { root.picked(next); }
+
+        touch := TouchArea {
+            clicked => { root.picked(next); }
+        }
+
+        Rectangle {
+            width: dot;
+            height: dot;
+            border-radius: dot / 2;
+            background: Theme.group-colour(colour, transparent);
+        }
+    }
+}

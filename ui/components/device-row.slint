@@ -13,7 +13,7 @@ export component DeviceRow inherits Rectangle {
 
     height: Theme.row-height;
     border-radius: Theme.radius;
-    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : Theme.group-tint(device.colour);
     accessible-role: list-item;
     accessible-label: Labels.device-name(device.name);
     accessible-item-selected: selected;
@@ -31,7 +31,7 @@ export component DeviceRow inherits Rectangle {
         DeviceIcon {
             kind: device.icon;
             width: 26px;
-            colorize: selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon;
+            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
         }
 
         VerticalLayout {

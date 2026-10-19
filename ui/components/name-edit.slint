@@ -1,0 +1,24 @@
+import { LineEdit } from "std-widgets.slint";
+
+// A name field that commits on Enter or when it loses focus, then shows whatever name the owner
+// ended up with, which is unchanged if the new name was refused.
+export component NameEdit inherits LineEdit {
+    in property <string> name;
+    callback commit(string);
+
+    text: name;
+
+    function apply() {
+        if self.text != name {
+            root.commit(self.text);
+        }
+        self.text = name;
+    }
+
+    accepted => { apply(); }
+    changed has-focus => {
+        if !self.has-focus {
+            apply();
+        }
+    }
+}

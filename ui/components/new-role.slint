@@ -1,0 +1,39 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { DeviceKind } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { IconPicker } from "icon-picker.slint";
+
+// A name and icon for a new role. Reports them through `add` and leaves adding to the owner.
+export component NewRole inherits VerticalLayout {
+    in-out property <DeviceKind> icon;
+    callback add(string, DeviceKind);
+    callback cancel();
+
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        name := LineEdit {
+            placeholder-text: @tr("new-role.name");
+            min-width: 100px;
+            init => { self.focus(); }
+            accepted(text) => { root.add(text, icon); }
+        }
+        Button {
+            text: @tr("new-role.add");
+            primary: true;
+            enabled: name.text != "";
+            clicked => { root.add(name.text, icon); }
+        }
+        Button {
+            icon: @image-url("../icons/close.svg");
+            colorize-icon: true;
+            accessible-label: @tr("new-role.cancel");
+            clicked => { root.cancel(); }
+        }
+    }
+    IconPicker {
+        selected: icon;
+        picked(icon) => { root.icon = icon; }
+    }
+}

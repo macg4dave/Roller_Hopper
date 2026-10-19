@@ -1,12 +1,37 @@
 // Design tokens. Every colour and size used by the UI comes from here.
+import { GroupColour } from "bridge.slint";
 
 export global Theme {
+    // A group's colour, strong enough for line art on white; `otherwise` when it has none.
+    public pure function group-colour(colour: GroupColour, otherwise: color) -> color {
+        if colour == GroupColour.red { return #c42b1c; }
+        if colour == GroupColour.orange { return #ca5010; }
+        if colour == GroupColour.yellow { return #b58900; }
+        if colour == GroupColour.green { return #107c10; }
+        if colour == GroupColour.blue { return #0063b1; }
+        if colour == GroupColour.purple { return #8764b8; }
+        return otherwise;
+    }
+
+    // A pale wash of a group's colour, behind its devices' rows.
+    public pure function group-tint(colour: GroupColour) -> color {
+        if colour == GroupColour.red { return #fbeceb; }
+        if colour == GroupColour.orange { return #fcefe6; }
+        if colour == GroupColour.yellow { return #fbf5dc; }
+        if colour == GroupColour.green { return #e8f4e8; }
+        if colour == GroupColour.blue { return #e5f0fa; }
+        if colour == GroupColour.purple { return #f1edf8; }
+        return transparent;
+    }
+
     // Surfaces
     out property <color> background: #f7f8fa;
     out property <color> surface: #ffffff;
     out property <color> border: #e3e6eb;
     out property <color> hover: #f1f3f6;
     out property <color> grid: #eceff3;
+    // Every other row of a table, so each line is easy to follow.
+    out property <color> stripe: #f4f6f9;
 
     // Text and line art
     out property <color> text: #1f2328;

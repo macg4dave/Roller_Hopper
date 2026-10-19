@@ -91,9 +91,9 @@ impl Role {
         Self::Other,
     ];
 
-    /// The icon a standard role gives its devices. `Other` keeps the detected icon, and a custom
-    /// role's icon is stored with the network's custom roles.
-    pub(crate) fn icon(&self) -> Option<DeviceKind> {
+    /// The icon a standard role starts with, until the user changes it. `Other` keeps the
+    /// detected icon, and a custom role's icon is picked when it is added.
+    pub(crate) fn default_icon(&self) -> Option<DeviceKind> {
         match self {
             Self::Router => Some(DeviceKind::Router),
             Self::Switch => Some(DeviceKind::Switch),
@@ -223,7 +223,7 @@ mod tests {
             DeviceKind::Unknown,
         ];
         for kind in kinds {
-            let icon = kind.default_role().icon().unwrap_or(kind);
+            let icon = kind.default_role().default_icon().unwrap_or(kind);
             assert_eq!(icon, kind, "{kind:?}");
         }
     }

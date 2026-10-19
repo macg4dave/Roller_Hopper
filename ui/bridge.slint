@@ -11,6 +11,9 @@ export enum StatusFilter { all, online, offline }
 // The standard roles; custom roles are sent as the user typed them.
 export enum RoleKind { router, switch, access-point, server, nas, desktop, laptop, phone, printer, camera, iot, other }
 
+// A group's colour; `none` leaves its devices in the usual colours.
+export enum GroupColour { none, red, orange, yellow, green, blue, purple }
+
 /// One device as drawn on the map and in the list. `x`/`y` are map units (icon centre).
 export struct DeviceView {
     id: int,
@@ -20,6 +23,8 @@ export struct DeviceView {
     role: string,
     // Follows the role; the detected kind when the role has no icon of its own.
     icon: DeviceKind,
+    // The colour of the role's group.
+    colour: GroupColour,
     status: DeviceStatus,
     x: float,
     y: float,
@@ -51,15 +56,23 @@ export struct DeviceDetails {
     services: string,
 }
 
-/// A role on the edit page's Roles tab.
+/// A role on the edit page's Roles tab, in the same order as Bridge.roles.
 export struct RoleView {
-    // Translated for standard roles; as typed (and used to identify it) for custom ones.
+    // As shown in the role dropdown: translated, unless the user named it.
     name: string,
     icon: DeviceKind,
-    // False for roles whose devices keep their own detected icon (Other).
+    // False when the role's devices keep their own detected icon.
     has-icon: bool,
-    devices: int,
-    custom: bool,
+    // Other cannot be deleted: it is where devices of a deleted role go.
+    deletable: bool,
+    // Index in Bridge.group-choices: 0 for no group.
+    group: int,
+}
+
+/// A group on the edit page's Groups tab, in the same order as Bridge.groups.
+export struct GroupView {
+    name: string,
+    colour: GroupColour,
 }
 
 /// SVG path commands for the connection lines, in map units.
@@ -87,6 +100,11 @@ export global Bridge {
     in property <DeviceDetails> details;
     in property <[string]> roles;
     in property <[RoleView]> role-list;
+    // A standard role was renamed, re-iconed or deleted.
+    in property <bool> roles-restorable;
+    // The Groups tab's rows, and their names led by "no group" for the role group dropdown.
+    in property <[GroupView]> groups;
+    in property <[string]> group-choices;
     in property <StatusFilter> filter;
     in property <int> count-all;
     in property <int> count-online;
@@ -105,18 +123,31 @@ export global Bridge {
     callback set-filter(StatusFilter);
     callback rename(string);
     callback choose-role(int);
-    // A new custom role's name and the icon picked for it.
-    callback add-role(string, DeviceKind);
+    // Adds a role, with the icon picked for it, and gives it to the selected device.
+    callback choose-new-role(string, DeviceKind);
     callback edit-notes(string);
     // The selected device's own icon, or back to its role's icon.
     callback set-icon(DeviceKind);
     callback reset-icon();
     // Removes the selected device until the app restarts.
     callback forget();
-    // Custom roles, identified by their current name.
-    callback rename-role(string, string);
-    callback set-role-icon(string, DeviceKind);
-    callback delete-role(string);
+    // The Roles tab. Roles are identified by their index in role-list.
+    callback add-role(string, DeviceKind);
+    callback rename-role(int, string);
+    callback set-role-icon(int, DeviceKind);
+    // The role's devices keep their own detected icon.
+    callback clear-role-icon(int);
+    callback delete-role(int);
+    // Standard roles back as they were, including deleted ones.
+    callback restore-roles();
+    // A role and its index in group-choices.
+    callback set-role-group(int, int);
+    // The Groups tab. Groups are identified by their index in groups.
+    callback add-group(string);
+    callback rename-group(int, string);
+    callback set-group-colour(int, GroupColour);
+    // The group's roles are left in no group.
+    callback delete-group(int);
     callback move-device(int, float, float);
     callback reset-layout();
     callback scan();

@@ -329,6 +329,10 @@ pub(crate) fn network() -> Network {
             device.role = role;
         }
     }
+    // Example groups, as if the user had made them; every role starts in none.
+    for name in ["Infrastructure", "Office", "Home", "Media"] {
+        network.add_group(name);
+    }
     network
 }
 

@@ -4,6 +4,7 @@
 @docs/agents/product.md
 @docs/agents/rust.md
 @docs/agents/slint.md
+@docs/agents/tooling.md
 
 ## Claude Code specifics
 

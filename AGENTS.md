@@ -19,6 +19,7 @@ Each guide is short. Read the ones your task touches **before** editing; when un
 | [docs/agents/product.md](docs/agents/product.md) | Any feature or UI work — product brief, scope limits, definition of done |
 | [docs/agents/rust.md](docs/agents/rust.md) | Touching `src/`, `build.rs` or `Cargo.toml` |
 | [docs/agents/slint.md](docs/agents/slint.md) | Touching `ui/`, `translations/` or `src/ui_bridge.rs` |
+| [docs/agents/tooling.md](docs/agents/tooling.md) | Before any shell command other than `cargo`/`git`/`rustfmt`, wanting a script, or touching `tools/` |
 
 ## Project layout
 
@@ -32,6 +33,7 @@ src/mock_data.rs   the sample network
 src/ui_bridge.rs   model ↔ Slint struct conversion and callback handlers
 ui/                .slint files: app window, panels, canvas, components/, icons/, theme
 translations/      all UI text: one gettext .po file per language (English in en/)
+tools/             agent tooling: Rust wrappers around established crates (jq, grep, …)
 docs/agents/       the agent guides linked above
 ```
 

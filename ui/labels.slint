@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { DeviceKind, DeviceStatus, RoleKind } from "bridge.slint";
+import { DeviceKind, DeviceStatus, GroupColour, RoleKind } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -62,6 +62,21 @@ export global Labels {
         }
         let days = Math.floor(minutes / 1440);
         return @tr("last-seen.days" | "last-seen.days.plural" % days);
+    }
+
+    // First in the role group dropdown. Rust calls this to build that list.
+    public pure function no-group() -> string {
+        return @tr("groups.none");
+    }
+
+    public pure function group-colour(colour: GroupColour) -> string {
+        if colour == GroupColour.red { return @tr("groups.colour.red"); }
+        if colour == GroupColour.orange { return @tr("groups.colour.orange"); }
+        if colour == GroupColour.yellow { return @tr("groups.colour.yellow"); }
+        if colour == GroupColour.green { return @tr("groups.colour.green"); }
+        if colour == GroupColour.blue { return @tr("groups.colour.blue"); }
+        if colour == GroupColour.purple { return @tr("groups.colour.purple"); }
+        return @tr("groups.colour.none");
     }
 
     public pure function uplink(name: string, inferred: bool) -> string {

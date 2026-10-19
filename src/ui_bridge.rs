@@ -16,7 +16,8 @@ use slint::{ComponentHandle, Model, SharedString, Timer, Weak};
 
 use crate::mock_data;
 use crate::model::{
-    Device, DeviceId, DeviceKind, Network, Point, Positions, StatusFilter, tree_layout,
+    Device, DeviceId, DeviceKind, GroupId, Network, Point, Positions, Role, StatusFilter,
+    tree_layout,
 };
 use crate::ui::{AppWindow, Bridge};
 use push::push;
@@ -55,33 +56,66 @@ impl AppState {
         }
     }
 
+    fn role(&self, index: usize) -> Option<Role> {
+        self.network.roles().into_iter().nth(index)
+    }
+
     fn choose_role(&mut self, index: usize) {
-        if let Some(role) = self.network.roles().into_iter().nth(index) {
+        if let Some(role) = self.role(index) {
             self.edit_selected(|d| d.role = role);
         }
     }
 
-    /// Assigns the role named `name`, adding it as a custom role shown with `icon` unless it
-    /// matches one of the roles `shown` in the dropdown (which are translated, so only the UI
-    /// knows their names). A matching role keeps its own icon.
-    fn add_role(&mut self, name: &str, icon: DeviceKind, shown: &[SharedString]) {
+    /// Adds the role named `name`, shown with `icon`, unless it matches one of the roles `shown`
+    /// in the dropdown (which may be translated, so only the UI knows their names). Returns the
+    /// index of the new or matching role; a matching role keeps its own icon.
+    fn add_role(&mut self, name: &str, icon: DeviceKind, shown: &[SharedString]) -> Option<usize> {
         let lower = name.trim().to_lowercase();
         if let Some(index) = shown.iter().position(|r| r.trim().to_lowercase() == lower) {
-            self.choose_role(index);
-        } else if let Some(role) = self.network.add_custom_role(name, icon) {
-            self.edit_selected(|d| d.role = role);
+            return Some(index);
         }
+        let role = self.network.add_custom_role(name, icon)?;
+        self.network.roles().iter().position(|r| *r == role)
     }
 
-    /// Renames custom role `old`, unless `new` is the name of another role `shown` in the
+    /// Renames the role at `index`, unless `new` is the name of another role `shown` in the
     /// dropdown, such as a translated standard role.
-    fn rename_role(&mut self, old: &str, new: &str, shown: &[SharedString]) {
+    fn rename_role(&mut self, index: usize, new: &str, shown: &[SharedString]) {
         let lower = new.trim().to_lowercase();
         let clash = shown
             .iter()
-            .any(|r| r.as_str() != old && r.trim().to_lowercase() == lower);
+            .enumerate()
+            .any(|(i, r)| i != index && r.trim().to_lowercase() == lower);
         if !clash {
-            self.network.rename_custom_role(old, new);
+            self.edit_role(index, |network, role| network.rename_role(role, new));
+        }
+    }
+
+    fn edit_role(&mut self, index: usize, edit: impl FnOnce(&mut Network, &Role)) {
+        if let Some(role) = self.role(index) {
+            edit(&mut self.network, &role);
+        }
+    }
+
+    fn group(&self, index: usize) -> Option<GroupId> {
+        self.network.groups().iter().nth(index).map(|(id, _)| id)
+    }
+
+    /// Puts the role at `index` in the group at `choice` in the group dropdown, where 0 is none.
+    fn set_role_group(&mut self, index: usize, choice: usize) {
+        let group = match choice.checked_sub(1) {
+            None => None,
+            Some(group) => match self.group(group) {
+                Some(id) => Some(id),
+                None => return,
+            },
+        };
+        self.edit_role(index, |network, role| network.set_role_group(role, group));
+    }
+
+    fn edit_group(&mut self, index: usize, edit: impl FnOnce(&mut Network, GroupId)) {
+        if let Some(group) = self.group(index) {
+            edit(&mut self.network, group);
         }
     }
 
@@ -114,6 +148,7 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     }));
     connect_device_edits(ui, state);
     connect_role_edits(ui, state);
+    connect_group_edits(ui, state);
 
     let reset = handler(ui, state, |st, ()| st.positions = tree_layout(&st.network));
     bridge.on_reset_layout(move || reset(()));
@@ -145,18 +180,16 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         st.edit_selected(|d| d.notes = notes.into());
     }));
     bridge.on_choose_role(handler(ui, state, |st, index| {
-        st.choose_role(usize::try_from(index).unwrap_or(usize::MAX));
+        st.choose_role(convert::index(index));
     }));
-    let add_role = handler(
-        ui,
-        state,
-        |st, (name, icon, shown): (SharedString, DeviceKind, Vec<SharedString>)| {
-            st.add_role(&name, icon, &shown);
-        },
-    );
+    let choose_new = handler(ui, state, |st, (name, icon, shown): NewRole| {
+        if let Some(index) = st.add_role(&name, icon, &shown) {
+            st.choose_role(index);
+        }
+    });
     let ui_weak = ui.as_weak();
-    bridge.on_add_role(move |name, icon| {
-        add_role((name, convert::kind_from_ui(icon), shown_roles(&ui_weak)));
+    bridge.on_choose_new_role(move |name, icon| {
+        choose_new((name, convert::kind_from_ui(icon), shown_roles(&ui_weak)));
     });
     bridge.on_set_icon(handler(ui, state, |st, icon| {
         st.edit_selected(|d| d.icon = Some(convert::kind_from_ui(icon)));
@@ -167,24 +200,73 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_forget(move || forget(()));
 }
 
-/// Renaming, re-iconing and deleting custom roles.
+/// A new role's name and icon, with the role names the dropdown shows.
+type NewRole = (SharedString, DeviceKind, Vec<SharedString>);
+
+/// The Roles tab: adding, renaming, re-iconing, deleting and restoring roles.
 fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
+    let add = handler(ui, state, |st, (name, icon, shown): NewRole| {
+        // The index is only needed when a device is to get the new role.
+        st.add_role(&name, icon, &shown);
+    });
+    let add_ui = ui.as_weak();
+    bridge.on_add_role(move |name, icon| {
+        add((name, convert::kind_from_ui(icon), shown_roles(&add_ui)));
+    });
     let rename = handler(
         ui,
         state,
-        |st, (old, new, shown): (SharedString, SharedString, Vec<SharedString>)| {
-            st.rename_role(&old, &new, &shown);
+        |st, (index, new, shown): (i32, SharedString, Vec<SharedString>)| {
+            st.rename_role(convert::index(index), &new, &shown);
         },
     );
-    let ui_weak = ui.as_weak();
-    bridge.on_rename_role(move |old, new| rename((old, new, shown_roles(&ui_weak))));
-    let set_icon = handler(ui, state, |st, (name, icon): (SharedString, DeviceKind)| {
-        st.network.set_custom_role_icon(&name, icon);
+    let rename_ui = ui.as_weak();
+    bridge.on_rename_role(move |index, new| rename((index, new, shown_roles(&rename_ui))));
+    let set_icon = Rc::new(handler(
+        ui,
+        state,
+        |st, (index, icon): (i32, Option<DeviceKind>)| {
+            st.edit_role(convert::index(index), |n, role| n.set_role_icon(role, icon));
+        },
+    ));
+    let clear_icon = Rc::clone(&set_icon);
+    bridge.on_set_role_icon(move |index, icon| {
+        set_icon((index, Some(convert::kind_from_ui(icon))));
     });
-    bridge.on_set_role_icon(move |name, icon| set_icon((name, convert::kind_from_ui(icon))));
-    bridge.on_delete_role(handler(ui, state, |st, name: SharedString| {
-        st.network.remove_custom_role(&name);
+    bridge.on_clear_role_icon(move |index| clear_icon((index, None)));
+    bridge.on_delete_role(handler(ui, state, |st, index| {
+        st.edit_role(convert::index(index), Network::remove_role);
+    }));
+    let restore = handler(ui, state, |st, ()| st.network.restore_standard_roles());
+    bridge.on_restore_roles(move || restore(()));
+}
+
+/// The Groups tab, and choosing a role's group on the Roles tab.
+fn connect_group_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    let set_group = handler(ui, state, |st, (role, choice)| {
+        st.set_role_group(convert::index(role), convert::index(choice));
+    });
+    bridge.on_set_role_group(move |role, choice| set_group((role, choice)));
+    bridge.on_add_group(handler(ui, state, |st, name: SharedString| {
+        st.network.add_group(&name);
+    }));
+    let rename = handler(ui, state, |st, (index, new): (i32, SharedString)| {
+        st.edit_group(convert::index(index), |n, group| {
+            n.rename_group(group, &new);
+        });
+    });
+    bridge.on_rename_group(move |index, new| rename((index, new)));
+    let set_colour = handler(ui, state, |st, (index, colour)| {
+        let colour = convert::colour_from_ui(colour);
+        st.edit_group(convert::index(index), |n, group| {
+            n.set_group_colour(group, colour);
+        });
+    });
+    bridge.on_set_group_colour(move |index, colour| set_colour((index, colour)));
+    bridge.on_delete_group(handler(ui, state, |st, index| {
+        st.edit_group(convert::index(index), Network::remove_group);
     }));
 }
 
@@ -215,7 +297,6 @@ fn update(ui: &Weak<AppWindow>, state: &RefCell<AppState>, change: impl FnOnce(&
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Role;
 
     fn state_with(selected: u32) -> AppState {
         let mut state = AppState::new(mock_data::network());
@@ -277,40 +358,100 @@ mod tests {
     }
 
     #[test]
-    fn adding_a_role_that_is_already_shown_selects_it_instead() {
+    fn adding_a_role_that_is_already_shown_finds_it_instead() {
         let mut state = state_with(10);
         let shown = shown_roles(&state);
         let before = state.network.roles().len();
-        state.add_role(" serveur ", DeviceKind::Tv, &shown);
-        assert_eq!(selected_role(&state), Some(Role::Server));
+        let index = state.add_role(" serveur ", DeviceKind::Tv, &shown);
+        assert_eq!(index.and_then(|i| state.role(i)), Some(Role::Server));
         assert_eq!(state.network.roles().len(), before, "nothing added");
     }
 
     #[test]
-    fn adding_a_custom_role_gives_the_device_that_role_and_its_icon() {
+    fn a_new_role_comes_last_with_its_icon() {
         let mut state = state_with(10);
         let shown = shown_roles(&state);
-        state.add_role("Media", DeviceKind::Server, &shown);
-        assert_eq!(selected_role(&state), Some(Role::Custom("Media".into())));
+        let media = Role::Custom("Media".into());
+        let index = state.add_role("Media", DeviceKind::Server, &shown);
+        assert_eq!(index, Some(state.network.roles().len() - 1));
+        assert_eq!(state.network.role_icon(&media), Some(DeviceKind::Server));
         assert_eq!(
-            state.network.roles().last(),
-            Some(&Role::Custom("Media".into()))
+            selected_role(&state),
+            Some(Role::Custom("TV".into())),
+            "unchanged"
         );
-        let device = state.network.device(DeviceId(10)).unwrap();
-        assert_eq!(state.network.icon(device), DeviceKind::Server);
+    }
+
+    /// Where a role sits in the dropdown.
+    fn index_of(state: &AppState, role: &Role) -> usize {
+        state
+            .network
+            .roles()
+            .iter()
+            .position(|r| r == role)
+            .unwrap()
     }
 
     #[test]
-    fn a_custom_role_cannot_take_a_standard_role_name() {
+    fn a_role_cannot_take_the_name_of_another_shown_role() {
         let mut state = state_with(10);
         let shown = shown_roles(&state);
-        state.rename_role("TV", "imprimante", &shown);
+        let tv = index_of(&state, &Role::Custom("TV".into()));
+        state.rename_role(tv, "imprimante", &shown);
         assert_eq!(selected_role(&state), Some(Role::Custom("TV".into())));
-        state.rename_role("TV", "tv", &shown);
+        state.rename_role(tv, "tv", &shown);
         assert_eq!(
             selected_role(&state),
             Some(Role::Custom("tv".into())),
             "own name"
+        );
+        let router = index_of(&state, &Role::Router);
+        state.rename_role(router, "Serveur", &shown);
+        assert_eq!(state.network.role_name(&Role::Router), None);
+        state.rename_role(router, "Passerelle", &shown);
+        assert_eq!(state.network.role_name(&Role::Router), Some("Passerelle"));
+    }
+
+    #[test]
+    fn role_edits_out_of_range_change_nothing() {
+        let mut state = AppState::new(mock_data::network());
+        let before = state.network.clone();
+        state.edit_role(999, Network::remove_role);
+        state.rename_role(999, "Anything", &[]);
+        assert_eq!(state.network, before);
+    }
+
+    #[test]
+    fn a_role_is_put_in_a_group_by_dropdown_choice() {
+        let mut state = AppState::new(mock_data::network());
+        let printer = index_of(&state, &Role::Printer);
+        let second = state.group(1);
+        assert!(second.is_some());
+        state.set_role_group(printer, 2);
+        assert_eq!(state.network.role_group(&Role::Printer), second);
+        state.set_role_group(printer, 999);
+        assert_eq!(
+            state.network.role_group(&Role::Printer),
+            second,
+            "out of range"
+        );
+        state.set_role_group(printer, 0);
+        assert_eq!(state.network.role_group(&Role::Printer), None);
+    }
+
+    #[test]
+    fn deleting_a_group_leaves_its_roles_in_none() {
+        let mut state = AppState::new(mock_data::network());
+        let printer = index_of(&state, &Role::Printer);
+        state.set_role_group(printer, 1);
+        state.edit_group(0, Network::remove_group);
+        assert_eq!(state.network.role_group(&Role::Printer), None);
+        assert!(
+            state
+                .network
+                .groups()
+                .iter()
+                .all(|(_, n)| n != "Infrastructure")
         );
     }
 

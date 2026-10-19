@@ -54,7 +54,7 @@ export component MapNode inherits Rectangle {
                     height: icon-size * detail;
                     transform-origin: { x: 0, y: 0 };
                     transform-scale: 1 / detail;
-                    colorize: selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon;
+                    colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
                 }
 
                 StatusDot {

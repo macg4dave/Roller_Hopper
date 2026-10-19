@@ -1,10 +1,10 @@
-import { Button, ListView, TabWidget } from "std-widgets.slint";
-import { Bridge } from "bridge.slint";
+import { Button, TabWidget } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { DeviceEditor } from "device-editor.slint";
-import { RoleRow } from "components/role-row.slint";
+import { GroupEditor } from "group-editor.slint";
+import { RoleEditor } from "role-editor.slint";
 
-// The edit page that replaces the map view: devices on one tab, roles on the other.
+// The edit page that replaces the map view: a tab each for devices, roles and groups.
 export component EditPage inherits Rectangle {
     callback back();
 
@@ -44,17 +44,14 @@ export component EditPage inherits Rectangle {
                 title: @tr("edit.tab-roles");
                 VerticalLayout {
                     padding-top: Theme.space-m;
-                    spacing: Theme.space-m;
-                    Text {
-                        text: @tr("roles.intro");
-                        font-size: Theme.font-body;
-                        color: Theme.text-muted;
-                        wrap: word-wrap;
-                    }
-                    ListView {
-                        vertical-stretch: 1;
-                        for role in Bridge.role-list: RoleRow { role: role; }
-                    }
+                    RoleEditor { }
+                }
+            }
+            Tab {
+                title: @tr("edit.tab-groups");
+                VerticalLayout {
+                    padding-top: Theme.space-m;
+                    GroupEditor { }
                 }
             }
         }

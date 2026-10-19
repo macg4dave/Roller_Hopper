@@ -1,0 +1,97 @@
+import { Button, LineEdit, ListView } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { NameEdit } from "components/name-edit.slint";
+import { ColourPicker } from "components/colour-picker.slint";
+
+// Edit page, Groups tab: the groups roles can be sorted into, with a way to add one.
+export component GroupEditor inherits VerticalLayout {
+    property <bool> adding;
+
+    spacing: Theme.space-m;
+
+    Text {
+        text: @tr("groups.intro");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+    ListView {
+        vertical-stretch: 1;
+        // Groups are identified to Rust by their index in Bridge.groups.
+        for group[i] in Bridge.groups: Rectangle {
+            height: Theme.row-height;
+            border-radius: Theme.radius;
+            background: Math.mod(i, 2) == 1 ? Theme.stripe : transparent;
+
+            HorizontalLayout {
+                padding-left: Theme.space-s;
+                padding-right: Theme.space-s;
+                spacing: Theme.space-m;
+                alignment: start;
+                VerticalLayout {
+                    alignment: center;
+                    width: 260px;
+                    NameEdit {
+                        name: group.name;
+                        accessible-label: @tr("groups.name");
+                        commit(text) => { Bridge.rename-group(i, text); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ColourPicker {
+                        selected: group.colour;
+                        picked(colour) => { Bridge.set-group-colour(i, colour); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        icon: @image-url("icons/delete.svg");
+                        colorize-icon: true;
+                        accessible-label: @tr("groups.delete");
+                        clicked => { Bridge.delete-group(i); }
+                    }
+                }
+            }
+        }
+    }
+    if !adding: HorizontalLayout {
+        alignment: start;
+        Button {
+            text: @tr("groups.add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            clicked => { adding = true; }
+        }
+    }
+    if adding: HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space-xs;
+        name := LineEdit {
+            width: 260px;
+            placeholder-text: @tr("groups.new");
+            init => { self.focus(); }
+            accepted(text) => {
+                Bridge.add-group(text);
+                adding = false;
+            }
+        }
+        Button {
+            text: @tr("groups.confirm-add");
+            primary: true;
+            enabled: name.text != "";
+            clicked => {
+                Bridge.add-group(name.text);
+                adding = false;
+            }
+        }
+        Button {
+            icon: @image-url("icons/close.svg");
+            colorize-icon: true;
+            accessible-label: @tr("groups.cancel");
+            clicked => { adding = false; }
+        }
+    }
+}

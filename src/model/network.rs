@@ -1,7 +1,8 @@
-//! The network as a whole: devices, how they connect, and the roles on offer.
+//! The network as a whole: devices, how they connect, the roles on offer and their groups.
 
 use super::device::{Device, DeviceId, DeviceKind, Role, Status};
-use super::roles::CustomRoles;
+use super::groups::{GroupColour, GroupId, Groups};
+use super::roles::Roles;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,7 +42,8 @@ impl StatusFilter {
 pub(crate) struct Network {
     devices: Vec<Device>,
     connections: Vec<Connection>,
-    custom_roles: CustomRoles,
+    roles: Roles,
+    groups: Groups,
 }
 
 impl Network {
@@ -49,7 +51,8 @@ impl Network {
         Self {
             devices,
             connections,
-            custom_roles: CustomRoles::default(),
+            roles: Roles::default(),
+            groups: Groups::default(),
         }
     }
 
@@ -101,19 +104,17 @@ impl Network {
 
     /// Standard roles followed by the custom ones, in the order they were added.
     pub(crate) fn roles(&self) -> Vec<Role> {
-        Role::STANDARD
-            .into_iter()
-            .chain(self.custom_roles.roles())
-            .collect()
+        self.roles.roles().cloned().collect()
+    }
+
+    /// The name the user gave a role; `None` for a standard role still shown translated.
+    pub(crate) fn role_name(&self, role: &Role) -> Option<&str> {
+        self.roles.name(role)
     }
 
     /// The icon a role gives its devices; `None` when they keep their detected icon.
     pub(crate) fn role_icon(&self, role: &Role) -> Option<DeviceKind> {
-        if let Role::Custom(name) = role {
-            self.custom_roles.icon(name)
-        } else {
-            role.icon()
-        }
+        self.roles.icon(role)
     }
 
     /// The icon shown for a device: the one picked for it, else its role's, else the detected one.
@@ -124,34 +125,81 @@ impl Network {
             .unwrap_or(device.kind)
     }
 
-    /// Adds a custom role shown with `icon`, and returns it (see [`CustomRoles::add`]).
+    /// Adds a custom role shown with `icon`, and returns it (see [`Roles::add`]).
     pub(crate) fn add_custom_role(&mut self, name: &str, icon: DeviceKind) -> Option<Role> {
-        self.custom_roles.add(name, icon)
+        self.roles.add(name, icon)
     }
 
-    /// Renames a custom role on every device that has it. Blank or taken names are ignored.
-    pub(crate) fn rename_custom_role(&mut self, old: &str, new: &str) {
-        let Some(new) = self.custom_roles.rename(old, new) else {
+    /// Renames a role, on every device that has it. Blank or taken names are ignored.
+    pub(crate) fn rename_role(&mut self, role: &Role, new: &str) {
+        let Some(renamed) = self.roles.rename(role, new) else {
             return;
         };
-        let old = Role::Custom(old.to_owned());
-        for device in self.devices.iter_mut().filter(|d| d.role == old) {
-            device.role = Role::Custom(new.clone());
+        for device in self.devices.iter_mut().filter(|d| d.role == *role) {
+            device.role = renamed.clone();
         }
     }
 
-    pub(crate) fn set_custom_role_icon(&mut self, name: &str, icon: DeviceKind) {
-        self.custom_roles.set_icon(name, icon);
+    /// Sets the icon a role gives its devices; `None` lets each keep its detected icon.
+    pub(crate) fn set_role_icon(&mut self, role: &Role, icon: Option<DeviceKind>) {
+        self.roles.set_icon(role, icon);
     }
 
-    /// Deletes a custom role; its devices go back to `Other` and their own icon.
-    pub(crate) fn remove_custom_role(&mut self, name: &str) {
-        if self.custom_roles.remove(name) {
-            let old = Role::Custom(name.to_owned());
-            for device in self.devices.iter_mut().filter(|d| d.role == old) {
+    /// Deletes a role; its devices go back to Other. Other itself cannot be deleted.
+    pub(crate) fn remove_role(&mut self, role: &Role) {
+        if self.roles.remove(role) {
+            for device in self.devices.iter_mut().filter(|d| d.role == *role) {
                 device.role = Role::Other;
             }
         }
+    }
+
+    /// Whether [`Self::restore_standard_roles`] would change anything.
+    pub(crate) fn standard_roles_changed(&self) -> bool {
+        self.roles.standard_changed()
+    }
+
+    /// Brings back the standard roles' names and icons, and any that were deleted. Devices moved
+    /// to Other by a deletion stay there.
+    pub(crate) fn restore_standard_roles(&mut self) {
+        self.roles.restore_standard();
+    }
+
+    pub(crate) fn groups(&self) -> &Groups {
+        &self.groups
+    }
+
+    pub(crate) fn add_group(&mut self, name: &str) -> Option<GroupId> {
+        self.groups.add(name)
+    }
+
+    pub(crate) fn rename_group(&mut self, group: GroupId, new: &str) {
+        self.groups.rename(group, new);
+    }
+
+    /// Deletes a group; its roles are left in no group.
+    pub(crate) fn remove_group(&mut self, group: GroupId) {
+        self.groups.remove(group);
+        self.roles.leave_group(group);
+    }
+
+    pub(crate) fn role_group(&self, role: &Role) -> Option<GroupId> {
+        self.roles.group(role)
+    }
+
+    /// Puts a role in a group, or in none.
+    pub(crate) fn set_role_group(&mut self, role: &Role, group: Option<GroupId>) {
+        self.roles.set_group(role, group);
+    }
+
+    pub(crate) fn set_group_colour(&mut self, group: GroupId, colour: Option<GroupColour>) {
+        self.groups.set_colour(group, colour);
+    }
+
+    /// The colour a device is shown in: that of its role's group, if the group has one.
+    pub(crate) fn colour(&self, device: &Device) -> Option<GroupColour> {
+        self.role_group(&device.role)
+            .and_then(|group| self.groups.colour(group))
     }
 }
 
@@ -234,31 +282,57 @@ mod tests {
     fn renaming_a_custom_role_renames_it_on_its_devices() {
         let mut network = mock_data::network();
         let tv = Role::Custom("TV".into());
+        let television = Role::Custom("Television".into());
         let users = roles_of(&network, &tv);
         assert!(users > 0);
-        network.rename_custom_role("TV", "Television");
+        network.rename_role(&tv, "Television");
         assert_eq!(roles_of(&network, &tv), 0);
-        assert_eq!(
-            roles_of(&network, &Role::Custom("Television".into())),
-            users
-        );
-        network.rename_custom_role("Television", "games CONSOLE");
-        assert_eq!(
-            roles_of(&network, &Role::Custom("Television".into())),
-            users,
-            "taken"
-        );
+        assert_eq!(roles_of(&network, &television), users);
+        network.rename_role(&television, "games CONSOLE");
+        assert_eq!(roles_of(&network, &television), users, "taken");
     }
 
     #[test]
-    fn deleting_a_custom_role_gives_its_devices_other() {
+    fn renaming_a_standard_role_keeps_its_devices() {
+        let mut network = mock_data::network();
+        let printers = roles_of(&network, &Role::Printer);
+        network.rename_role(&Role::Printer, "Office printer");
+        assert_eq!(network.role_name(&Role::Printer), Some("Office printer"));
+        assert_eq!(roles_of(&network, &Role::Printer), printers);
+    }
+
+    #[test]
+    fn deleting_a_role_gives_its_devices_other() {
         let mut network = mock_data::network();
         let tv = Role::Custom("TV".into());
-        let others = roles_of(&network, &Role::Other);
-        let users = roles_of(&network, &tv);
-        network.remove_custom_role("TV");
-        assert!(!network.roles().contains(&tv));
-        assert_eq!(roles_of(&network, &Role::Other), others + users);
+        for role in [tv, Role::Printer] {
+            let others = roles_of(&network, &Role::Other);
+            let users = roles_of(&network, &role);
+            assert!(users > 0, "{role:?}");
+            network.remove_role(&role);
+            assert!(!network.roles().contains(&role));
+            assert_eq!(roles_of(&network, &Role::Other), others + users);
+        }
+        network.remove_role(&Role::Other);
+        assert!(network.roles().contains(&Role::Other));
+    }
+
+    #[test]
+    fn a_device_takes_the_colour_of_its_roles_group() {
+        let mut network = mock_data::network();
+        let printer = network
+            .devices()
+            .iter()
+            .find(|d| d.role == Role::Printer)
+            .cloned()
+            .unwrap();
+        let office = network.add_group("Office").unwrap();
+        network.set_group_colour(office, Some(GroupColour::Orange));
+        assert_eq!(network.colour(&printer), None, "role in no group");
+        network.set_role_group(&Role::Printer, Some(office));
+        assert_eq!(network.colour(&printer), Some(GroupColour::Orange));
+        network.remove_group(office);
+        assert_eq!(network.colour(&printer), None, "group deleted");
     }
 
     #[test]

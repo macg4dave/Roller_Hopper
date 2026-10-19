@@ -1,0 +1,79 @@
+import { Button, ListView } from "std-widgets.slint";
+import { Bridge, DeviceKind } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { NewRole } from "components/new-role.slint";
+import { RoleColumns, RoleRow } from "components/role-row.slint";
+
+// Edit page, Roles tab: every role, editable, with ways to add one or restore the standard set.
+export component RoleEditor inherits VerticalLayout {
+    property <bool> adding;
+
+    spacing: Theme.space-m;
+
+    Text {
+        text: @tr("roles.intro");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+    // Column headings, padded and spaced like RoleRow so they sit over their columns.
+    VerticalLayout {
+        spacing: Theme.space-xs;
+        HorizontalLayout {
+            padding-left: Theme.space-s;
+            padding-right: Theme.space-s;
+            spacing: Theme.space-m;
+            for heading[i] in [
+                { text: @tr("roles.column-icon"), width: RoleColumns.icon },
+                { text: @tr("roles.column-name"), width: RoleColumns.name },
+                { text: @tr("roles.column-group"), width: RoleColumns.group },
+            ]: Text {
+                text: heading.text;
+                width: heading.width;
+                font-size: Theme.font-small;
+                font-weight: 600;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+            Rectangle { }
+        }
+        Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+    }
+    ListView {
+        vertical-stretch: 1;
+        for role[i] in Bridge.role-list: RoleRow {
+            role: role;
+            index: i;
+        }
+    }
+    if !adding: HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space-s;
+        Button {
+            text: @tr("roles.add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            clicked => { adding = true; }
+        }
+        Button {
+            text: @tr("roles.restore");
+            enabled: Bridge.roles-restorable;
+            clicked => { Bridge.restore-roles(); }
+        }
+    }
+    if adding: HorizontalLayout {
+        alignment: start;
+        NewRole {
+            width: 360px;
+            icon: DeviceKind.unknown;
+            add(name, icon) => {
+                Bridge.add-role(name, icon);
+                adding = false;
+            }
+            cancel => { adding = false; }
+        }
+    }
+}

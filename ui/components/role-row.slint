@@ -1,23 +1,30 @@
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button, ComboBox } from "std-widgets.slint";
 import { Bridge, RoleView } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { IconPicker } from "icon-picker.slint";
+import { NameEdit } from "name-edit.slint";
 
-// One role on the edit page's Roles tab. Custom roles can be renamed, re-iconed and deleted.
+// Column sizes shared by the rows and the heading above them, so the columns line up.
+export global RoleColumns {
+    out property <length> icon: 32px;
+    out property <length> name: 220px;
+    out property <length> group: 200px;
+}
+
+// One role on the edit page's Roles tab: rename it, change its icon or group, or delete it.
 export component RoleRow inherits Rectangle {
     in property <RoleView> role;
-    property <length> icon-box: 32px;
+    // Where the role sits in Bridge.role-list, which identifies it to Rust.
+    in property <int> index;
+    property <length> icon-box: RoleColumns.icon;
 
     height: Theme.row-height;
+    border-radius: Theme.radius;
+    background: Math.mod(index, 2) == 1 ? Theme.stripe : transparent;
 
-    // Applies a rename; the caller then shows whatever name the role ended up with, which is
-    // unchanged if the new name was refused.
-    function commit-name(text: string) {
-        if text != role.name {
-            Bridge.rename-role(role.name, text);
-        }
-    }
+    // Picking a group replaces the dropdown's binding, so keep it following Rust's state.
+    changed role => { group-box.current-index = role.group; }
 
     HorizontalLayout {
         padding-left: Theme.space-s;
@@ -29,20 +36,16 @@ export component RoleRow inherits Rectangle {
             height: icon-box;
             y: (parent.height - self.height) / 2;
             border-radius: Theme.radius;
-            border-width: role.custom ? 1px : 0;
+            border-width: 1px;
             border-color: Theme.border;
+            background: touch.has-hover ? Theme.hover : transparent;
+            accessible-role: button;
+            accessible-label: @tr("roles.change-icon");
+            accessible-action-default => { popup.show(); }
 
-            if role.custom: Rectangle {
-                border-radius: Theme.radius;
-                background: touch.has-hover ? Theme.hover : transparent;
-                accessible-role: button;
-                accessible-label: @tr("roles.change-icon");
-                accessible-action-default => { popup.show(); }
-
-                touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { popup.show(); }
-                }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { popup.show(); }
             }
             if role.has-icon: DeviceIcon {
                 kind: role.icon;
@@ -53,34 +56,27 @@ export component RoleRow inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            width: 200px;
-            if !role.custom: Text {
-                text: role.name;
-                font-size: Theme.font-body;
-                font-weight: 600;
-                color: Theme.text;
-                overflow: elide;
-            }
-            if role.custom: LineEdit {
-                text: role.name;
+            width: RoleColumns.name;
+            NameEdit {
+                name: role.name;
                 accessible-label: @tr("roles.name");
-                accepted => {
-                    commit-name(self.text);
-                    self.text = role.name;
-                }
-                changed has-focus => {
-                    if !self.has-focus {
-                        commit-name(self.text);
-                        self.text = role.name;
-                    }
-                }
+                commit(text) => { Bridge.rename-role(index, text); }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            width: RoleColumns.group;
+            group-box := ComboBox {
+                model: Bridge.group-choices;
+                current-index: role.group;
+                accessible-label: @tr("roles.group");
+                selected => { Bridge.set-role-group(index, self.current-index); }
             }
         }
 
         Text {
-            text: role.has-icon
-                ? @tr("roles.device-count" | "roles.device-count.plural" % role.devices)
-                : @tr("roles.own-icon" | "roles.own-icon.plural" % role.devices);
+            text: role.has-icon ? "" : @tr("roles.own-icon");
             font-size: Theme.font-small;
             color: Theme.text-muted;
             vertical-alignment: center;
@@ -88,13 +84,15 @@ export component RoleRow inherits Rectangle {
             overflow: elide;
         }
 
-        if role.custom: VerticalLayout {
+        VerticalLayout {
             alignment: center;
-            Button {
+            // Keeps the column width when the button is absent, so the rows stay aligned.
+            min-width: icon-box;
+            if role.deletable: Button {
                 icon: @image-url("../icons/delete.svg");
                 colorize-icon: true;
                 accessible-label: @tr("roles.delete");
-                clicked => { Bridge.delete-role(role.name); }
+                clicked => { Bridge.delete-role(index); }
             }
         }
     }
@@ -103,7 +101,7 @@ export component RoleRow inherits Rectangle {
         x: icon-button.x;
         y: icon-button.y + icon-button.height + Theme.space-xs;
         width: 7 * 28px + 2 * Theme.space-s;
-        height: picker.height + 2 * Theme.space-s;
+        height: content.preferred-height;
         close-policy: close-on-click-outside;
 
         Rectangle {
@@ -113,14 +111,23 @@ export component RoleRow inherits Rectangle {
             border-radius: Theme.radius;
             drop-shadow-blur: 12px;
             drop-shadow-color: #0000001f;
-
-            picker := IconPicker {
-                x: Theme.space-s;
-                y: Theme.space-s;
-                width: parent.width - 2 * Theme.space-s;
+        }
+        content := VerticalLayout {
+            padding: Theme.space-s;
+            spacing: Theme.space-s;
+            IconPicker {
                 selected: role.icon;
+                has-selection: role.has-icon;
                 picked(icon) => {
-                    Bridge.set-role-icon(role.name, icon);
+                    Bridge.set-role-icon(index, icon);
+                    popup.close();
+                }
+            }
+            Button {
+                text: @tr("roles.detected-icon");
+                enabled: role.has-icon;
+                clicked => {
+                    Bridge.clear-role-icon(index);
                     popup.close();
                 }
             }
