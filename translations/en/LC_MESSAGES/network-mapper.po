@@ -1,0 +1,333 @@
+# Network Mapper: English (British) UI text.
+# Every user-visible string lives here and in the other languages' files; the .slint files only
+# hold the message keys. Copy this file to start a new language. Placeholders: {} or {0}, {1} are
+# filled in order; {n} is the count that picks a plural form.
+msgid ""
+msgstr ""
+"Project-Id-Version: network-mapper\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# Window and header
+msgid "app.title"
+msgstr "Network Mapper"
+
+msgid "header.search-placeholder"
+msgstr "Search by name, IP or MAC address"
+
+msgid "header.scan"
+msgstr "Scan"
+
+msgid "header.scanning"
+msgstr "Scanning…"
+
+msgid "header.edit-devices"
+msgstr "Edit devices"
+
+msgid "header.settings"
+msgstr "Settings"
+
+msgid "settings.title"
+msgstr "Map display"
+
+msgid "settings.show-addresses"
+msgstr "Show IP addresses"
+
+msgid "settings.show-inferred"
+msgstr "Show inferred links"
+
+# Device list. filter.button: {0} is the filter name, {1} the number of devices.
+msgid "filter.all"
+msgstr "All"
+
+msgid "filter.online"
+msgstr "Online"
+
+msgid "filter.offline"
+msgstr "Offline"
+
+msgid "filter.button"
+msgstr "{0}  {1}"
+
+msgid "list.no-match"
+msgstr "No devices match."
+
+# Map
+msgid "map.zoom-in"
+msgstr "Zoom in"
+
+msgid "map.zoom-out"
+msgstr "Zoom out"
+
+# {} is the zoom level as a whole number.
+msgid "map.zoom-percent"
+msgstr "{}%"
+
+msgid "map.fit"
+msgstr "Fit to view"
+
+msgid "map.reset-layout"
+msgstr "Reset layout"
+
+msgid "legend.known"
+msgstr "Known link"
+
+msgid "legend.inferred"
+msgstr "Inferred link"
+
+# Details panel
+msgid "details.empty"
+msgstr "Select a device on the map or in the list to see its details."
+
+msgid "details.close"
+msgstr "Close details"
+
+msgid "details.edit"
+msgstr "Edit device"
+
+msgid "details.name"
+msgstr "Name"
+
+msgid "details.role"
+msgstr "Role"
+
+msgid "details.ip"
+msgstr "IP address"
+
+msgid "details.mac"
+msgstr "MAC address"
+
+msgid "details.type"
+msgstr "Type"
+
+msgid "details.manufacturer"
+msgstr "Manufacturer"
+
+msgid "details.model"
+msgstr "Model"
+
+msgid "details.hostname"
+msgstr "Hostname"
+
+msgid "details.last-seen"
+msgstr "Last seen"
+
+msgid "details.connected-to"
+msgstr "Connected to"
+
+msgid "details.open-ports"
+msgstr "Open ports"
+
+msgid "details.notes"
+msgstr "Notes"
+
+msgid "details.notes-placeholder"
+msgstr "Add a note"
+
+msgid "role-picker.add-custom"
+msgstr "Add custom role"
+
+msgid "role-picker.new-role"
+msgstr "New role"
+
+msgid "role-picker.add"
+msgstr "Add"
+
+msgid "role-picker.cancel"
+msgstr "Cancel"
+
+# Edit page
+msgid "edit.title"
+msgstr "Devices and roles"
+
+msgid "edit.back"
+msgstr "Back to map"
+
+msgid "edit.tab-devices"
+msgstr "Devices"
+
+msgid "edit.tab-roles"
+msgstr "Roles"
+
+msgid "edit.choose-device"
+msgstr "Choose a device to edit it."
+
+msgid "edit.icon"
+msgstr "Icon"
+
+msgid "edit.icon-from-role"
+msgstr "Use the role's icon"
+
+msgid "edit.forget"
+msgstr "Forget device"
+
+msgid "edit.forget-question"
+msgstr "Remove this device from the map and the list? It comes back when the app restarts."
+
+msgid "edit.forget-confirm"
+msgstr "Forget"
+
+msgid "edit.cancel"
+msgstr "Cancel"
+
+msgid "roles.intro"
+msgstr "Give a device a role on the Devices tab. Roles you add there can be renamed, given a different icon or deleted here; deleting one sets its devices to Other."
+
+msgid "roles.name"
+msgstr "Role name"
+
+msgid "roles.change-icon"
+msgstr "Change icon"
+
+msgid "roles.delete"
+msgstr "Delete role"
+
+msgid "roles.device-count"
+msgid_plural "roles.device-count.plural"
+msgstr[0] "{n} device"
+msgstr[1] "{n} devices"
+
+# Roles without an icon of their own (Other).
+msgid "roles.own-icon"
+msgid_plural "roles.own-icon.plural"
+msgstr[0] "{n} device, shown with its own icon"
+msgstr[1] "{n} devices, each shown with its own icon"
+
+# Device types, as detected
+msgid "kind.router"
+msgstr "Router"
+
+msgid "kind.switch"
+msgstr "Switch"
+
+msgid "kind.access-point"
+msgstr "Access point"
+
+msgid "kind.nas"
+msgstr "NAS"
+
+msgid "kind.desktop"
+msgstr "Desktop"
+
+msgid "kind.laptop"
+msgstr "Laptop"
+
+msgid "kind.server"
+msgstr "Server"
+
+msgid "kind.printer"
+msgstr "Printer"
+
+msgid "kind.phone"
+msgstr "Phone"
+
+msgid "kind.tv"
+msgstr "Smart TV"
+
+msgid "kind.console"
+msgstr "Games console"
+
+msgid "kind.camera"
+msgstr "Camera"
+
+msgid "kind.smart"
+msgstr "Smart device"
+
+msgid "kind.unknown"
+msgstr "Unknown"
+
+# Roles the user can choose
+msgid "role.router"
+msgstr "Router"
+
+msgid "role.switch"
+msgstr "Switch"
+
+msgid "role.access-point"
+msgstr "Access point"
+
+msgid "role.server"
+msgstr "Server"
+
+msgid "role.nas"
+msgstr "NAS"
+
+msgid "role.desktop"
+msgstr "Desktop"
+
+msgid "role.laptop"
+msgstr "Laptop"
+
+msgid "role.phone"
+msgstr "Phone"
+
+msgid "role.printer"
+msgstr "Printer"
+
+msgid "role.camera"
+msgstr "Camera"
+
+msgid "role.iot"
+msgstr "IoT"
+
+msgid "role.other"
+msgstr "Other"
+
+# Device status and history
+msgid "status.online"
+msgstr "Online"
+
+msgid "status.offline"
+msgstr "Offline"
+
+msgid "status.unknown"
+msgstr "Unknown"
+
+msgid "device.unnamed"
+msgstr "Unnamed device"
+
+msgid "last-seen.now"
+msgstr "At last scan"
+
+msgid "last-seen.minutes"
+msgid_plural "last-seen.minutes.plural"
+msgstr[0] "{n} minute ago"
+msgstr[1] "{n} minutes ago"
+
+msgid "last-seen.hours"
+msgid_plural "last-seen.hours.plural"
+msgstr[0] "{n} hour ago"
+msgstr[1] "{n} hours ago"
+
+msgid "last-seen.days"
+msgid_plural "last-seen.days.plural"
+msgstr[0] "{n} day ago"
+msgstr[1] "{n} days ago"
+
+# {} is the name of the device it connects through.
+msgid "uplink.known"
+msgstr "{} (known link)"
+
+msgid "uplink.inferred"
+msgstr "{} (inferred link)"
+
+# Status bar. scan.loaded / scan.complete: {0} is scan.devices, {1} the number offline.
+msgid "scan.running"
+msgstr "Simulating a scan of the sample network…"
+
+msgid "scan.devices"
+msgid_plural "scan.devices.plural"
+msgstr[0] "{n} device"
+msgstr[1] "{n} devices"
+
+msgid "scan.loaded"
+msgstr "Sample network loaded · {0}, {1} offline"
+
+msgid "scan.complete"
+msgstr "Simulated scan complete · {0}, {1} offline"
+
+msgid "status-bar.sample-only"
+msgstr "Sample data only. No real network access."

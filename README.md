@@ -9,6 +9,11 @@ only — there is no real network discovery or scanning.
 cargo run
 ```
 
+## Languages
+
+All UI text is translatable. To add or change a language, see
+[translations/README.md](translations/README.md).
+
 ## Contributing (humans and AI agents)
 
 Read [AGENTS.md](AGENTS.md) first. It indexes the guides in [docs/agents/](docs/agents/) — the
@@ -21,5 +26,3 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo build
 ```
-
-Design reference: [docs/design/reference-mockup.png](docs/design/reference-mockup.png).

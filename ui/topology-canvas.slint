@@ -5,9 +5,19 @@ import { MapNode } from "components/map-node.slint";
 
 // The pannable, zoomable topology map. Pan and zoom are visual state and live here.
 export component TopologyCanvas inherits Rectangle {
-    property <float> zoom: 1;
-    property <length> pan-x;
-    property <length> pan-y;
+    // Where the view is heading; zoom and pan below glide towards these.
+    property <float> target-zoom: 1;
+    property <length> target-pan-x;
+    property <length> target-pan-y;
+    // Zoom and pan glide together with the same timing, so the point under the cursor stays put.
+    property <bool> glide;
+    property <float> zoom: target-zoom;
+    property <length> pan-x: target-pan-x;
+    property <length> pan-y: target-pan-y;
+    animate zoom, pan-x, pan-y {
+        duration: glide ? 160ms : 0ms;
+        easing: ease-out;
+    }
     // Keep fitting the map to the view on resize until the user pans or zooms by hand.
     property <bool> auto-fit: true;
     property <length> grid: Theme.grid-spacing * zoom;
@@ -15,24 +25,35 @@ export component TopologyCanvas inherits Rectangle {
     background: Theme.background;
     clip: true;
 
-    changed width => { if auto-fit { fit(); } }
-    changed height => { if auto-fit { fit(); } }
+    changed width => { if auto-fit { fit(false); } }
+    changed height => { if auto-fit { fit(false); } }
 
-    function fit() {
+    function fit(animated: bool) {
         let b = Bridge.bounds;
         let margin = 24px;
-        zoom = clamp(min((root.width - 2 * margin) / (b.width * 1px), (root.height - 2 * margin) / (b.height * 1px)), 0.25, 1.25);
-        pan-x = (root.width - b.width * zoom * 1px) / 2 - b.x * zoom * 1px;
-        pan-y = (root.height - b.height * zoom * 1px) / 2 - b.y * zoom * 1px;
+        let new-zoom = clamp(min((root.width - 2 * margin) / (b.width * 1px), (root.height - 2 * margin) / (b.height * 1px)), 0.25, 1.25);
+        glide = animated;
+        target-pan-x = (root.width - b.width * new-zoom * 1px) / 2 - b.x * new-zoom * 1px;
+        target-pan-y = (root.height - b.height * new-zoom * 1px) / 2 - b.y * new-zoom * 1px;
+        target-zoom = new-zoom;
         auto-fit = true;
+    }
+
+    // Glides the map so the point (x, y), in map units, sits in the centre of the view.
+    public function centre-on(x: float, y: float) {
+        glide = true;
+        target-pan-x = root.width / 2 - x * target-zoom * 1px;
+        target-pan-y = root.height / 2 - y * target-zoom * 1px;
+        auto-fit = false;
     }
 
     // Zooms by `factor`, keeping the map point under (px, py) in place.
     function zoom-at(px: length, py: length, factor: float) {
-        let new-zoom = clamp(zoom * factor, 0.25, 3);
-        pan-x = px - (px - pan-x) * new-zoom / zoom;
-        pan-y = py - (py - pan-y) * new-zoom / zoom;
-        zoom = new-zoom;
+        let new-zoom = clamp(target-zoom * factor, 0.25, 3);
+        glide = true;
+        target-pan-x = px - (px - target-pan-x) * new-zoom / target-zoom;
+        target-pan-y = py - (py - target-pan-y) * new-zoom / target-zoom;
+        target-zoom = new-zoom;
         auto-fit = false;
     }
 
@@ -54,53 +75,68 @@ export component TopologyCanvas inherits Rectangle {
         mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
-                start-x = pan-x;
-                start-y = pan-y;
+                start-x = target-pan-x;
+                start-y = target-pan-y;
             }
         }
         moved => {
-            pan-x = start-x + self.mouse-x - self.pressed-x;
-            pan-y = start-y + self.mouse-y - self.pressed-y;
+            // Dragging follows the pointer exactly; gliding here would feel like lag.
+            glide = false;
+            target-pan-x = start-x + self.mouse-x - self.pressed-x;
+            target-pan-y = start-y + self.mouse-y - self.pressed-y;
             auto-fit = false;
         }
         scroll-event(event) => {
-            zoom-at(self.mouse-x, self.mouse-y, event.delta-y > 0 ? 1.1 : 1 / 1.1);
+            // A wheel notch arrives as 60px; touchpads send many small deltas, which zoom in
+            // proportion instead of each counting as a full step.
+            zoom-at(self.mouse-x, self.mouse-y, Math.pow(1.15, event.delta-y / 60px));
             accept
         }
     }
 
-    // Connection lines: one path per style, drawn in map units and scaled with the map.
-    for style in [
-        { commands: Bridge.lines.known, color: Theme.line, visible: true },
-        { commands: Bridge.lines.inferred, color: Theme.line, visible: MapSettings.show-inferred },
-        { commands: Bridge.lines.selected-known, color: Theme.accent, visible: true },
-        { commands: Bridge.lines.selected-inferred, color: Theme.accent, visible: MapSettings.show-inferred },
-    ]: Path {
+    // The map itself, laid out in map units and scaled as one picture: panning and zooming only
+    // move this one element, so nothing inside is laid out or redrawn from scratch.
+    Rectangle {
         x: pan-x + Bridge.bounds.x * zoom * 1px;
         y: pan-y + Bridge.bounds.y * zoom * 1px;
-        width: Bridge.bounds.width * zoom * 1px;
-        height: Bridge.bounds.height * zoom * 1px;
-        viewbox-x: Bridge.bounds.x;
-        viewbox-y: Bridge.bounds.y;
-        viewbox-width: Bridge.bounds.width;
-        viewbox-height: Bridge.bounds.height;
-        commands: style.commands;
-        visible: style.visible;
-        stroke: style.color;
-        stroke-width: Theme.line-width;
-    }
+        width: Bridge.bounds.width * 1px;
+        height: Bridge.bounds.height * 1px;
+        transform-origin: { x: 0, y: 0 };
+        transform-scale: zoom;
 
-    for device in Bridge.devices: MapNode {
-        device: device;
-        zoom: zoom;
-        selected: device.id == Bridge.selected-id;
-        show-address: MapSettings.show-addresses;
-        x: pan-x + device.x * zoom * 1px - self.width / 2;
-        y: pan-y + device.y * zoom * 1px - (self.icon-size + 14px * zoom) / 2;
-        clicked => { Bridge.select(device.id); }
-        dragged(dx, dy) => {
-            Bridge.move-device(device.id, device.x + dx / zoom / 1px, device.y + dy / zoom / 1px);
-            auto-fit = false;
+        // Connection lines: one path per style.
+        for style in [
+            { commands: Bridge.lines.known, color: Theme.line, visible: true },
+            { commands: Bridge.lines.inferred, color: Theme.line, visible: MapSettings.show-inferred },
+            { commands: Bridge.lines.selected-known, color: Theme.accent, visible: true },
+            { commands: Bridge.lines.selected-inferred, color: Theme.accent, visible: MapSettings.show-inferred },
+        ]: Path {
+            width: parent.width;
+            height: parent.height;
+            viewbox-x: Bridge.bounds.x;
+            viewbox-y: Bridge.bounds.y;
+            viewbox-width: Bridge.bounds.width;
+            viewbox-height: Bridge.bounds.height;
+            commands: style.commands;
+            visible: style.visible;
+            stroke: style.color;
+            // Keep lines thin on screen at any zoom.
+            stroke-width: Theme.line-width / zoom;
+        }
+
+        for device in Bridge.devices: MapNode {
+            device: device;
+            zoom: zoom;
+            selected: device.id == Bridge.selected-id;
+            show-address: MapSettings.show-addresses;
+            x: (device.x - Bridge.bounds.x) * 1px - self.width / 2;
+            y: (device.y - Bridge.bounds.y) * 1px - (self.icon-size + 14px) / 2;
+            clicked => { Bridge.select(device.id); }
+            // The pointer offset arrives already in map units, as the node sits inside the scale.
+            dragged(dx, dy) => {
+                Bridge.move-device(device.id, device.x + dx / 1px, device.y + dy / 1px);
+                auto-fit = false;
+            }
         }
     }
 
@@ -119,8 +155,8 @@ export component TopologyCanvas inherits Rectangle {
             padding: Theme.space-s;
             spacing: Theme.space-s;
             for entry in [
-                { label: "Known link", commands: "M 0 5 L 24 5" },
-                { label: "Inferred link", commands: "M 0 5 L 5 5 M 9.5 5 L 14.5 5 M 19 5 L 24 5" },
+                { label: @tr("legend.known"), commands: "M 0 5 L 24 5" },
+                { label: @tr("legend.inferred"), commands: "M 0 5 L 5 5 M 9.5 5 L 14.5 5 M 19 5 L 24 5" },
             ]: HorizontalLayout {
                 spacing: Theme.space-xs;
                 Path {
@@ -159,11 +195,11 @@ export component TopologyCanvas inherits Rectangle {
             Button {
                 icon: @image-url("icons/plus.svg");
                 colorize-icon: true;
-                accessible-label: "Zoom in";
+                accessible-label: @tr("map.zoom-in");
                 clicked => { zoom-at(root.width / 2, root.height / 2, 1.25); }
             }
             Text {
-                text: "\{Math.round(zoom * 100)}%";
+                text: @tr("map.zoom-percent", Math.round(target-zoom * 100));
                 font-size: Theme.font-small;
                 color: Theme.text-muted;
                 horizontal-alignment: center;
@@ -171,23 +207,23 @@ export component TopologyCanvas inherits Rectangle {
             Button {
                 icon: @image-url("icons/minus.svg");
                 colorize-icon: true;
-                accessible-label: "Zoom out";
+                accessible-label: @tr("map.zoom-out");
                 clicked => { zoom-at(root.width / 2, root.height / 2, 1 / 1.25); }
             }
             Rectangle { height: 1px; background: Theme.border; }
             Button {
                 icon: @image-url("icons/fit.svg");
                 colorize-icon: true;
-                accessible-label: "Fit to view";
-                clicked => { fit(); }
+                accessible-label: @tr("map.fit");
+                clicked => { fit(true); }
             }
             Button {
                 icon: @image-url("icons/reset-layout.svg");
                 colorize-icon: true;
-                accessible-label: "Reset layout";
+                accessible-label: @tr("map.reset-layout");
                 clicked => {
                     Bridge.reset-layout();
-                    fit();
+                    fit(true);
                 }
             }
         }

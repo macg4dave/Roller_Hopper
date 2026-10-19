@@ -35,7 +35,9 @@ Read before touching `src/`, `build.rs` or `Cargo.toml`. Part of the agent rules
 - Use std types for well-known values (`std::net::Ipv4Addr`). Use a newtype for identifiers
   (`struct DeviceId(u32)`) so IDs cannot be confused with indices or counts.
 - Derive the standard traits where they make sense: `Debug`, `Clone`, `PartialEq`, `Eq`, `Hash`,
-  `Default`. Implement `Display` for anything shown to the user rather than formatting ad hoc.
+  `Default`. Implement `Display` only for language-neutral formats (a MAC address, a port list).
+  User-visible wording is never built in Rust: send data and let the UI word it (see
+  [slint.md](slint.md)).
 - Borrow by default: take `&str`/`&[T]`/`&T` in parameters. A `.clone()` added only to satisfy
   the borrow checker is a design smell — rethink ownership first. Use `Rc::clone(&x)` explicitly.
 - No global mutable state: no `static mut`, no `lazy_static`/`OnceLock` holding app state. State
@@ -52,7 +54,8 @@ Read before touching `src/`, `build.rs` or `Cargo.toml`. Part of the agent rules
 - Keep files focused (guideline: under ~300 lines). A file that grows past that is a signal to
   split by responsibility, not to add a layer.
 - Names are descriptive and follow Rust API guidelines (RFC 430). User-facing text is British
-  English; identifiers follow the APIs they touch (e.g. Slint's `color`).
+  English and lives in `translations/en/`; identifiers follow the APIs they touch (e.g. Slint's
+  `color`).
 - Comments explain *why*, not *what*. Add a `//!` module doc to each module and `///` docs to
   any item whose purpose is not obvious from its name and signature.
 

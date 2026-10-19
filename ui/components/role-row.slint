@@ -1,0 +1,129 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { Bridge, RoleView } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { DeviceIcon } from "device-icon.slint";
+import { IconPicker } from "icon-picker.slint";
+
+// One role on the edit page's Roles tab. Custom roles can be renamed, re-iconed and deleted.
+export component RoleRow inherits Rectangle {
+    in property <RoleView> role;
+    property <length> icon-box: 32px;
+
+    height: Theme.row-height;
+
+    // Applies a rename; the caller then shows whatever name the role ended up with, which is
+    // unchanged if the new name was refused.
+    function commit-name(text: string) {
+        if text != role.name {
+            Bridge.rename-role(role.name, text);
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-s;
+        padding-right: Theme.space-s;
+        spacing: Theme.space-m;
+
+        icon-button := Rectangle {
+            width: icon-box;
+            height: icon-box;
+            y: (parent.height - self.height) / 2;
+            border-radius: Theme.radius;
+            border-width: role.custom ? 1px : 0;
+            border-color: Theme.border;
+
+            if role.custom: Rectangle {
+                border-radius: Theme.radius;
+                background: touch.has-hover ? Theme.hover : transparent;
+                accessible-role: button;
+                accessible-label: @tr("roles.change-icon");
+                accessible-action-default => { popup.show(); }
+
+                touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { popup.show(); }
+                }
+            }
+            if role.has-icon: DeviceIcon {
+                kind: role.icon;
+                width: 20px;
+                height: 20px;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            width: 200px;
+            if !role.custom: Text {
+                text: role.name;
+                font-size: Theme.font-body;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            if role.custom: LineEdit {
+                text: role.name;
+                accessible-label: @tr("roles.name");
+                accepted => {
+                    commit-name(self.text);
+                    self.text = role.name;
+                }
+                changed has-focus => {
+                    if !self.has-focus {
+                        commit-name(self.text);
+                        self.text = role.name;
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: role.has-icon
+                ? @tr("roles.device-count" | "roles.device-count.plural" % role.devices)
+                : @tr("roles.own-icon" | "roles.own-icon.plural" % role.devices);
+            font-size: Theme.font-small;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        if role.custom: VerticalLayout {
+            alignment: center;
+            Button {
+                icon: @image-url("../icons/delete.svg");
+                colorize-icon: true;
+                accessible-label: @tr("roles.delete");
+                clicked => { Bridge.delete-role(role.name); }
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: icon-button.x;
+        y: icon-button.y + icon-button.height + Theme.space-xs;
+        width: 7 * 28px + 2 * Theme.space-s;
+        height: picker.height + 2 * Theme.space-s;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: Theme.radius;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #0000001f;
+
+            picker := IconPicker {
+                x: Theme.space-s;
+                y: Theme.space-s;
+                width: parent.width - 2 * Theme.space-s;
+                selected: role.icon;
+                picked(icon) => {
+                    Bridge.set-role-icon(role.name, icon);
+                    popup.close();
+                }
+            }
+        }
+    }
+}

@@ -1,4 +1,7 @@
 //! A single device on the network and the closed sets that describe it.
+//!
+//! User-visible wording for these types lives in the UI (`ui/labels.slint`) so it can be
+//! translated; only language-neutral formats (MAC address, port list) are produced here.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -7,7 +10,8 @@ use std::net::Ipv4Addr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct DeviceId(pub(crate) u32);
 
-/// What the device is, as detected. Fixed; the user edits the [`Role`] instead.
+/// What the device is, as detected. Fixed; the user edits the [`Role`] instead. Each kind has its
+/// own icon, so this is also the set of icons a role can show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum DeviceKind {
     Router,
@@ -24,27 +28,6 @@ pub(crate) enum DeviceKind {
     Camera,
     Smart,
     Unknown,
-}
-
-impl fmt::Display for DeviceKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Router => "Router",
-            Self::Switch => "Switch",
-            Self::AccessPoint => "Access point",
-            Self::Nas => "NAS",
-            Self::Desktop => "Desktop",
-            Self::Laptop => "Laptop",
-            Self::Server => "Server",
-            Self::Printer => "Printer",
-            Self::Phone => "Phone",
-            Self::Tv => "Smart TV",
-            Self::Console => "Games console",
-            Self::Camera => "Camera",
-            Self::Smart => "Smart device",
-            Self::Unknown => "Unknown",
-        })
-    }
 }
 
 impl DeviceKind {
@@ -72,16 +55,6 @@ pub(crate) enum Status {
     Online,
     Offline,
     Unknown,
-}
-
-impl fmt::Display for Status {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Online => "Online",
-            Self::Offline => "Offline",
-            Self::Unknown => "Unknown",
-        })
-    }
 }
 
 /// The user-assigned purpose of a device. Custom roles are the one open set.
@@ -117,25 +90,24 @@ impl Role {
         Self::Iot,
         Self::Other,
     ];
-}
 
-impl fmt::Display for Role {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Router => "Router",
-            Self::Switch => "Switch",
-            Self::AccessPoint => "Access point",
-            Self::Server => "Server",
-            Self::Nas => "NAS",
-            Self::Desktop => "Desktop",
-            Self::Laptop => "Laptop",
-            Self::Phone => "Phone",
-            Self::Printer => "Printer",
-            Self::Camera => "Camera",
-            Self::Iot => "IoT",
-            Self::Other => "Other",
-            Self::Custom(name) => name,
-        })
+    /// The icon a standard role gives its devices. `Other` keeps the detected icon, and a custom
+    /// role's icon is stored with the network's custom roles.
+    pub(crate) fn icon(&self) -> Option<DeviceKind> {
+        match self {
+            Self::Router => Some(DeviceKind::Router),
+            Self::Switch => Some(DeviceKind::Switch),
+            Self::AccessPoint => Some(DeviceKind::AccessPoint),
+            Self::Server => Some(DeviceKind::Server),
+            Self::Nas => Some(DeviceKind::Nas),
+            Self::Desktop => Some(DeviceKind::Desktop),
+            Self::Laptop => Some(DeviceKind::Laptop),
+            Self::Phone => Some(DeviceKind::Phone),
+            Self::Printer => Some(DeviceKind::Printer),
+            Self::Camera => Some(DeviceKind::Camera),
+            Self::Iot => Some(DeviceKind::Smart),
+            Self::Other | Self::Custom(_) => None,
+        }
     }
 }
 
@@ -150,7 +122,7 @@ impl fmt::Display for MacAddr {
     }
 }
 
-/// An open port and the service usually found on it.
+/// An open port and the service usually found on it. The name is a protocol name, not prose.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Service {
     pub(crate) port: u16,
@@ -169,24 +141,14 @@ pub(crate) struct LastSeen {
     pub(crate) minutes_ago: u32,
 }
 
-impl fmt::Display for LastSeen {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let plural = |n: u32| if n == 1 { "" } else { "s" };
-        match self.minutes_ago {
-            0 => f.write_str("At last scan"),
-            m @ 1..60 => write!(f, "{m} minute{} ago", plural(m)),
-            m @ 60..1440 => write!(f, "{} hour{} ago", m / 60, plural(m / 60)),
-            m => write!(f, "{} day{} ago", m / 1440, plural(m / 1440)),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Device {
     pub(crate) id: DeviceId,
     pub(crate) name: String,
     pub(crate) kind: DeviceKind,
     pub(crate) role: Role,
+    /// An icon picked for this device alone; `None` follows the role.
+    pub(crate) icon: Option<DeviceKind>,
     pub(crate) status: Status,
     pub(crate) ip: Ipv4Addr,
     pub(crate) mac: MacAddr,
@@ -199,15 +161,6 @@ pub(crate) struct Device {
 }
 
 impl Device {
-    /// The name to show; never blank, so a cleared name still leaves something to click.
-    pub(crate) fn display_name(&self) -> &str {
-        if self.name.trim().is_empty() {
-            "Unnamed device"
-        } else {
-            &self.name
-        }
-    }
-
     /// Case-insensitive match on name, IP address or MAC address.
     pub(crate) fn matches(&self, query: &str) -> bool {
         let query = query.trim().to_lowercase();
@@ -228,6 +181,7 @@ mod tests {
             name: "Living Room TV".into(),
             kind: DeviceKind::Tv,
             role: Role::Other,
+            icon: None,
             status: Status::Online,
             ip: Ipv4Addr::new(192, 168, 1, 50),
             mac: MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c]),
@@ -251,18 +205,26 @@ mod tests {
     }
 
     #[test]
-    fn blank_name_falls_back_to_placeholder() {
-        let mut d = device();
-        d.name = "   ".into();
-        assert_eq!(d.display_name(), "Unnamed device");
-    }
-
-    #[test]
-    fn last_seen_reads_naturally() {
-        let at = |minutes_ago| LastSeen { minutes_ago }.to_string();
-        assert_eq!(at(0), "At last scan");
-        assert_eq!(at(1), "1 minute ago");
-        assert_eq!(at(125), "2 hours ago");
-        assert_eq!(at(1440), "1 day ago");
+    fn a_new_device_shows_its_detected_icon() {
+        let kinds = [
+            DeviceKind::Router,
+            DeviceKind::Switch,
+            DeviceKind::AccessPoint,
+            DeviceKind::Nas,
+            DeviceKind::Desktop,
+            DeviceKind::Laptop,
+            DeviceKind::Server,
+            DeviceKind::Printer,
+            DeviceKind::Phone,
+            DeviceKind::Tv,
+            DeviceKind::Console,
+            DeviceKind::Camera,
+            DeviceKind::Smart,
+            DeviceKind::Unknown,
+        ];
+        for kind in kinds {
+            let icon = kind.default_role().icon().unwrap_or(kind);
+            assert_eq!(icon, kind, "{kind:?}");
+        }
     }
 }

@@ -18,7 +18,7 @@ Each guide is short. Read the ones your task touches **before** editing; when un
 | [docs/agents/collaboration.md](docs/agents/collaboration.md) | Always — working alongside other agents (Claude, Codex) |
 | [docs/agents/product.md](docs/agents/product.md) | Any feature or UI work — product brief, scope limits, definition of done |
 | [docs/agents/rust.md](docs/agents/rust.md) | Touching `src/`, `build.rs` or `Cargo.toml` |
-| [docs/agents/slint.md](docs/agents/slint.md) | Touching `ui/` or `src/ui_bridge.rs` |
+| [docs/agents/slint.md](docs/agents/slint.md) | Touching `ui/`, `translations/` or `src/ui_bridge.rs` |
 
 ## Project layout
 
@@ -31,6 +31,7 @@ src/model/         pure data and logic (devices, connections, roles, filtering) 
 src/mock_data.rs   the sample network
 src/ui_bridge.rs   model ↔ Slint struct conversion and callback handlers
 ui/                .slint files: app window, panels, canvas, components/, icons/, theme
+translations/      all UI text: one gettext .po file per language (English in en/)
 docs/agents/       the agent guides linked above
 ```
 

@@ -1,13 +1,16 @@
-import { Button, LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
+import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
-import { RolePicker } from "components/role-picker.slint";
 import { StatusDot } from "components/status-dot.slint";
 
-// Right panel: everything known about the selected device; name, role and notes are editable.
+// Right panel: everything known about the selected device. Editing happens on the edit page.
 export component DetailsPanel inherits Rectangle {
+    // Open the edit page on the selected device.
+    callback edit();
+
     width: Theme.details-width;
     background: Theme.surface;
 
@@ -18,7 +21,7 @@ export component DetailsPanel inherits Rectangle {
     }
 
     if Bridge.selected-id < 0: Text {
-        text: "Select a device on the map or in the list to see its details.";
+        text: @tr("details.empty");
         font-size: Theme.font-body;
         color: Theme.text-muted;
         wrap: word-wrap;
@@ -38,7 +41,7 @@ export component DetailsPanel inherits Rectangle {
                 spacing: Theme.space-m;
                 padding-bottom: Theme.space-m;
                 DeviceIcon {
-                    kind: Bridge.details.kind;
+                    kind: Bridge.details.icon;
                     width: 44px;
                     height: 44px;
                     colorize: Theme.accent;
@@ -48,7 +51,7 @@ export component DetailsPanel inherits Rectangle {
                     spacing: Theme.space-xs;
                     horizontal-stretch: 1;
                     Text {
-                        text: Bridge.details.name;
+                        text: Labels.device-name(Bridge.details.name);
                         font-size: Theme.font-title;
                         font-weight: 600;
                         color: Theme.text;
@@ -62,53 +65,44 @@ export component DetailsPanel inherits Rectangle {
                             StatusDot { status: Bridge.details.status; }
                         }
                         Text {
-                            text: Bridge.details.status-label;
+                            text: Labels.status(Bridge.details.status);
                             font-size: Theme.font-body;
                             color: Theme.text-muted;
                         }
                     }
                 }
-                VerticalLayout {
+                HorizontalLayout {
                     alignment: start;
+                    spacing: Theme.space-xs;
+                    Button {
+                        icon: @image-url("icons/edit.svg");
+                        colorize-icon: true;
+                        accessible-label: @tr("details.edit");
+                        clicked => { root.edit(); }
+                    }
                     Button {
                         icon: @image-url("icons/close.svg");
                         colorize-icon: true;
-                        accessible-label: "Close details";
+                        accessible-label: @tr("details.close");
                         clicked => { Bridge.select(-1); }
                     }
                 }
             }
 
-            DetailField {
-                label: "Name";
-                LineEdit {
-                    text <=> Bridge.name-draft;
-                    edited(text) => { Bridge.rename(text); }
-                }
+            DetailField { label: @tr("details.role"); value: Bridge.details.role; }
+            DetailField { label: @tr("details.ip"); value: Bridge.details.ip; }
+            DetailField { label: @tr("details.mac"); value: Bridge.details.mac; }
+            DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
+            if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
+            if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }
+            if Bridge.details.hostname != "": DetailField { label: @tr("details.hostname"); value: Bridge.details.hostname; }
+            DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
+            if Bridge.details.uplink-name != "": DetailField {
+                label: @tr("details.connected-to");
+                value: Labels.uplink(Bridge.details.uplink-name, Bridge.details.uplink-inferred);
             }
-            DetailField {
-                label: "Role";
-                RolePicker { }
-            }
-            DetailField { label: "IP address"; value: Bridge.details.ip; }
-            DetailField { label: "MAC address"; value: Bridge.details.mac; }
-            DetailField { label: "Type"; value: Bridge.details.kind-label; }
-            if Bridge.details.manufacturer != "": DetailField { label: "Manufacturer"; value: Bridge.details.manufacturer; }
-            if Bridge.details.model != "": DetailField { label: "Model"; value: Bridge.details.model; }
-            if Bridge.details.hostname != "": DetailField { label: "Hostname"; value: Bridge.details.hostname; }
-            DetailField { label: "Last seen"; value: Bridge.details.last-seen; }
-            if Bridge.details.uplink != "": DetailField { label: "Connected to"; value: Bridge.details.uplink; }
-            if Bridge.details.services != "": DetailField { label: "Open ports"; value: Bridge.details.services; }
-            DetailField {
-                label: "Notes";
-                TextEdit {
-                    height: 96px;
-                    wrap: word-wrap;
-                    placeholder-text: "Add a note";
-                    text <=> Bridge.notes-draft;
-                    edited(text) => { Bridge.edit-notes(text); }
-                }
-            }
+            if Bridge.details.services != "": DetailField { label: @tr("details.open-ports"); value: Bridge.details.services; }
+            if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
         }
     }
 }

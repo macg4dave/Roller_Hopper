@@ -1,12 +1,13 @@
 //! Conversion of model data into the Slint structs declared in `ui/bridge.slint`.
+//! Only data crosses over; wording is added on the Slint side so it can be translated.
 
 use slint::SharedString;
 
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, Network, Point, Positions, Status, StatusFilter,
-    route,
+    ConnectionKind, Device, DeviceId, DeviceKind, Network, Point, Positions, Role, Status,
+    StatusFilter, route,
 };
-use crate::ui;
+use crate::ui::{self, Labels};
 
 /// Dash and gap lengths of inferred links, in map units.
 const DASH: f32 = 6.0;
@@ -60,6 +61,26 @@ fn kind(kind: DeviceKind) -> ui::DeviceKind {
     }
 }
 
+/// The icon picked for a new custom role.
+pub(super) fn kind_from_ui(kind: ui::DeviceKind) -> DeviceKind {
+    match kind {
+        ui::DeviceKind::Router => DeviceKind::Router,
+        ui::DeviceKind::Switch => DeviceKind::Switch,
+        ui::DeviceKind::AccessPoint => DeviceKind::AccessPoint,
+        ui::DeviceKind::Nas => DeviceKind::Nas,
+        ui::DeviceKind::Desktop => DeviceKind::Desktop,
+        ui::DeviceKind::Laptop => DeviceKind::Laptop,
+        ui::DeviceKind::Server => DeviceKind::Server,
+        ui::DeviceKind::Printer => DeviceKind::Printer,
+        ui::DeviceKind::Phone => DeviceKind::Phone,
+        ui::DeviceKind::Tv => DeviceKind::Tv,
+        ui::DeviceKind::Console => DeviceKind::Console,
+        ui::DeviceKind::Camera => DeviceKind::Camera,
+        ui::DeviceKind::Smart => DeviceKind::Smart,
+        ui::DeviceKind::Unknown => DeviceKind::Unknown,
+    }
+}
+
 fn status(status: Status) -> ui::DeviceStatus {
     match status {
         Status::Online => ui::DeviceStatus::Online,
@@ -68,13 +89,40 @@ fn status(status: Status) -> ui::DeviceStatus {
     }
 }
 
-pub(super) fn device_view(device: &Device, at: Point, dimmed: bool) -> ui::DeviceView {
+/// The role as shown to the user: translated for standard roles, as typed for custom ones.
+pub(super) fn role_label(labels: &Labels<'_>, role: &Role) -> SharedString {
+    let standard = match role {
+        Role::Router => ui::RoleKind::Router,
+        Role::Switch => ui::RoleKind::Switch,
+        Role::AccessPoint => ui::RoleKind::AccessPoint,
+        Role::Server => ui::RoleKind::Server,
+        Role::Nas => ui::RoleKind::Nas,
+        Role::Desktop => ui::RoleKind::Desktop,
+        Role::Laptop => ui::RoleKind::Laptop,
+        Role::Phone => ui::RoleKind::Phone,
+        Role::Printer => ui::RoleKind::Printer,
+        Role::Camera => ui::RoleKind::Camera,
+        Role::Iot => ui::RoleKind::Iot,
+        Role::Other => ui::RoleKind::Other,
+        Role::Custom(name) => return name.as_str().into(),
+    };
+    labels.invoke_role(standard)
+}
+
+pub(super) fn device_view(
+    device: &Device,
+    role: SharedString,
+    icon: DeviceKind,
+    at: Point,
+    dimmed: bool,
+) -> ui::DeviceView {
     ui::DeviceView {
         id: ui_id(device.id),
-        name: device.display_name().into(),
+        // Blank names are shown with a translated placeholder by the UI.
+        name: device.name.trim().into(),
         ip: device.ip.to_string().into(),
-        role: device.role.to_string().into(),
-        kind: kind(device.kind),
+        role,
+        icon: kind(icon),
         status: status(device.status),
         x: at.x,
         y: at.y,
@@ -82,30 +130,42 @@ pub(super) fn device_view(device: &Device, at: Point, dimmed: bool) -> ui::Devic
     }
 }
 
-pub(super) fn details(network: &Network, device: &Device) -> ui::DeviceDetails {
+/// A role for the Roles tab, with `label` as shown in the role dropdown.
+pub(super) fn role_view(network: &Network, role: &Role, label: SharedString) -> ui::RoleView {
+    let icon = network.role_icon(role);
+    let devices = network.devices().iter().filter(|d| d.role == *role).count();
+    ui::RoleView {
+        name: label,
+        icon: kind(icon.unwrap_or(DeviceKind::Unknown)),
+        has_icon: icon.is_some(),
+        devices: i32::try_from(devices).unwrap_or(i32::MAX),
+        custom: matches!(role, Role::Custom(_)),
+    }
+}
+
+pub(super) fn details(network: &Network, device: &Device, role: SharedString) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let uplink = network.uplink(device.id).and_then(|link| {
         let upstream = network.device(link.upstream)?;
-        let how = match link.kind {
-            ConnectionKind::Known => "known link",
-            ConnectionKind::Inferred => "inferred link",
-        };
-        Some(format!("{} ({how})", upstream.display_name()))
+        Some((upstream.name.trim(), link.kind == ConnectionKind::Inferred))
     });
     let services: Vec<String> = device.services.iter().map(ToString::to_string).collect();
     ui::DeviceDetails {
         kind: kind(device.kind),
-        kind_label: device.kind.to_string().into(),
+        icon: kind(network.icon(device)),
+        custom_icon: device.icon.is_some(),
         status: status(device.status),
-        status_label: device.status.to_string().into(),
-        name: device.display_name().into(),
+        name: device.name.trim().into(),
+        role,
+        notes: device.notes.as_str().into(),
         ip: device.ip.to_string().into(),
         mac: device.mac.to_string().into(),
         manufacturer: text(device.manufacturer),
         model: text(device.model),
         hostname: text(device.hostname),
-        last_seen: device.last_seen.to_string().into(),
-        uplink: uplink.unwrap_or_default().into(),
+        last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
+        uplink_name: uplink.map(|(name, _)| name).unwrap_or_default().into(),
+        uplink_inferred: uplink.is_some_and(|(_, inferred)| inferred),
         services: services.join(", ").into(),
     }
 }

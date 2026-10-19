@@ -36,6 +36,7 @@ impl Spec {
             name: self.name.to_owned(),
             kind: self.kind,
             role: self.role,
+            icon: None,
             status: self.status,
             ip: Ipv4Addr::new(192, 168, 1, self.host),
             mac: MacAddr(self.mac),
@@ -132,7 +133,7 @@ fn devices() -> Vec<Device> {
             manufacturer: Some("Dell"),
             model: Some("OptiPlex 7090"),
             hostname: Some("desktop-7k2m"),
-            services: &[(3389, "Remote Desktop")],
+            services: &[(3389, "RDP")],
             ..spec(
                 5,
                 "Windows PC",
@@ -159,7 +160,7 @@ fn devices() -> Vec<Device> {
             manufacturer: Some("HP"),
             model: Some("LaserJet Pro M404dn"),
             hostname: Some("hp-laserjet"),
-            services: &[(80, "HTTP"), (631, "IPP"), (9100, "Raw print")],
+            services: &[(80, "HTTP"), (631, "IPP"), (9100, "JetDirect")],
             ..spec(
                 7,
                 "HP Printer",
@@ -196,7 +197,7 @@ fn devices() -> Vec<Device> {
             manufacturer: Some("Samsung"),
             model: Some("QE55Q80C"),
             hostname: Some("samsung-tv"),
-            services: &[(8001, "Remote control")],
+            services: &[(8001, "SmartView")],
             ..spec(
                 10,
                 "TV Living Room",
@@ -317,7 +318,18 @@ fn connections() -> Vec<Connection> {
 }
 
 pub(crate) fn network() -> Network {
-    Network::new(devices(), connections())
+    let mut network = Network::new(devices(), connections());
+    // Custom roles as if the user had added them: no standard role has the TV or console icon.
+    for (id, name, icon) in [
+        (10, "TV", DeviceKind::Tv),
+        (11, "Games console", DeviceKind::Console),
+    ] {
+        let role = network.add_custom_role(name, icon);
+        if let (Some(role), Some(device)) = (role, network.device_mut(DeviceId(id))) {
+            device.role = role;
+        }
+    }
+    network
 }
 
 /// Pretends a scan ran: responsive devices are seen now, silent ones age, and one device flips

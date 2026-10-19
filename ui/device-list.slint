@@ -1,10 +1,13 @@
 import { Button, ListView } from "std-widgets.slint";
-import { Bridge, StatusFilter } from "bridge.slint";
+import { Bridge, DeviceView, StatusFilter } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
 
 // Left panel: All / Online / Offline filters and the matching devices.
 export component DeviceList inherits Rectangle {
+    // A device was double-clicked: bring it into view on the map.
+    callback show-on-map(DeviceView);
+
     width: Theme.list-width;
     background: Theme.surface;
 
@@ -21,18 +24,18 @@ export component DeviceList inherits Rectangle {
         HorizontalLayout {
             spacing: Theme.space-xs;
             for tab in [
-                { filter: StatusFilter.all, label: "All", count: Bridge.count-all },
-                { filter: StatusFilter.online, label: "Online", count: Bridge.count-online },
-                { filter: StatusFilter.offline, label: "Offline", count: Bridge.count-offline },
+                { filter: StatusFilter.all, label: @tr("filter.all"), count: Bridge.count-all },
+                { filter: StatusFilter.online, label: @tr("filter.online"), count: Bridge.count-online },
+                { filter: StatusFilter.offline, label: @tr("filter.offline"), count: Bridge.count-offline },
             ]: Button {
-                text: "\{tab.label}  \{tab.count}";
+                text: @tr("filter.button", tab.label, tab.count);
                 primary: Bridge.filter == tab.filter;
                 clicked => { Bridge.set-filter(tab.filter); }
             }
         }
 
         if Bridge.list.length == 0: Text {
-            text: "No devices match.";
+            text: @tr("list.no-match");
             font-size: Theme.font-body;
             color: Theme.text-muted;
             horizontal-alignment: center;
@@ -46,6 +49,7 @@ export component DeviceList inherits Rectangle {
                 device: device;
                 selected: device.id == Bridge.selected-id;
                 clicked => { Bridge.select(device.id); }
+                double-clicked => { root.show-on-map(device); }
             }
         }
     }

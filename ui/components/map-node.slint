@@ -1,24 +1,27 @@
 import { DeviceStatus, DeviceView } from "../bridge.slint";
+import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { StatusDot } from "status-dot.slint";
 
-// A device on the topology map. Scales with the map zoom; the icon centre is the anchor point.
+// A device on the topology map, laid out at 100% and scaled with the rest of the map by the
+// canvas; the icon centre is the anchor point.
 export component MapNode inherits Rectangle {
     in property <DeviceView> device;
+    // The map zoom, used only to keep the icon crisp under the canvas's scale transform.
     in property <float> zoom: 1;
     in property <bool> selected;
     in property <bool> show-address: true;
-    out property <length> icon-size: Theme.map-icon * zoom;
+    out property <length> icon-size: Theme.map-icon;
     callback clicked;
     // Pointer movement since the press, while dragging.
     callback dragged(length, length);
 
-    width: Theme.map-label-width * zoom;
+    width: Theme.map-label-width;
     height: layout.preferred-height;
     opacity: device.dimmed ? 0.3 : 1;
     accessible-role: button;
-    accessible-label: device.name;
+    accessible-label: Labels.device-name(device.name);
 
     touch := TouchArea {
         mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.pointer;
@@ -27,12 +30,12 @@ export component MapNode inherits Rectangle {
     }
 
     layout := VerticalLayout {
-        spacing: 3px * zoom;
+        spacing: 3px;
 
         HorizontalLayout {
             alignment: center;
             Rectangle {
-                width: icon-size + 14px * zoom;
+                width: icon-size + 14px;
                 height: self.width;
                 border-radius: self.width / 2;
                 background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
@@ -40,24 +43,31 @@ export component MapNode inherits Rectangle {
                 border-color: Theme.accent;
 
                 DeviceIcon {
-                    kind: device.kind;
-                    width: icon-size;
-                    height: icon-size;
+                    // SVGs are rasterised at the element's own size, ignoring transforms. Drawing
+                    // at the next power-of-two of the zoom and scaling back keeps icons sharp,
+                    // while the few sizes used stay in Slint's image cache during smooth zooming.
+                    property <float> detail: Math.pow(2, Math.ceil(Math.log(zoom, 2)));
+                    kind: device.icon;
+                    x: (parent.width - icon-size) / 2;
+                    y: (parent.height - icon-size) / 2;
+                    width: icon-size * detail;
+                    height: icon-size * detail;
+                    transform-origin: { x: 0, y: 0 };
+                    transform-scale: 1 / detail;
                     colorize: selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon;
                 }
 
                 StatusDot {
                     status: device.status;
-                    x: parent.width - self.width - 3px * zoom;
-                    y: 3px * zoom;
+                    x: parent.width - self.width - 3px;
+                    y: 3px;
                 }
             }
         }
 
         Text {
-            text: device.name;
-            // Floors keep labels legible when the whole map is fitted into a small window.
-            font-size: max(12px * zoom, 10px);
+            text: Labels.device-name(device.name);
+            font-size: 12px;
             font-weight: 600;
             color: Theme.text;
             horizontal-alignment: center;
@@ -66,7 +76,7 @@ export component MapNode inherits Rectangle {
 
         if show-address: Text {
             text: device.ip;
-            font-size: max(11px * zoom, 9px);
+            font-size: 11px;
             color: Theme.text-muted;
             horizontal-alignment: center;
         }

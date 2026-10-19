@@ -1,5 +1,6 @@
 // The data Rust pushes into the UI and the callbacks the UI raises back to Rust.
 // Rust owns this state; components only read it and call the callbacks.
+// Rust sends data, not wording: user-visible text is produced in Slint (see labels.slint).
 
 export enum DeviceKind { router, switch, access-point, nas, desktop, laptop, server, printer, phone, tv, console, camera, smart, unknown }
 
@@ -7,13 +8,18 @@ export enum DeviceStatus { online, offline, unknown }
 
 export enum StatusFilter { all, online, offline }
 
+// The standard roles; custom roles are sent as the user typed them.
+export enum RoleKind { router, switch, access-point, server, nas, desktop, laptop, phone, printer, camera, iot, other }
+
 /// One device as drawn on the map and in the list. `x`/`y` are map units (icon centre).
 export struct DeviceView {
     id: int,
     name: string,
     ip: string,
+    // Already translated: standard role names come from Labels.role().
     role: string,
-    kind: DeviceKind,
+    // Follows the role; the detected kind when the role has no icon of its own.
+    icon: DeviceKind,
     status: DeviceStatus,
     x: float,
     y: float,
@@ -23,19 +29,37 @@ export struct DeviceView {
 
 /// Read-only details of the selected device. Empty strings are not shown.
 export struct DeviceDetails {
+    // What the device was detected as, and the icon it is shown with.
     kind: DeviceKind,
-    kind-label: string,
+    icon: DeviceKind,
+    // The icon was picked for this device rather than coming from its role.
+    custom-icon: bool,
     status: DeviceStatus,
-    status-label: string,
     name: string,
+    // Already translated, like DeviceView.role.
+    role: string,
+    notes: string,
     ip: string,
     mac: string,
     manufacturer: string,
     model: string,
     hostname: string,
-    last-seen: string,
-    uplink: string,
+    last-seen-minutes: int,
+    // Name of the device this one connects through; empty for the router.
+    uplink-name: string,
+    uplink-inferred: bool,
     services: string,
+}
+
+/// A role on the edit page's Roles tab.
+export struct RoleView {
+    // Translated for standard roles; as typed (and used to identify it) for custom ones.
+    name: string,
+    icon: DeviceKind,
+    // False for roles whose devices keep their own detected icon (Other).
+    has-icon: bool,
+    devices: int,
+    custom: bool,
 }
 
 /// SVG path commands for the connection lines, in map units.
@@ -62,12 +86,14 @@ export global Bridge {
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[string]> roles;
+    in property <[RoleView]> role-list;
     in property <StatusFilter> filter;
     in property <int> count-all;
     in property <int> count-online;
     in property <int> count-offline;
     in property <bool> scanning;
-    in property <string> status-text;
+    // Completed simulated scans.
+    in property <int> scans;
 
     // Edit buffers for the selected device, set by Rust when the selection changes.
     in-out property <string> name-draft;
@@ -79,8 +105,18 @@ export global Bridge {
     callback set-filter(StatusFilter);
     callback rename(string);
     callback choose-role(int);
-    callback add-role(string);
+    // A new custom role's name and the icon picked for it.
+    callback add-role(string, DeviceKind);
     callback edit-notes(string);
+    // The selected device's own icon, or back to its role's icon.
+    callback set-icon(DeviceKind);
+    callback reset-icon();
+    // Removes the selected device until the app restarts.
+    callback forget();
+    // Custom roles, identified by their current name.
+    callback rename-role(string, string);
+    callback set-role-icon(string, DeviceKind);
+    callback delete-role(string);
     callback move-device(int, float, float);
     callback reset-layout();
     callback scan();

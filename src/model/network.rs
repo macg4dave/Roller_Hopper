@@ -1,6 +1,7 @@
 //! The network as a whole: devices, how they connect, and the roles on offer.
 
-use super::device::{Device, DeviceId, Role, Status};
+use super::device::{Device, DeviceId, DeviceKind, Role, Status};
+use super::roles::CustomRoles;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -40,7 +41,7 @@ impl StatusFilter {
 pub(crate) struct Network {
     devices: Vec<Device>,
     connections: Vec<Connection>,
-    custom_roles: Vec<String>,
+    custom_roles: CustomRoles,
 }
 
 impl Network {
@@ -48,7 +49,7 @@ impl Network {
         Self {
             devices,
             connections,
-            custom_roles: Vec::new(),
+            custom_roles: CustomRoles::default(),
         }
     }
 
@@ -70,6 +71,13 @@ impl Network {
 
     pub(crate) fn device_mut(&mut self, id: DeviceId) -> Option<&mut Device> {
         self.devices.iter_mut().find(|d| d.id == id)
+    }
+
+    /// Forgets a device and its links. Devices behind it stay, as separate branches of the map.
+    pub(crate) fn remove_device(&mut self, id: DeviceId) {
+        self.devices.retain(|d| d.id != id);
+        self.connections
+            .retain(|c| c.upstream != id && c.downstream != id);
     }
 
     /// The connection leading from `id` towards the router, if any.
@@ -95,26 +103,55 @@ impl Network {
     pub(crate) fn roles(&self) -> Vec<Role> {
         Role::STANDARD
             .into_iter()
-            .chain(self.custom_roles.iter().cloned().map(Role::Custom))
+            .chain(self.custom_roles.roles())
             .collect()
     }
 
-    /// Adds a custom role and returns it. An existing role with the same name (ignoring case) is
-    /// returned instead of a duplicate; a blank name is rejected.
-    pub(crate) fn add_custom_role(&mut self, name: &str) -> Option<Role> {
-        let name = name.trim();
-        if name.is_empty() {
-            return None;
+    /// The icon a role gives its devices; `None` when they keep their detected icon.
+    pub(crate) fn role_icon(&self, role: &Role) -> Option<DeviceKind> {
+        if let Role::Custom(name) = role {
+            self.custom_roles.icon(name)
+        } else {
+            role.icon()
         }
-        if let Some(existing) = self
-            .roles()
-            .into_iter()
-            .find(|r| r.to_string().eq_ignore_ascii_case(name))
-        {
-            return Some(existing);
+    }
+
+    /// The icon shown for a device: the one picked for it, else its role's, else the detected one.
+    pub(crate) fn icon(&self, device: &Device) -> DeviceKind {
+        device
+            .icon
+            .or_else(|| self.role_icon(&device.role))
+            .unwrap_or(device.kind)
+    }
+
+    /// Adds a custom role shown with `icon`, and returns it (see [`CustomRoles::add`]).
+    pub(crate) fn add_custom_role(&mut self, name: &str, icon: DeviceKind) -> Option<Role> {
+        self.custom_roles.add(name, icon)
+    }
+
+    /// Renames a custom role on every device that has it. Blank or taken names are ignored.
+    pub(crate) fn rename_custom_role(&mut self, old: &str, new: &str) {
+        let Some(new) = self.custom_roles.rename(old, new) else {
+            return;
+        };
+        let old = Role::Custom(old.to_owned());
+        for device in self.devices.iter_mut().filter(|d| d.role == old) {
+            device.role = Role::Custom(new.clone());
         }
-        self.custom_roles.push(name.to_owned());
-        Some(Role::Custom(name.to_owned()))
+    }
+
+    pub(crate) fn set_custom_role_icon(&mut self, name: &str, icon: DeviceKind) {
+        self.custom_roles.set_icon(name, icon);
+    }
+
+    /// Deletes a custom role; its devices go back to `Other` and their own icon.
+    pub(crate) fn remove_custom_role(&mut self, name: &str) {
+        if self.custom_roles.remove(name) {
+            let old = Role::Custom(name.to_owned());
+            for device in self.devices.iter_mut().filter(|d| d.role == old) {
+                device.role = Role::Other;
+            }
+        }
     }
 }
 
@@ -156,29 +193,86 @@ mod tests {
         device.notes = "Replace in spring".into();
 
         let edited = network.device(id).unwrap();
-        assert_eq!(edited.display_name(), "Gateway");
+        assert_eq!(edited.name, "Gateway");
         assert_eq!(edited.role, Role::Server);
         assert_eq!(edited.notes, "Replace in spring");
         assert_eq!(network.filtered(StatusFilter::All, "gateway").count(), 1);
     }
 
     #[test]
-    fn custom_roles_are_added_once_and_listed_after_standard_ones() {
+    fn custom_roles_are_listed_after_standard_ones() {
         let mut network = Network::default();
-        assert_eq!(
-            network.add_custom_role("  Media server "),
-            Some(Role::Custom("Media server".into()))
-        );
-        assert_eq!(
-            network.add_custom_role("media SERVER"),
-            Some(Role::Custom("Media server".into()))
-        );
-        assert_eq!(network.add_custom_role("nas"), Some(Role::Nas));
-        assert_eq!(network.add_custom_role("   "), None);
-
+        network.add_custom_role("Media server", DeviceKind::Server);
         let roles = network.roles();
         assert_eq!(roles.len(), Role::STANDARD.len() + 1);
         assert_eq!(roles.last(), Some(&Role::Custom("Media server".into())));
+    }
+
+    #[test]
+    fn the_icon_follows_the_role_unless_one_was_picked() {
+        let mut network = mock_data::network();
+        let media = network.add_custom_role("Media", DeviceKind::Tv).unwrap();
+        let mut device = network.devices().first().unwrap().clone();
+        for (role, expected) in [
+            (Role::Printer, DeviceKind::Printer),
+            (Role::Iot, DeviceKind::Smart),
+            (media, DeviceKind::Tv),
+            (Role::Other, device.kind),
+        ] {
+            device.role = role;
+            assert_eq!(network.icon(&device), expected, "{:?}", device.role);
+        }
+        device.icon = Some(DeviceKind::Camera);
+        assert_eq!(network.icon(&device), DeviceKind::Camera);
+    }
+
+    fn roles_of(network: &Network, role: &Role) -> usize {
+        network.devices().iter().filter(|d| d.role == *role).count()
+    }
+
+    #[test]
+    fn renaming_a_custom_role_renames_it_on_its_devices() {
+        let mut network = mock_data::network();
+        let tv = Role::Custom("TV".into());
+        let users = roles_of(&network, &tv);
+        assert!(users > 0);
+        network.rename_custom_role("TV", "Television");
+        assert_eq!(roles_of(&network, &tv), 0);
+        assert_eq!(
+            roles_of(&network, &Role::Custom("Television".into())),
+            users
+        );
+        network.rename_custom_role("Television", "games CONSOLE");
+        assert_eq!(
+            roles_of(&network, &Role::Custom("Television".into())),
+            users,
+            "taken"
+        );
+    }
+
+    #[test]
+    fn deleting_a_custom_role_gives_its_devices_other() {
+        let mut network = mock_data::network();
+        let tv = Role::Custom("TV".into());
+        let others = roles_of(&network, &Role::Other);
+        let users = roles_of(&network, &tv);
+        network.remove_custom_role("TV");
+        assert!(!network.roles().contains(&tv));
+        assert_eq!(roles_of(&network, &Role::Other), others + users);
+    }
+
+    #[test]
+    fn forgetting_a_device_drops_it_and_its_links() {
+        let mut network = mock_data::network();
+        let switch = DeviceId(2);
+        network.remove_device(switch);
+        assert!(network.device(switch).is_none());
+        assert!(
+            network
+                .connections()
+                .iter()
+                .all(|c| c.upstream != switch && c.downstream != switch)
+        );
     }
 
     #[test]

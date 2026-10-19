@@ -1,17 +1,25 @@
 //! Connects the Slint UI to the model: pushes state into the `Bridge` global and handles the
 //! callbacks it raises. Rust owns the data; after every change the affected views are re-sent.
+//! Rust sends data rather than wording, so all user-visible text can be translated in Slint.
 
 mod convert;
+mod i18n;
+mod push;
+
+pub(crate) use i18n::select_language;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, VecModel, Weak};
+use slint::{ComponentHandle, Model, SharedString, Timer, Weak};
 
 use crate::mock_data;
-use crate::model::{DeviceId, Network, Point, Positions, Role, StatusFilter, tree_layout};
+use crate::model::{
+    Device, DeviceId, DeviceKind, Network, Point, Positions, StatusFilter, tree_layout,
+};
 use crate::ui::{AppWindow, Bridge};
+use push::push;
 
 /// How long the simulated scan pretends to take, so the refresh is visible.
 const SCAN_DURATION: Duration = Duration::from_millis(1500);
@@ -41,7 +49,7 @@ impl AppState {
         }
     }
 
-    fn edit_selected(&mut self, edit: impl FnOnce(&mut crate::model::Device)) {
+    fn edit_selected(&mut self, edit: impl FnOnce(&mut Device)) {
         if let Some(device) = self.selected.and_then(|id| self.network.device_mut(id)) {
             edit(device);
         }
@@ -53,9 +61,35 @@ impl AppState {
         }
     }
 
-    fn add_role(&mut self, name: &str) {
-        if let Some(role) = self.network.add_custom_role(name) {
+    /// Assigns the role named `name`, adding it as a custom role shown with `icon` unless it
+    /// matches one of the roles `shown` in the dropdown (which are translated, so only the UI
+    /// knows their names). A matching role keeps its own icon.
+    fn add_role(&mut self, name: &str, icon: DeviceKind, shown: &[SharedString]) {
+        let lower = name.trim().to_lowercase();
+        if let Some(index) = shown.iter().position(|r| r.trim().to_lowercase() == lower) {
+            self.choose_role(index);
+        } else if let Some(role) = self.network.add_custom_role(name, icon) {
             self.edit_selected(|d| d.role = role);
+        }
+    }
+
+    /// Renames custom role `old`, unless `new` is the name of another role `shown` in the
+    /// dropdown, such as a translated standard role.
+    fn rename_role(&mut self, old: &str, new: &str, shown: &[SharedString]) {
+        let lower = new.trim().to_lowercase();
+        let clash = shown
+            .iter()
+            .any(|r| r.as_str() != old && r.trim().to_lowercase() == lower);
+        if !clash {
+            self.network.rename_custom_role(old, new);
+        }
+    }
+
+    /// Forgets the selected device until restart; the rest of the map stays where it is.
+    fn forget_selected(&mut self) {
+        if let Some(id) = self.selected.take() {
+            self.network.remove_device(id);
+            self.positions.remove(&id);
         }
     }
 
@@ -63,17 +97,6 @@ impl AppState {
         mock_data::simulate_scan(&mut self.network);
         self.scanning = false;
         self.scans += 1;
-    }
-
-    fn status_text(&self) -> String {
-        let total = self.network.count(StatusFilter::All);
-        let offline = self.network.count(StatusFilter::Offline);
-        let summary = format!("{total} devices, {offline} offline");
-        match (self.scanning, self.scans) {
-            (true, _) => "Simulating a scan of the sample network…".to_owned(),
-            (false, 0) => format!("Sample network loaded · {summary}"),
-            (false, _) => format!("Simulated scan complete · {summary}"),
-        }
     }
 }
 
@@ -89,21 +112,11 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_set_filter(handler(ui, state, |st, f| {
         st.filter = convert::filter_from_ui(f);
     }));
-    bridge.on_rename(handler(ui, state, |st, name: SharedString| {
-        st.edit_selected(|d| d.name = name.into());
-    }));
-    bridge.on_edit_notes(handler(ui, state, |st, notes: SharedString| {
-        st.edit_selected(|d| d.notes = notes.into());
-    }));
-    bridge.on_choose_role(handler(ui, state, |st, index| {
-        st.choose_role(usize::try_from(index).unwrap_or(usize::MAX));
-    }));
-    bridge.on_add_role(handler(ui, state, |st, name: SharedString| {
-        st.add_role(&name);
-    }));
+    connect_device_edits(ui, state);
+    connect_role_edits(ui, state);
+
     let reset = handler(ui, state, |st, ()| st.positions = tree_layout(&st.network));
     bridge.on_reset_layout(move || reset(()));
-
     let move_device = handler(ui, state, |st, (id, x, y)| {
         if let Some(id) = convert::device_id(id) {
             st.positions.insert(id, Point { x, y });
@@ -120,6 +133,66 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     });
 
     push(ui, &state.borrow());
+}
+
+/// Name, notes, role, icon and forgetting, for the selected device.
+fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    bridge.on_rename(handler(ui, state, |st, name: SharedString| {
+        st.edit_selected(|d| d.name = name.into());
+    }));
+    bridge.on_edit_notes(handler(ui, state, |st, notes: SharedString| {
+        st.edit_selected(|d| d.notes = notes.into());
+    }));
+    bridge.on_choose_role(handler(ui, state, |st, index| {
+        st.choose_role(usize::try_from(index).unwrap_or(usize::MAX));
+    }));
+    let add_role = handler(
+        ui,
+        state,
+        |st, (name, icon, shown): (SharedString, DeviceKind, Vec<SharedString>)| {
+            st.add_role(&name, icon, &shown);
+        },
+    );
+    let ui_weak = ui.as_weak();
+    bridge.on_add_role(move |name, icon| {
+        add_role((name, convert::kind_from_ui(icon), shown_roles(&ui_weak)));
+    });
+    bridge.on_set_icon(handler(ui, state, |st, icon| {
+        st.edit_selected(|d| d.icon = Some(convert::kind_from_ui(icon)));
+    }));
+    let reset_icon = handler(ui, state, |st, ()| st.edit_selected(|d| d.icon = None));
+    bridge.on_reset_icon(move || reset_icon(()));
+    let forget = handler(ui, state, |st, ()| st.forget_selected());
+    bridge.on_forget(move || forget(()));
+}
+
+/// Renaming, re-iconing and deleting custom roles.
+fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    let rename = handler(
+        ui,
+        state,
+        |st, (old, new, shown): (SharedString, SharedString, Vec<SharedString>)| {
+            st.rename_role(&old, &new, &shown);
+        },
+    );
+    let ui_weak = ui.as_weak();
+    bridge.on_rename_role(move |old, new| rename((old, new, shown_roles(&ui_weak))));
+    let set_icon = handler(ui, state, |st, (name, icon): (SharedString, DeviceKind)| {
+        st.network.set_custom_role_icon(&name, icon);
+    });
+    bridge.on_set_role_icon(move |name, icon| set_icon((name, convert::kind_from_ui(icon))));
+    bridge.on_delete_role(handler(ui, state, |st, name: SharedString| {
+        st.network.remove_custom_role(&name);
+    }));
+}
+
+/// The role names in the dropdown, as the UI shows them (standard ones translated).
+fn shown_roles(ui: &Weak<AppWindow>) -> Vec<SharedString> {
+    ui.upgrade()
+        .map(|window| window.global::<Bridge<'_>>().get_roles().iter().collect())
+        .unwrap_or_default()
 }
 
 /// A callback that applies `change` with the callback's argument, then refreshes the window.
@@ -139,92 +212,10 @@ fn update(ui: &Weak<AppWindow>, state: &RefCell<AppState>, change: impl FnOnce(&
     push(&ui, &state.borrow());
 }
 
-/// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
-/// consistent; models are updated row by row so nodes being dragged are not recreated.
-fn push(ui: &AppWindow, state: &AppState) {
-    let bridge = ui.global::<Bridge<'_>>();
-    let network = &state.network;
-    let at = |id| state.positions.get(&id).copied().unwrap_or_default();
-
-    let nodes = network.devices().iter().map(|d| {
-        let shown = state.filter.admits(d.status) && d.matches(&state.query);
-        convert::device_view(d, at(d.id), !shown)
-    });
-    if let Some(model) = sync(&bridge.get_devices(), nodes.collect()) {
-        bridge.set_devices(model);
-    }
-    let list = network.filtered(state.filter, &state.query);
-    let list = list
-        .map(|d| convert::device_view(d, at(d.id), false))
-        .collect();
-    if let Some(model) = sync(&bridge.get_list(), list) {
-        bridge.set_list(model);
-    }
-    let roles: Vec<SharedString> = network
-        .roles()
-        .iter()
-        .map(|r| r.to_string().into())
-        .collect();
-    if let Some(model) = sync(&bridge.get_roles(), roles) {
-        bridge.set_roles(model);
-    }
-
-    bridge.set_lines(convert::lines(network, &state.positions, state.selected));
-    bridge.set_bounds(convert::bounds(&state.positions));
-    bridge.set_filter(convert::filter_to_ui(state.filter));
-    bridge.set_count_all(count(network, StatusFilter::All));
-    bridge.set_count_online(count(network, StatusFilter::Online));
-    bridge.set_count_offline(count(network, StatusFilter::Offline));
-    bridge.set_scanning(state.scanning);
-    bridge.set_status_text(state.status_text().into());
-    push_selection(&bridge, state);
-}
-
-fn push_selection(bridge: &Bridge<'_>, state: &AppState) {
-    let selected = state.selected.and_then(|id| state.network.device(id));
-    let id = selected.map_or(-1, |d| convert::ui_id(d.id));
-    if let Some(device) = selected {
-        // Edit buffers are reset only when the selection changes, so typing is never disturbed.
-        if bridge.get_selected_id() != id {
-            bridge.set_name_draft(device.name.as_str().into());
-            bridge.set_notes_draft(device.notes.as_str().into());
-        }
-        bridge.set_details(convert::details(&state.network, device));
-        let roles = state.network.roles();
-        let index = roles
-            .iter()
-            .position(|r: &Role| *r == device.role)
-            .unwrap_or_default();
-        bridge.set_role_index(i32::try_from(index).unwrap_or_default());
-    }
-    bridge.set_selected_id(id);
-}
-
-fn count(network: &Network, filter: StatusFilter) -> i32 {
-    i32::try_from(network.count(filter)).unwrap_or(i32::MAX)
-}
-
-/// Updates a `VecModel` in place, touching only rows that changed. Returns a new model to set
-/// when the property does not hold a `VecModel` yet (its initial empty value).
-fn sync<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, rows: Vec<T>) -> Option<ModelRc<T>> {
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<T>>() else {
-        return Some(ModelRc::new(VecModel::from(rows)));
-    };
-    if vec.row_count() == rows.len() {
-        for (i, row) in rows.into_iter().enumerate() {
-            if vec.row_data(i).as_ref() != Some(&row) {
-                vec.set_row_data(i, row);
-            }
-        }
-    } else {
-        vec.set_vec(rows);
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Role;
 
     fn state_with(selected: u32) -> AppState {
         let mut state = AppState::new(mock_data::network());
@@ -252,15 +243,84 @@ mod tests {
         );
     }
 
+    /// Role names as the dropdown would show them in some language.
+    fn shown_roles(state: &AppState) -> Vec<SharedString> {
+        let standard = [
+            "Routeur",
+            "Commutateur",
+            "Point d'accès",
+            "Serveur",
+            "NAS",
+            "Bureau",
+        ];
+        let rest = [
+            "Portable",
+            "Téléphone",
+            "Imprimante",
+            "Caméra",
+            "IoT",
+            "Autre",
+        ];
+        let custom = state.network.roles().into_iter().filter_map(|r| {
+            if let Role::Custom(name) = r {
+                Some(name.into())
+            } else {
+                None
+            }
+        });
+        standard
+            .into_iter()
+            .chain(rest)
+            .map(SharedString::from)
+            .chain(custom)
+            .collect()
+    }
+
     #[test]
-    fn adding_a_custom_role_selects_it_for_the_device() {
+    fn adding_a_role_that_is_already_shown_selects_it_instead() {
         let mut state = state_with(10);
-        state.add_role("Media");
+        let shown = shown_roles(&state);
+        let before = state.network.roles().len();
+        state.add_role(" serveur ", DeviceKind::Tv, &shown);
+        assert_eq!(selected_role(&state), Some(Role::Server));
+        assert_eq!(state.network.roles().len(), before, "nothing added");
+    }
+
+    #[test]
+    fn adding_a_custom_role_gives_the_device_that_role_and_its_icon() {
+        let mut state = state_with(10);
+        let shown = shown_roles(&state);
+        state.add_role("Media", DeviceKind::Server, &shown);
         assert_eq!(selected_role(&state), Some(Role::Custom("Media".into())));
         assert_eq!(
             state.network.roles().last(),
             Some(&Role::Custom("Media".into()))
         );
+        let device = state.network.device(DeviceId(10)).unwrap();
+        assert_eq!(state.network.icon(device), DeviceKind::Server);
+    }
+
+    #[test]
+    fn a_custom_role_cannot_take_a_standard_role_name() {
+        let mut state = state_with(10);
+        let shown = shown_roles(&state);
+        state.rename_role("TV", "imprimante", &shown);
+        assert_eq!(selected_role(&state), Some(Role::Custom("TV".into())));
+        state.rename_role("TV", "tv", &shown);
+        assert_eq!(
+            selected_role(&state),
+            Some(Role::Custom("tv".into())),
+            "own name"
+        );
+    }
+
+    #[test]
+    fn forgetting_clears_the_selection_and_its_place_on_the_map() {
+        let mut state = state_with(10);
+        state.forget_selected();
+        assert_eq!(state.selected, None);
+        assert!(state.network.device(DeviceId(10)).is_none());
+        assert!(!state.positions.contains_key(&DeviceId(10)));
     }
 
     #[test]
@@ -268,17 +328,17 @@ mod tests {
         let mut state = AppState::new(mock_data::network());
         let before = state.network.clone();
         state.edit_selected(|d| d.name = "Changed".into());
-        state.add_role("Media");
+        state.add_role("Media", DeviceKind::Tv, &[]);
+        state.forget_selected();
         assert_eq!(state.network.devices(), before.devices());
     }
 
     #[test]
-    fn scan_status_never_claims_a_real_scan() {
+    fn finishing_a_scan_counts_it_and_clears_the_busy_state() {
         let mut state = AppState::new(mock_data::network());
         state.scanning = true;
-        assert!(state.status_text().starts_with("Simulating"));
         state.finish_scan();
         assert!(!state.scanning);
-        assert!(state.status_text().starts_with("Simulated scan complete"));
+        assert_eq!(state.scans, 1);
     }
 }

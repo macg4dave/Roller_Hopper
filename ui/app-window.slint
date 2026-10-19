@@ -2,14 +2,16 @@ import { Palette, Spinner } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { Header } from "header.slint";
+import { Labels } from "labels.slint";
 import { DeviceList } from "device-list.slint";
 import { TopologyCanvas } from "topology-canvas.slint";
 import { DetailsPanel } from "details-panel.slint";
+import { EditPage } from "edit-page.slint";
 
-export { Bridge }
+export { Bridge, Labels }
 
 export component AppWindow inherits Window {
-    title: "Network Mapper";
+    title: @tr("app.title");
     preferred-width: 1280px;
     preferred-height: 800px;
     min-width: 1000px;
@@ -20,14 +22,30 @@ export component AppWindow inherits Window {
     // The design is light-only; without this, std-widgets follow a dark system theme.
     init => { Palette.color-scheme = ColorScheme.light; }
 
-    VerticalLayout {
-        Header { }
+    // The edit page covers the map view rather than replacing it, so the map keeps its zoom and
+    // pan while the page is open.
+    property <bool> editing;
 
-        HorizontalLayout {
+    VerticalLayout {
+        Header { editing <=> root.editing; }
+
+        Rectangle {
             vertical-stretch: 1;
-            DeviceList { }
-            TopologyCanvas { horizontal-stretch: 1; }
-            DetailsPanel { }
+
+            HorizontalLayout {
+                visible: !editing;
+                DeviceList {
+                    show-on-map(device) => { canvas.centre-on(device.x, device.y); }
+                }
+                canvas := TopologyCanvas { horizontal-stretch: 1; }
+                DetailsPanel {
+                    edit => { editing = true; }
+                }
+            }
+
+            if editing: EditPage {
+                back => { editing = false; }
+            }
         }
 
         // Status bar: outcome of the last (simulated) scan.
@@ -51,14 +69,14 @@ export component AppWindow inherits Window {
                     width: 14px;
                 }
                 Text {
-                    text: Bridge.status-text;
+                    text: Labels.scan-status(Bridge.scanning, Bridge.scans, Bridge.count-all, Bridge.count-offline);
                     color: Theme.text;
                     font-size: Theme.font-small;
                     vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; }
                 Text {
-                    text: "Sample data only. No real network access.";
+                    text: @tr("status-bar.sample-only");
                     color: Theme.text-muted;
                     font-size: Theme.font-small;
                     vertical-alignment: center;

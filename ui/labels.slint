@@ -1,0 +1,76 @@
+// Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
+// message key, and the text for each language (English included) is in translations/.
+import { DeviceKind, DeviceStatus, RoleKind } from "bridge.slint";
+
+export global Labels {
+    // False when no bundled language matched the system locale, so keys would show as-is.
+    public pure function has-language() -> bool {
+        return @tr("app.title") != "app.title";
+    }
+
+    public pure function kind(kind: DeviceKind) -> string {
+        if kind == DeviceKind.router { return @tr("kind.router"); }
+        if kind == DeviceKind.switch { return @tr("kind.switch"); }
+        if kind == DeviceKind.access-point { return @tr("kind.access-point"); }
+        if kind == DeviceKind.nas { return @tr("kind.nas"); }
+        if kind == DeviceKind.desktop { return @tr("kind.desktop"); }
+        if kind == DeviceKind.laptop { return @tr("kind.laptop"); }
+        if kind == DeviceKind.server { return @tr("kind.server"); }
+        if kind == DeviceKind.printer { return @tr("kind.printer"); }
+        if kind == DeviceKind.phone { return @tr("kind.phone"); }
+        if kind == DeviceKind.tv { return @tr("kind.tv"); }
+        if kind == DeviceKind.console { return @tr("kind.console"); }
+        if kind == DeviceKind.camera { return @tr("kind.camera"); }
+        if kind == DeviceKind.smart { return @tr("kind.smart"); }
+        return @tr("kind.unknown");
+    }
+
+    // Standard roles only; custom roles are the user's own words and are shown as typed.
+    // Rust calls this to build the role dropdown, which needs a ready-made list of strings.
+    public pure function role(role: RoleKind) -> string {
+        if role == RoleKind.router { return @tr("role.router"); }
+        if role == RoleKind.switch { return @tr("role.switch"); }
+        if role == RoleKind.access-point { return @tr("role.access-point"); }
+        if role == RoleKind.server { return @tr("role.server"); }
+        if role == RoleKind.nas { return @tr("role.nas"); }
+        if role == RoleKind.desktop { return @tr("role.desktop"); }
+        if role == RoleKind.laptop { return @tr("role.laptop"); }
+        if role == RoleKind.phone { return @tr("role.phone"); }
+        if role == RoleKind.printer { return @tr("role.printer"); }
+        if role == RoleKind.camera { return @tr("role.camera"); }
+        if role == RoleKind.iot { return @tr("role.iot"); }
+        return @tr("role.other");
+    }
+
+    public pure function status(status: DeviceStatus) -> string {
+        if status == DeviceStatus.online { return @tr("status.online"); }
+        if status == DeviceStatus.offline { return @tr("status.offline"); }
+        return @tr("status.unknown");
+    }
+
+    // A cleared name still leaves something to read and click.
+    public pure function device-name(name: string) -> string {
+        return name == "" ? @tr("device.unnamed") : name;
+    }
+
+    public pure function last-seen(minutes: int) -> string {
+        if minutes <= 0 { return @tr("last-seen.now"); }
+        if minutes < 60 { return @tr("last-seen.minutes" | "last-seen.minutes.plural" % minutes); }
+        if minutes < 1440 {
+            let hours = Math.floor(minutes / 60);
+            return @tr("last-seen.hours" | "last-seen.hours.plural" % hours);
+        }
+        let days = Math.floor(minutes / 1440);
+        return @tr("last-seen.days" | "last-seen.days.plural" % days);
+    }
+
+    public pure function uplink(name: string, inferred: bool) -> string {
+        return inferred ? @tr("uplink.inferred", device-name(name)) : @tr("uplink.known", device-name(name));
+    }
+
+    public pure function scan-status(scanning: bool, scans: int, devices: int, offline: int) -> string {
+        if scanning { return @tr("scan.running"); }
+        let summary = @tr("scan.devices" | "scan.devices.plural" % devices);
+        return scans == 0 ? @tr("scan.loaded", summary, offline) : @tr("scan.complete", summary, offline);
+    }
+}

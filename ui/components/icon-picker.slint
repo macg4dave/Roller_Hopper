@@ -1,0 +1,48 @@
+import { DeviceKind } from "../bridge.slint";
+import { Labels } from "../labels.slint";
+import { Theme } from "../theme.slint";
+import { DeviceIcon } from "device-icon.slint";
+
+// A grid of the device icons to choose from; wraps to the width it is given. Reports the
+// choice through `picked` and leaves applying it to the owner.
+export component IconPicker inherits Rectangle {
+    in property <DeviceKind> selected;
+    callback picked(DeviceKind);
+    property <length> cell: 28px;
+    property <int> columns: max(1, Math.floor(root.width / cell));
+    property <[DeviceKind]> icons: [
+        DeviceKind.router, DeviceKind.switch, DeviceKind.access-point, DeviceKind.nas,
+        DeviceKind.server, DeviceKind.desktop, DeviceKind.laptop, DeviceKind.phone,
+        DeviceKind.tv, DeviceKind.console, DeviceKind.printer, DeviceKind.camera,
+        DeviceKind.smart, DeviceKind.unknown,
+    ];
+
+    height: Math.ceil(icons.length / columns) * cell;
+
+    for icon[i] in icons: Rectangle {
+        x: Math.mod(i, columns) * cell;
+        y: Math.floor(i / columns) * cell;
+        width: cell;
+        height: cell;
+        border-radius: Theme.radius;
+        background: icon == selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+        border-width: icon == selected ? 1px : 0;
+        border-color: Theme.accent;
+        accessible-role: button;
+        accessible-label: Labels.kind(icon);
+        accessible-checkable: true;
+        accessible-checked: icon == selected;
+        accessible-action-default => { root.picked(icon); }
+
+        touch := TouchArea {
+            clicked => { root.picked(icon); }
+        }
+
+        DeviceIcon {
+            kind: icon;
+            width: 18px;
+            height: 18px;
+            colorize: icon == selected ? Theme.accent : Theme.icon;
+        }
+    }
+}

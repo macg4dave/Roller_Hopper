@@ -12,6 +12,7 @@ use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = ui::AppWindow::new()?;
+    ui_bridge::select_language(&ui);
     let state = Rc::new(RefCell::new(ui_bridge::AppState::new(mock_data::network())));
     ui_bridge::connect(&ui, &state);
     ui.run()

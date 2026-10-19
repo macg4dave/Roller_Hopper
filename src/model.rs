@@ -3,6 +3,7 @@
 mod device;
 mod layout;
 mod network;
+mod roles;
 
 pub(crate) use device::{Device, DeviceId, DeviceKind, LastSeen, MacAddr, Role, Service, Status};
 pub(crate) use layout::{Point, Positions, route, tree_layout};

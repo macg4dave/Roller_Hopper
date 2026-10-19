@@ -1,4 +1,5 @@
 import { DeviceStatus, DeviceView } from "../bridge.slint";
+import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { StatusDot } from "status-dot.slint";
@@ -8,16 +9,18 @@ export component DeviceRow inherits Rectangle {
     in property <DeviceView> device;
     in property <bool> selected;
     callback clicked;
+    callback double-clicked;
 
     height: Theme.row-height;
     border-radius: Theme.radius;
     background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
     accessible-role: list-item;
-    accessible-label: device.name;
+    accessible-label: Labels.device-name(device.name);
     accessible-item-selected: selected;
 
     touch := TouchArea {
         clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
     }
 
     HorizontalLayout {
@@ -26,7 +29,7 @@ export component DeviceRow inherits Rectangle {
         spacing: Theme.space-m;
 
         DeviceIcon {
-            kind: device.kind;
+            kind: device.icon;
             width: 26px;
             colorize: selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon;
         }
@@ -35,7 +38,7 @@ export component DeviceRow inherits Rectangle {
             alignment: center;
             spacing: 2px;
             Text {
-                text: device.name;
+                text: Labels.device-name(device.name);
                 font-size: Theme.font-body;
                 font-weight: 600;
                 color: Theme.text;

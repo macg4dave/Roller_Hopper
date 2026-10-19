@@ -1,0 +1,62 @@
+import { Button, ListView, TabWidget } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { DeviceEditor } from "device-editor.slint";
+import { RoleRow } from "components/role-row.slint";
+
+// The edit page that replaces the map view: devices on one tab, roles on the other.
+export component EditPage inherits Rectangle {
+    callback back();
+
+    background: Theme.surface;
+
+    VerticalLayout {
+        padding: Theme.space-l;
+        spacing: Theme.space-m;
+
+        HorizontalLayout {
+            spacing: Theme.space-m;
+            alignment: start;
+            Button {
+                text: @tr("edit.back");
+                clicked => { root.back(); }
+            }
+            Text {
+                text: @tr("edit.title");
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+        }
+
+        TabWidget {
+            vertical-stretch: 1;
+
+            Tab {
+                title: @tr("edit.tab-devices");
+                VerticalLayout {
+                    padding-top: Theme.space-m;
+                    DeviceEditor { }
+                }
+            }
+            Tab {
+                title: @tr("edit.tab-roles");
+                VerticalLayout {
+                    padding-top: Theme.space-m;
+                    spacing: Theme.space-m;
+                    Text {
+                        text: @tr("roles.intro");
+                        font-size: Theme.font-body;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        for role in Bridge.role-list: RoleRow { role: role; }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -28,14 +28,14 @@
       "Edit(clippy.toml)",
       "Edit(rustfmt.toml)",
       "Edit(rust-toolchain.toml)",
-      "Edit(src/ui.rs)"
+      "Edit(src/ui.rs)",
+      "Edit(docs/agents/**)",
+      "Write(docs/agents/**)",
     ],
     "ask": [
 
       "Edit(AGENTS.md)",
       "Edit(CLAUDE.md)",
-      "Edit(docs/agents/**)",
-      "Write(docs/agents/**)",
       "Edit(.claude/settings.json)"
 
     ]

@@ -2,8 +2,11 @@ import { Button, LineEdit, Switch } from "std-widgets.slint";
 import { Bridge, MapSettings } from "bridge.slint";
 import { Theme } from "theme.slint";
 
-// Title, search, Scan and Settings.
+// Title, search, Scan, the edit page toggle and Settings.
 export component Header inherits Rectangle {
+    // Whether the edit page is showing instead of the map.
+    in-out property <bool> editing;
+
     height: Theme.header-height;
     background: Theme.surface;
 
@@ -26,7 +29,7 @@ export component Header inherits Rectangle {
             width: 24px;
         }
         Text {
-            text: "Network Mapper";
+            text: @tr("app.title");
             font-size: Theme.font-title;
             font-weight: 600;
             color: Theme.text;
@@ -37,11 +40,11 @@ export component Header inherits Rectangle {
 
         LineEdit {
             width: 320px;
-            placeholder-text: "Search by name, IP or MAC address";
+            placeholder-text: @tr("header.search-placeholder");
             edited(text) => { Bridge.search(text); }
         }
         Button {
-            text: Bridge.scanning ? "Scanning…" : "Scan";
+            text: Bridge.scanning ? @tr("header.scanning") : @tr("header.scan");
             // Wide enough for both labels, so the search field does not shift during a scan.
             min-width: 120px;
             icon: @image-url("icons/scan.svg");
@@ -50,7 +53,14 @@ export component Header inherits Rectangle {
             clicked => { Bridge.scan(); }
         }
         Button {
-            text: "Settings";
+            text: @tr("header.edit-devices");
+            icon: @image-url("icons/edit.svg");
+            colorize-icon: true;
+            checkable: true;
+            checked <=> root.editing;
+        }
+        Button {
+            text: @tr("header.settings");
             icon: @image-url("icons/settings.svg");
             colorize-icon: true;
             clicked => { settings-popup.show(); }
@@ -75,17 +85,17 @@ export component Header inherits Rectangle {
                 padding: Theme.space-l;
                 spacing: Theme.space-m;
                 Text {
-                    text: "Map display";
+                    text: @tr("settings.title");
                     font-size: Theme.font-heading;
                     font-weight: 600;
                     color: Theme.text;
                 }
                 Switch {
-                    text: "Show IP addresses";
+                    text: @tr("settings.show-addresses");
                     checked <=> MapSettings.show-addresses;
                 }
                 Switch {
-                    text: "Show inferred links";
+                    text: @tr("settings.show-inferred");
                     checked <=> MapSettings.show-inferred;
                 }
             }

@@ -1,7 +1,7 @@
 # Slint standards
 
-Read before touching `ui/` or `src/ui_bridge.rs`. Part of the agent rules indexed in
-[AGENTS.md](../../AGENTS.md).
+Read before touching `ui/`, `translations/` or `src/ui_bridge.rs`. Part of the agent rules
+indexed in [AGENTS.md](../../AGENTS.md).
 
 - UI lives in `.slint` files under `ui/`, compiled by `build.rs` with `slint-build` (not the
   `slint!` macro) so the UI is type-checked at build time. Style is `fluent` (Windows 11).
@@ -9,6 +9,15 @@ Read before touching `ui/` or `src/ui_bridge.rs`. Part of the agent rules indexe
   rebuilding widgets.
 - Design tokens (colours, spacing, radii, font sizes) live in one `global Theme`. MUST NOT
   scatter hard-coded colours or sizes across components.
+- **UI text lives only in `translations/<lang>/LC_MESSAGES/network-mapper.po`.** MUST NOT
+  write wording in `.slint` files or build it in Rust. Every visible or accessible string is
+  `@tr("area.name")` with a lower-case dotted key (counts:
+  `@tr("area.name" | "area.name.plural" % n)`). Wording derived from data (type, status, role,
+  "last seen") goes through the `Labels` global; Rust sends enums, numbers and names.
+- When adding, renaming or removing UI text, update the `msgid`/`msgstr` entries in
+  `translations/en/…/network-mapper.po` (and any other language files) in the same change.
+  `cargo test` fails on a key with no English text, an unused English entry, or wording passed
+  to `@tr()`. Full how-to: [translations/README.md](../../translations/README.md).
 - Small reusable components (device icon, status dot, device row, detail field) go in
   `ui/components/`. One component per concern; reuse before creating a variant.
 - Keep each component focused (guideline: under ~200 lines). Past that, split by responsibility.
@@ -21,4 +30,4 @@ Read before touching `ui/` or `src/ui_bridge.rs`. Part of the agent rules indexe
 - Icons are SVG files in `ui/icons/`: one consistent line-art style, same stroke width and
   viewBox, tinted with `colorize` rather than duplicated per colour.
 - For UI changes, launch the app (`cargo run`) when possible and check the change visually
-  against the [reference mockup](../design/reference-mockup.png).
+  against the design direction in [product.md](product.md).
