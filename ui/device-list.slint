@@ -1,0 +1,52 @@
+import { Button, ListView } from "std-widgets.slint";
+import { Bridge, StatusFilter } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { DeviceRow } from "components/device-row.slint";
+
+// Left panel: All / Online / Offline filters and the matching devices.
+export component DeviceList inherits Rectangle {
+    width: Theme.list-width;
+    background: Theme.surface;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.border;
+    }
+
+    VerticalLayout {
+        padding: Theme.space-m;
+        spacing: Theme.space-s;
+
+        HorizontalLayout {
+            spacing: Theme.space-xs;
+            for tab in [
+                { filter: StatusFilter.all, label: "All", count: Bridge.count-all },
+                { filter: StatusFilter.online, label: "Online", count: Bridge.count-online },
+                { filter: StatusFilter.offline, label: "Offline", count: Bridge.count-offline },
+            ]: Button {
+                text: "\{tab.label}  \{tab.count}";
+                primary: Bridge.filter == tab.filter;
+                clicked => { Bridge.set-filter(tab.filter); }
+            }
+        }
+
+        if Bridge.list.length == 0: Text {
+            text: "No devices match.";
+            font-size: Theme.font-body;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+            vertical-alignment: top;
+            vertical-stretch: 1;
+        }
+
+        if Bridge.list.length > 0: ListView {
+            vertical-stretch: 1;
+            for device in Bridge.list: DeviceRow {
+                device: device;
+                selected: device.id == Bridge.selected-id;
+                clicked => { Bridge.select(device.id); }
+            }
+        }
+    }
+}

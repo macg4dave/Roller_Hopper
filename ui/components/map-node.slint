@@ -1,0 +1,74 @@
+import { DeviceStatus, DeviceView } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { DeviceIcon } from "device-icon.slint";
+import { StatusDot } from "status-dot.slint";
+
+// A device on the topology map. Scales with the map zoom; the icon centre is the anchor point.
+export component MapNode inherits Rectangle {
+    in property <DeviceView> device;
+    in property <float> zoom: 1;
+    in property <bool> selected;
+    in property <bool> show-address: true;
+    out property <length> icon-size: Theme.map-icon * zoom;
+    callback clicked;
+    // Pointer movement since the press, while dragging.
+    callback dragged(length, length);
+
+    width: Theme.map-label-width * zoom;
+    height: layout.preferred-height;
+    opacity: device.dimmed ? 0.3 : 1;
+    accessible-role: button;
+    accessible-label: device.name;
+
+    touch := TouchArea {
+        mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.pointer;
+        clicked => { root.clicked(); }
+        moved => { root.dragged(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y); }
+    }
+
+    layout := VerticalLayout {
+        spacing: 3px * zoom;
+
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: icon-size + 14px * zoom;
+                height: self.width;
+                border-radius: self.width / 2;
+                background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+                border-width: selected ? 1px : 0;
+                border-color: Theme.accent;
+
+                DeviceIcon {
+                    kind: device.kind;
+                    width: icon-size;
+                    height: icon-size;
+                    colorize: selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon;
+                }
+
+                StatusDot {
+                    status: device.status;
+                    x: parent.width - self.width - 3px * zoom;
+                    y: 3px * zoom;
+                }
+            }
+        }
+
+        Text {
+            text: device.name;
+            // Floors keep labels legible when the whole map is fitted into a small window.
+            font-size: max(12px * zoom, 10px);
+            font-weight: 600;
+            color: Theme.text;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+
+        if show-address: Text {
+            text: device.ip;
+            font-size: max(11px * zoom, 9px);
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+}

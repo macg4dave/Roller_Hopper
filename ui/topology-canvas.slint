@@ -1,0 +1,195 @@
+import { Button } from "std-widgets.slint";
+import { Bridge, MapSettings } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { MapNode } from "components/map-node.slint";
+
+// The pannable, zoomable topology map. Pan and zoom are visual state and live here.
+export component TopologyCanvas inherits Rectangle {
+    property <float> zoom: 1;
+    property <length> pan-x;
+    property <length> pan-y;
+    // Keep fitting the map to the view on resize until the user pans or zooms by hand.
+    property <bool> auto-fit: true;
+    property <length> grid: Theme.grid-spacing * zoom;
+
+    background: Theme.background;
+    clip: true;
+
+    changed width => { if auto-fit { fit(); } }
+    changed height => { if auto-fit { fit(); } }
+
+    function fit() {
+        let b = Bridge.bounds;
+        let margin = 24px;
+        zoom = clamp(min((root.width - 2 * margin) / (b.width * 1px), (root.height - 2 * margin) / (b.height * 1px)), 0.25, 1.25);
+        pan-x = (root.width - b.width * zoom * 1px) / 2 - b.x * zoom * 1px;
+        pan-y = (root.height - b.height * zoom * 1px) / 2 - b.y * zoom * 1px;
+        auto-fit = true;
+    }
+
+    // Zooms by `factor`, keeping the map point under (px, py) in place.
+    function zoom-at(px: length, py: length, factor: float) {
+        let new-zoom = clamp(zoom * factor, 0.25, 3);
+        pan-x = px - (px - pan-x) * new-zoom / zoom;
+        pan-y = py - (py - pan-y) * new-zoom / zoom;
+        zoom = new-zoom;
+        auto-fit = false;
+    }
+
+    // Subtle grid that moves with the map.
+    for i in Math.ceil(root.width / grid) + 1: Rectangle {
+        x: Math.mod(pan-x, grid) + i * grid - grid;
+        width: 1px;
+        background: Theme.grid;
+    }
+    for i in Math.ceil(root.height / grid) + 1: Rectangle {
+        y: Math.mod(pan-y, grid) + i * grid - grid;
+        height: 1px;
+        background: Theme.grid;
+    }
+
+    pan := TouchArea {
+        property <length> start-x;
+        property <length> start-y;
+        mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                start-x = pan-x;
+                start-y = pan-y;
+            }
+        }
+        moved => {
+            pan-x = start-x + self.mouse-x - self.pressed-x;
+            pan-y = start-y + self.mouse-y - self.pressed-y;
+            auto-fit = false;
+        }
+        scroll-event(event) => {
+            zoom-at(self.mouse-x, self.mouse-y, event.delta-y > 0 ? 1.1 : 1 / 1.1);
+            accept
+        }
+    }
+
+    // Connection lines: one path per style, drawn in map units and scaled with the map.
+    for style in [
+        { commands: Bridge.lines.known, color: Theme.line, visible: true },
+        { commands: Bridge.lines.inferred, color: Theme.line, visible: MapSettings.show-inferred },
+        { commands: Bridge.lines.selected-known, color: Theme.accent, visible: true },
+        { commands: Bridge.lines.selected-inferred, color: Theme.accent, visible: MapSettings.show-inferred },
+    ]: Path {
+        x: pan-x + Bridge.bounds.x * zoom * 1px;
+        y: pan-y + Bridge.bounds.y * zoom * 1px;
+        width: Bridge.bounds.width * zoom * 1px;
+        height: Bridge.bounds.height * zoom * 1px;
+        viewbox-x: Bridge.bounds.x;
+        viewbox-y: Bridge.bounds.y;
+        viewbox-width: Bridge.bounds.width;
+        viewbox-height: Bridge.bounds.height;
+        commands: style.commands;
+        visible: style.visible;
+        stroke: style.color;
+        stroke-width: Theme.line-width;
+    }
+
+    for device in Bridge.devices: MapNode {
+        device: device;
+        zoom: zoom;
+        selected: device.id == Bridge.selected-id;
+        show-address: MapSettings.show-addresses;
+        x: pan-x + device.x * zoom * 1px - self.width / 2;
+        y: pan-y + device.y * zoom * 1px - (self.icon-size + 14px * zoom) / 2;
+        clicked => { Bridge.select(device.id); }
+        dragged(dx, dy) => {
+            Bridge.move-device(device.id, device.x + dx / zoom / 1px, device.y + dy / zoom / 1px);
+            auto-fit = false;
+        }
+    }
+
+    // Legend for the two line styles.
+    Rectangle {
+        x: Theme.space-l;
+        y: root.height - self.height - Theme.space-l;
+        width: legend.preferred-width;
+        height: legend.preferred-height;
+        background: Theme.surface;
+        border-color: Theme.border;
+        border-width: 1px;
+        border-radius: Theme.radius;
+
+        legend := HorizontalLayout {
+            padding: Theme.space-s;
+            spacing: Theme.space-s;
+            for entry in [
+                { label: "Known link", commands: "M 0 5 L 24 5" },
+                { label: "Inferred link", commands: "M 0 5 L 5 5 M 9.5 5 L 14.5 5 M 19 5 L 24 5" },
+            ]: HorizontalLayout {
+                spacing: Theme.space-xs;
+                Path {
+                    width: 24px;
+                    height: 10px;
+                    viewbox-width: 24;
+                    viewbox-height: 10;
+                    commands: entry.commands;
+                    stroke: Theme.line;
+                    stroke-width: Theme.line-width;
+                }
+                Text {
+                    text: entry.label;
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // Zoom and layout controls.
+    Rectangle {
+        x: Theme.space-l;
+        y: Theme.space-l;
+        width: controls.preferred-width;
+        height: controls.preferred-height;
+        background: Theme.surface;
+        border-color: Theme.border;
+        border-width: 1px;
+        border-radius: Theme.radius;
+
+        controls := VerticalLayout {
+            padding: Theme.space-xs;
+            spacing: Theme.space-xs;
+            Button {
+                icon: @image-url("icons/plus.svg");
+                colorize-icon: true;
+                accessible-label: "Zoom in";
+                clicked => { zoom-at(root.width / 2, root.height / 2, 1.25); }
+            }
+            Text {
+                text: "\{Math.round(zoom * 100)}%";
+                font-size: Theme.font-small;
+                color: Theme.text-muted;
+                horizontal-alignment: center;
+            }
+            Button {
+                icon: @image-url("icons/minus.svg");
+                colorize-icon: true;
+                accessible-label: "Zoom out";
+                clicked => { zoom-at(root.width / 2, root.height / 2, 1 / 1.25); }
+            }
+            Rectangle { height: 1px; background: Theme.border; }
+            Button {
+                icon: @image-url("icons/fit.svg");
+                colorize-icon: true;
+                accessible-label: "Fit to view";
+                clicked => { fit(); }
+            }
+            Button {
+                icon: @image-url("icons/reset-layout.svg");
+                colorize-icon: true;
+                accessible-label: "Reset layout";
+                clicked => {
+                    Bridge.reset-layout();
+                    fit();
+                }
+            }
+        }
+    }
+}

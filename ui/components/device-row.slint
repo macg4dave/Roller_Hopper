@@ -1,0 +1,66 @@
+import { DeviceStatus, DeviceView } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { DeviceIcon } from "device-icon.slint";
+import { StatusDot } from "status-dot.slint";
+
+// One entry in the device list.
+export component DeviceRow inherits Rectangle {
+    in property <DeviceView> device;
+    in property <bool> selected;
+    callback clicked;
+
+    height: Theme.row-height;
+    border-radius: Theme.radius;
+    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    accessible-role: list-item;
+    accessible-label: device.name;
+    accessible-item-selected: selected;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-s;
+        padding-right: Theme.space-m;
+        spacing: Theme.space-m;
+
+        DeviceIcon {
+            kind: device.kind;
+            width: 26px;
+            colorize: selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: device.name;
+                font-size: Theme.font-body;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            Text {
+                text: device.ip;
+                font-size: Theme.font-small;
+                color: Theme.text-muted;
+            }
+        }
+
+        Text {
+            text: device.role;
+            font-size: Theme.font-small;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            overflow: elide;
+            max-width: 90px;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            StatusDot { status: device.status; }
+        }
+    }
+}

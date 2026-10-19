@@ -1,0 +1,94 @@
+import { Button, LineEdit, Switch } from "std-widgets.slint";
+import { Bridge, MapSettings } from "bridge.slint";
+import { Theme } from "theme.slint";
+
+// Title, search, Scan and Settings.
+export component Header inherits Rectangle {
+    height: Theme.header-height;
+    background: Theme.surface;
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-l;
+        padding-right: Theme.space-l;
+        padding-top: Theme.space-s;
+        padding-bottom: Theme.space-s;
+        spacing: Theme.space-m;
+
+        Image {
+            source: @image-url("icons/logo.svg");
+            colorize: Theme.accent;
+            width: 24px;
+        }
+        Text {
+            text: "Network Mapper";
+            font-size: Theme.font-title;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        LineEdit {
+            width: 320px;
+            placeholder-text: "Search by name, IP or MAC address";
+            edited(text) => { Bridge.search(text); }
+        }
+        Button {
+            text: Bridge.scanning ? "Scanning…" : "Scan";
+            // Wide enough for both labels, so the search field does not shift during a scan.
+            min-width: 120px;
+            icon: @image-url("icons/scan.svg");
+            colorize-icon: true;
+            enabled: !Bridge.scanning;
+            clicked => { Bridge.scan(); }
+        }
+        Button {
+            text: "Settings";
+            icon: @image-url("icons/settings.svg");
+            colorize-icon: true;
+            clicked => { settings-popup.show(); }
+        }
+    }
+
+    settings-popup := PopupWindow {
+        x: root.width - self.width - Theme.space-l;
+        y: root.height - Theme.space-xs;
+        width: 260px;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: Theme.radius;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #0000001f;
+
+            VerticalLayout {
+                padding: Theme.space-l;
+                spacing: Theme.space-m;
+                Text {
+                    text: "Map display";
+                    font-size: Theme.font-heading;
+                    font-weight: 600;
+                    color: Theme.text;
+                }
+                Switch {
+                    text: "Show IP addresses";
+                    checked <=> MapSettings.show-addresses;
+                }
+                Switch {
+                    text: "Show inferred links";
+                    checked <=> MapSettings.show-inferred;
+                }
+            }
+        }
+    }
+}

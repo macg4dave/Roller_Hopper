@@ -1,6 +1,69 @@
+import { Palette, Spinner } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { Header } from "header.slint";
+import { DeviceList } from "device-list.slint";
+import { TopologyCanvas } from "topology-canvas.slint";
+import { DetailsPanel } from "details-panel.slint";
+
+export { Bridge }
+
 export component AppWindow inherits Window {
     title: "Network Mapper";
     preferred-width: 1280px;
     preferred-height: 800px;
-    background: #f7f8fa;
+    min-width: 1000px;
+    min-height: 600px;
+    background: Theme.background;
+    default-font-size: Theme.font-body;
+
+    // The design is light-only; without this, std-widgets follow a dark system theme.
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        Header { }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            DeviceList { }
+            TopologyCanvas { horizontal-stretch: 1; }
+            DetailsPanel { }
+        }
+
+        // Status bar: outcome of the last (simulated) scan.
+        Rectangle {
+            height: Theme.status-height;
+            background: Theme.surface;
+
+            Rectangle {
+                height: 1px;
+                y: 0;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: Theme.space-l;
+                padding-right: Theme.space-l;
+                spacing: Theme.space-s;
+
+                if Bridge.scanning: Spinner {
+                    indeterminate: true;
+                    width: 14px;
+                }
+                Text {
+                    text: Bridge.status-text;
+                    color: Theme.text;
+                    font-size: Theme.font-small;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "Sample data only. No real network access.";
+                    color: Theme.text-muted;
+                    font-size: Theme.font-small;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
 }

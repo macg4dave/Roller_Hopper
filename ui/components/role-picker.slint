@@ -1,0 +1,57 @@
+import { Button, ComboBox, LineEdit } from "std-widgets.slint";
+import { Bridge } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// Role dropdown for the selected device, with a way to add a custom role.
+export component RolePicker inherits VerticalLayout {
+    property <bool> adding;
+
+    horizontal-stretch: 1;
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        ComboBox {
+            // Fluent's 160px default leaves no room for the add button in the details panel.
+            min-width: 120px;
+            model: Bridge.roles;
+            current-index <=> Bridge.role-index;
+            selected => { Bridge.choose-role(self.current-index); }
+        }
+        Button {
+            icon: @image-url("../icons/plus.svg");
+            colorize-icon: true;
+            accessible-label: "Add custom role";
+            enabled: !adding;
+            clicked => { adding = true; }
+        }
+    }
+
+    if adding: HorizontalLayout {
+        spacing: Theme.space-xs;
+        new-role := LineEdit {
+            placeholder-text: "New role";
+            min-width: 100px;
+            init => { self.focus(); }
+            accepted(text) => {
+                Bridge.add-role(text);
+                adding = false;
+            }
+        }
+        Button {
+            text: "Add";
+            primary: true;
+            enabled: new-role.text != "";
+            clicked => {
+                Bridge.add-role(new-role.text);
+                adding = false;
+            }
+        }
+        Button {
+            icon: @image-url("../icons/close.svg");
+            colorize-icon: true;
+            accessible-label: "Cancel";
+            clicked => { adding = false; }
+        }
+    }
+}

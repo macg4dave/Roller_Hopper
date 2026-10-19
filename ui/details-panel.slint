@@ -1,0 +1,114 @@
+import { Button, LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { DetailField } from "components/detail-field.slint";
+import { DeviceIcon } from "components/device-icon.slint";
+import { RolePicker } from "components/role-picker.slint";
+import { StatusDot } from "components/status-dot.slint";
+
+// Right panel: everything known about the selected device; name, role and notes are editable.
+export component DetailsPanel inherits Rectangle {
+    width: Theme.details-width;
+    background: Theme.surface;
+
+    Rectangle {
+        width: 1px;
+        x: 0;
+        background: Theme.border;
+    }
+
+    if Bridge.selected-id < 0: Text {
+        text: "Select a device on the map or in the list to see its details.";
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width - 4 * Theme.space-l;
+    }
+
+    if Bridge.selected-id >= 0: scroll := ScrollView {
+        VerticalLayout {
+            width: scroll.visible-width;
+            alignment: start;
+            padding: Theme.space-l;
+            spacing: Theme.space-xs;
+
+            HorizontalLayout {
+                spacing: Theme.space-m;
+                padding-bottom: Theme.space-m;
+                DeviceIcon {
+                    kind: Bridge.details.kind;
+                    width: 44px;
+                    height: 44px;
+                    colorize: Theme.accent;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.space-xs;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: Bridge.details.name;
+                        font-size: Theme.font-title;
+                        font-weight: 600;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-s;
+                        alignment: start;
+                        VerticalLayout {
+                            alignment: center;
+                            StatusDot { status: Bridge.details.status; }
+                        }
+                        Text {
+                            text: Bridge.details.status-label;
+                            font-size: Theme.font-body;
+                            color: Theme.text-muted;
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: start;
+                    Button {
+                        icon: @image-url("icons/close.svg");
+                        colorize-icon: true;
+                        accessible-label: "Close details";
+                        clicked => { Bridge.select(-1); }
+                    }
+                }
+            }
+
+            DetailField {
+                label: "Name";
+                LineEdit {
+                    text <=> Bridge.name-draft;
+                    edited(text) => { Bridge.rename(text); }
+                }
+            }
+            DetailField {
+                label: "Role";
+                RolePicker { }
+            }
+            DetailField { label: "IP address"; value: Bridge.details.ip; }
+            DetailField { label: "MAC address"; value: Bridge.details.mac; }
+            DetailField { label: "Type"; value: Bridge.details.kind-label; }
+            if Bridge.details.manufacturer != "": DetailField { label: "Manufacturer"; value: Bridge.details.manufacturer; }
+            if Bridge.details.model != "": DetailField { label: "Model"; value: Bridge.details.model; }
+            if Bridge.details.hostname != "": DetailField { label: "Hostname"; value: Bridge.details.hostname; }
+            DetailField { label: "Last seen"; value: Bridge.details.last-seen; }
+            if Bridge.details.uplink != "": DetailField { label: "Connected to"; value: Bridge.details.uplink; }
+            if Bridge.details.services != "": DetailField { label: "Open ports"; value: Bridge.details.services; }
+            DetailField {
+                label: "Notes";
+                TextEdit {
+                    height: 96px;
+                    wrap: word-wrap;
+                    placeholder-text: "Add a note";
+                    text <=> Bridge.notes-draft;
+                    edited(text) => { Bridge.edit-notes(text); }
+                }
+            }
+        }
+    }
+}
