@@ -1,0 +1,5 @@
+# Protected: see AGENTS.md "Protected files".
+[toolchain]
+channel = "1.94.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

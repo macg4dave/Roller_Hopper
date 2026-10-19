@@ -1,0 +1,8 @@
+# Protected: see AGENTS.md "Protected files".
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+too-many-lines-threshold = 60
+too-many-arguments-threshold = 5
+cognitive-complexity-threshold = 15
