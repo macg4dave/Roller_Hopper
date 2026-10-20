@@ -1,0 +1,37 @@
+import { FoundDecision, FoundFinding } from "../bridge.slint";
+import { Labels } from "../labels.slint";
+import { Theme } from "../theme.slint";
+
+// A small rounded label, such as how a host was found. Empty text shows nothing.
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <color> colour: Theme.accent;
+    in property <color> tint: Theme.accent-soft;
+
+    visible: text != "";
+    height: 18px;
+    width: text == "" ? 0 : label.preferred-width + 2 * Theme.space-s;
+    border-radius: self.height / 2;
+    background: tint;
+
+    label := Text {
+        text: root.text;
+        color: colour;
+        font-size: Theme.font-small;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+}
+
+// A found host's flag: New, a possible duplicate, or what the user did with it. Nothing for a
+// device already on the map.
+export component FlagChip inherits Chip {
+    in property <FoundFinding> finding;
+    in property <FoundDecision> decision;
+
+    property <bool> settled: decision != FoundDecision.pending;
+
+    text: Labels.found-flag(finding, decision);
+    colour: settled ? Theme.text-muted : finding == FoundFinding.duplicate ? Theme.warning : Theme.accent;
+    tint: settled ? Theme.hover : finding == FoundFinding.duplicate ? Theme.warning-soft : Theme.accent-soft;
+}

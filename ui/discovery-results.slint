@@ -1,0 +1,80 @@
+import { Button, ListView } from "std-widgets.slint";
+import { Bridge, DiscoveryPhase, FoundFilter } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { FoundColumns, FoundRow } from "components/found-row.slint";
+
+// The hosts the discovery run found, with filters for the ones worth a look.
+export component DiscoveryResults inherits VerticalLayout {
+    spacing: Theme.space-s;
+
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        alignment: start;
+        for tab in [
+            { filter: FoundFilter.all, label: @tr("discovery.filter.all"), count: Bridge.discovery.count-all },
+            { filter: FoundFilter.new, label: @tr("discovery.filter.new"), count: Bridge.discovery.count-new },
+            { filter: FoundFilter.unidentified, label: @tr("discovery.filter.unidentified"), count: Bridge.discovery.count-unidentified },
+            { filter: FoundFilter.duplicates, label: @tr("discovery.filter.duplicates"), count: Bridge.discovery.count-duplicates },
+        ]: Button {
+            text: @tr("filter.button", tab.label, tab.count);
+            primary: Bridge.discovery.filter == tab.filter;
+            clicked => { Bridge.set-found-filter(tab.filter); }
+        }
+    }
+
+    // Column headings, padded and spaced like FoundRow so they sit over their columns.
+    VerticalLayout {
+        spacing: Theme.space-xs;
+        vertical-stretch: 0;
+        HorizontalLayout {
+            padding-left: Theme.space-s;
+            padding-right: Theme.space-s + Theme.scrollbar-width;
+            spacing: Theme.space-m;
+            Rectangle { width: FoundColumns.icon; }
+            Text {
+                text: @tr("discovery.column.name");
+                horizontal-stretch: 1;
+                font-size: Theme.font-small;
+                font-weight: 600;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+            for heading in [
+                { text: @tr("details.ip"), width: FoundColumns.ip, align: TextHorizontalAlignment.left },
+                { text: @tr("details.mac"), width: FoundColumns.mac, align: TextHorizontalAlignment.left },
+                { text: @tr("details.role"), width: FoundColumns.role, align: TextHorizontalAlignment.left },
+                { text: @tr("discovery.found-by"), width: FoundColumns.methods, align: TextHorizontalAlignment.left },
+                { text: @tr("discovery.confidence"), width: FoundColumns.confidence, align: TextHorizontalAlignment.right },
+            ]: Text {
+                text: heading.text;
+                width: heading.width;
+                horizontal-alignment: heading.align;
+                font-size: Theme.font-small;
+                font-weight: 600;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+    }
+
+    if Bridge.found.length == 0: Text {
+        text: Bridge.discovery.phase == DiscoveryPhase.idle ? @tr("discovery.empty.idle") : @tr("discovery.empty.none");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: top;
+        vertical-stretch: 1;
+    }
+
+    if Bridge.found.length > 0: ListView {
+        vertical-stretch: 1;
+        for found[i] in Bridge.found: FoundRow {
+            found: found;
+            index: i;
+        }
+    }
+}

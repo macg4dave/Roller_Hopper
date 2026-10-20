@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { DeviceKind, DeviceStatus, GroupColour, GuestKind, RoleKind } from "bridge.slint";
+import { DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, FoundDecision, FoundFinding, GroupColour, GuestKind, LogEvent, LogView, RoleKind } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -143,6 +143,58 @@ export global Labels {
     public pure function card(ip: string, via-name: string, via-card: string, via-index: int, inferred: bool) -> string {
         let address = ip == "" ? @tr("card.no-address") : ip;
         return via-name == "" ? address : @tr("details.card.value", address, plugged-into(via-name, via-card, via-index, inferred));
+    }
+
+    public pure function method(method: DiscoveryMethod) -> string {
+        if method == DiscoveryMethod.arp { return @tr("method.arp"); }
+        if method == DiscoveryMethod.ping { return @tr("method.ping"); }
+        if method == DiscoveryMethod.snmp { return @tr("method.snmp"); }
+        if method == DiscoveryMethod.mdns { return @tr("method.mdns"); }
+        if method == DiscoveryMethod.upnp { return @tr("method.upnp"); }
+        if method == DiscoveryMethod.onvif { return @tr("method.onvif"); }
+        return @tr("method.lldp");
+    }
+
+    // Minutes and seconds, as on a stopwatch.
+    public pure function clock(seconds: int) -> string {
+        let minutes = Math.floor(seconds / 60);
+        let rest = Math.mod(seconds, 60);
+        return @tr("time.clock", (minutes < 10 ? "0" : "") + minutes, (rest < 10 ? "0" : "") + rest);
+    }
+
+    // A found host that told no name.
+    public pure function found-name(name: string) -> string {
+        return name == "" ? @tr("discovery.unidentified-name") : name;
+    }
+
+    // The badge by a found host's name: what was done with it, or how it compares with the
+    // map. Empty for a device already on it.
+    public pure function found-flag(finding: FoundFinding, decision: FoundDecision) -> string {
+        if decision == FoundDecision.added { return @tr("flag.added"); }
+        if decision == FoundDecision.ignored { return @tr("flag.ignored"); }
+        if finding == FoundFinding.duplicate { return @tr("flag.duplicate"); }
+        if finding == FoundFinding.new { return @tr("flag.new"); }
+        return "";
+    }
+
+    // Over the progress bar: what the run is doing to which subnet.
+    public pure function discovery-heading(phase: DiscoveryPhase, target: string) -> string {
+        if phase == DiscoveryPhase.running { return @tr("discovery.heading.running", target); }
+        if phase == DiscoveryPhase.paused { return @tr("discovery.heading.paused", target); }
+        if phase == DiscoveryPhase.finished { return @tr("discovery.heading.finished", target); }
+        return @tr("discovery.heading.idle", target);
+    }
+
+    public pure function log-message(entry: LogView) -> string {
+        if entry.event == LogEvent.started { return @tr("log.started", entry.text); }
+        if entry.event == LogEvent.sweep { return @tr("log.sweep", entry.count); }
+        if entry.event == LogEvent.discovered { return @tr("log.discovered", entry.text, entry.ip); }
+        if entry.event == LogEvent.unidentified { return @tr("log.unidentified", entry.ip, entry.mac); }
+        if entry.event == LogEvent.duplicate { return @tr("log.duplicate", entry.ip, device-name(entry.text)); }
+        if entry.event == LogEvent.paused { return @tr("log.paused"); }
+        if entry.event == LogEvent.resumed { return @tr("log.resumed"); }
+        if entry.event == LogEvent.stopped { return @tr("log.stopped" | "log.stopped.plural" % entry.count); }
+        return @tr("log.finished" | "log.finished.plural" % entry.count);
     }
 
     public pure function scan-status(scanning: bool, scans: int, devices: int, offline: int) -> string {

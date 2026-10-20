@@ -4,6 +4,9 @@ import { Theme } from "theme.slint";
 
 // Title, Scan and Settings. Search and the edit page are reached from the device list.
 export component Header inherits Rectangle {
+    // Scan was clicked: the discovery page is wanted.
+    callback scan();
+
     height: Theme.header-height;
     background: Theme.surface;
 
@@ -41,8 +44,7 @@ export component Header inherits Rectangle {
             min-width: 120px;
             icon: @image-url("icons/scan.svg");
             colorize-icon: true;
-            enabled: !Bridge.scanning;
-            clicked => { Bridge.scan(); }
+            clicked => { root.scan(); }
         }
         Button {
             text: @tr("header.settings");

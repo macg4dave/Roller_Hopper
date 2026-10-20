@@ -1,8 +1,10 @@
 //! Sends the state to the window's `Bridge` global after every change: the lists, the roles and
-//! groups, the selection and its network cards. The map sends its own part (see
-//! [`super::map::push`]); the network cards' views are built in [`cards`].
+//! groups, the selection and its network cards, and the discovery page. The map sends its own
+//! part (see [`super::map::push`]); the network cards' views are built in [`cards`], and the
+//! discovery page's in [`discovery`].
 
 mod cards;
+mod discovery;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -38,7 +40,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     bridge.set_count_all(count(network, StatusFilter::All));
     bridge.set_count_online(count(network, StatusFilter::Online));
     bridge.set_count_offline(count(network, StatusFilter::Offline));
-    bridge.set_scanning(state.scanning);
+    discovery::push(&bridge, &labels, state);
     bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
     push_selection(&bridge, &labels, state);
     push_card(&bridge, &labels, state);

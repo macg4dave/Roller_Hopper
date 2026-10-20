@@ -1,0 +1,136 @@
+import { Button, ComboBox, ScrollView } from "std-widgets.slint";
+import { Bridge, FoundDecision, FoundFinding, FoundView } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+import { Chip, FlagChip } from "components/chip.slint";
+import { DetailField } from "components/detail-field.slint";
+import { DeviceIcon } from "components/device-icon.slint";
+
+// Right of the discovery results: what the run found out about the selected host. A host not on
+// the map can be given a role and added to it, or ignored; one on the map can be shown there.
+export component DiscoveryDetails inherits Rectangle {
+    // Show the device with this id on the map, whose first card sits at (x, y) on it.
+    callback show-on-map(int, float, float);
+
+    property <FoundView> found: Bridge.found-details;
+    property <bool> addable: found.finding != FoundFinding.known && found.decision != FoundDecision.added;
+
+    background: Theme.surface;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius;
+
+    if Bridge.selected-found < 0: Text {
+        text: @tr("discovery.details.empty");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width - 4 * Theme.space-l;
+    }
+
+    if Bridge.selected-found >= 0: scroll := ScrollView {
+        VerticalLayout {
+            width: scroll.visible-width;
+            alignment: start;
+            padding: Theme.space-l;
+            spacing: Theme.space-xs;
+
+            HorizontalLayout {
+                spacing: Theme.space-m;
+                padding-bottom: Theme.space-m;
+                DeviceIcon {
+                    icon: found.icon;
+                    width: 44px;
+                    height: 44px;
+                    colorize: found.unidentified ? Theme.unknown : Theme.accent;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.space-xs;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: Labels.found-name(found.name);
+                        font-size: Theme.font-title;
+                        font-weight: 600;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        FlagChip {
+                            finding: found.finding;
+                            decision: found.decision;
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        icon: @image-url("icons/close.svg");
+                        colorize-icon: true;
+                        accessible-label: @tr("details.close");
+                        clicked => { Bridge.select-found(-1); }
+                    }
+                }
+            }
+
+            DetailField { label: @tr("details.ip"); value: found.ip; }
+            if found.mac != "": DetailField { label: @tr("details.mac"); value: found.mac; }
+            if found.duplicate-of != "": DetailField {
+                label: @tr("discovery.same-mac-as");
+                value: Labels.device-name(found.duplicate-of);
+            }
+            if found.hostname != "": DetailField { label: @tr("details.hostname"); value: found.hostname; }
+            if found.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: found.manufacturer; }
+            if found.model != "": DetailField { label: @tr("details.model"); value: found.model; }
+            DetailField { label: @tr("details.type"); value: Labels.kind(found.kind); }
+            DetailField {
+                label: @tr("details.role");
+                value: addable ? "" : found.role;
+                if addable: ComboBox {
+                    // Picking a role replaces the binding, so keep it following Rust's state.
+                    property <int> role-index: found.role-index;
+                    changed role-index => { self.current-index = self.role-index; }
+                    horizontal-stretch: 1;
+                    model: Bridge.roles;
+                    current-index: found.role-index;
+                    selected => { Bridge.set-found-role(found.index, self.current-index); }
+                }
+            }
+            DetailField {
+                label: @tr("discovery.found-by");
+                HorizontalLayout {
+                    padding-top: 7px;
+                    alignment: start;
+                    spacing: Theme.space-xs;
+                    for method in found.methods: Chip { text: Labels.method(method); }
+                }
+            }
+            DetailField { label: @tr("discovery.confidence"); value: @tr("discovery.percent", found.confidence); }
+            if found.services != "": DetailField { label: @tr("details.open-ports"); value: found.services; }
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space-s;
+                padding-top: Theme.space-m;
+                if addable: Button {
+                    text: @tr("discovery.add");
+                    icon: @image-url("icons/plus.svg");
+                    colorize-icon: true;
+                    primary: true;
+                    clicked => { Bridge.add-found(found.index); }
+                }
+                if addable && found.decision == FoundDecision.pending: Button {
+                    text: @tr("discovery.ignore");
+                    clicked => { Bridge.ignore-found(found.index); }
+                }
+                if found.device-id >= 0: Button {
+                    text: @tr("discovery.show-on-map");
+                    clicked => { root.show-on-map(found.device-id, found.map-x, found.map-y); }
+                }
+            }
+        }
+    }
+}

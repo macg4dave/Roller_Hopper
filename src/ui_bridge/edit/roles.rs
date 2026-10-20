@@ -14,7 +14,8 @@ use crate::ui_bridge::{AppState, convert, handler};
 type NewRole = (SharedString, Icon, Vec<SharedString>);
 
 impl AppState {
-    pub(super) fn role(&self, index: usize) -> Option<Role> {
+    /// The role at `index` in the role dropdown.
+    pub(in crate::ui_bridge) fn role(&self, index: usize) -> Option<Role> {
         self.network.roles().into_iter().nth(index)
     }
 

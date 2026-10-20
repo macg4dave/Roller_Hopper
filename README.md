@@ -32,13 +32,15 @@ src/main.rs        wiring only: build state, create window, connect callbacks, r
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices with their network cards, virtual machines and
                    containers; the map's tree of network cards, roles, groups,
-                   layout) — no Slint imports
-src/mock_data.rs   the sample network
+                   layout; the simulated discovery run) — no Slint imports
+src/mock_data.rs   the sample network, and in mock_data/ the hosts a discovery run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
 src/ui_bridge/     edit/ (device, card, port, role and group edits), map/ (layout, dragging,
-                   lines, motion), view/ (sending state to the UI), model ↔ Slint conversion,
-                   reading the icon folder, choosing the language
-ui/                .slint files: app window, panels, canvas, components/, theme
+                   lines, motion), discovery (the timed scan run), view/ (sending state to
+                   the UI), model ↔ Slint conversion, reading the icon folder, choosing the
+                   language
+ui/                .slint files: app window, panels, canvas, edit and discovery pages,
+                   components/, theme
 ui/icons/          icons that are part of the UI (buttons, logo), compiled in
 icons/             device icons for the picker, read at run time (see above)
 translations/      all UI text: one gettext .po file per language (English in en/)

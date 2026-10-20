@@ -1,0 +1,65 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { DiscoveryDetails } from "discovery-details.slint";
+import { DiscoveryLog } from "discovery-log.slint";
+import { DiscoveryResults } from "discovery-results.slint";
+import { DiscoverySetup } from "discovery-setup.slint";
+
+// The page the Scan button opens, over the map view: a simulated scan of one of the network's
+// subnets, the hosts it finds, its log, and the selected host's details.
+export component DiscoveryPage inherits Rectangle {
+    callback back();
+    // Back to the map, with the device with this id shown there, at (x, y) on the map.
+    callback show-on-map(int, float, float);
+
+    background: Theme.surface;
+
+    VerticalLayout {
+        padding: Theme.space-l;
+        spacing: Theme.space-m;
+
+        HorizontalLayout {
+            spacing: Theme.space-m;
+            Button {
+                text: @tr("edit.back");
+                clicked => { root.back(); }
+            }
+            Text {
+                text: @tr("discovery.title");
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            Text {
+                text: @tr("discovery.simulated");
+                font-size: Theme.font-body;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+        }
+
+        DiscoverySetup { }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.space-l;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Theme.space-m;
+                DiscoveryResults { vertical-stretch: 1; }
+                DiscoveryLog {
+                    height: Theme.discovery-log-height;
+                    vertical-stretch: 0;
+                }
+            }
+            DiscoveryDetails {
+                width: Theme.details-width;
+                show-on-map(id, x, y) => { root.show-on-map(id, x, y); }
+            }
+        }
+    }
+}

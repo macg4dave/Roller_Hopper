@@ -24,17 +24,18 @@ Keep the design simple, not an enterprise-style dashboard.
 - Main focus: a spacious **2D network topology canvas**.
 - Crisp, consistent, minimal **SVG-style line-art icons**, not generic clip art or oversized illustrations.
 - Light background, subtle grid, thin connection lines, clear typography, restrained accent colour.
-- The main view favours device information over controls: editing lives on one separate edit page, not in the main view. Avoid decorative metrics, analytics, reports, dashboards, or enterprise terminology.
+- The main view favours device information over controls: editing lives on one separate edit page, not in the main view. Avoid decorative metrics, analytics, reports, dashboards, or enterprise terminology. The discovery page's few result counts double as its filters; they are not decorative metrics.
 - Keep the interface uncluttered. Use straightforward British English throughout.
 
 ## Main window
 
-1. **Header:** application title, simple search field, Scan button, Edit devices button, Settings button.
+1. **Header:** application title, simple search field, Scan button (opens the discovery page), Edit devices button, Settings button.
 2. **Left panel:** compact, scrollable device list with icon, user-friendly name, IP address, and small online/offline indicator. Simple All / Online / Offline filters.
 3. **Centre:** large interactive 2D topology canvas showing a router, switch, access point, NAS, PCs, servers, printers, phones, smart devices and unknown devices. Display short names and IPs alongside line-art icons. Use neat connection lines and visually distinguish *known* from *inferred* connections.
 4. **Right panel:** read-only details for the selected device: display name, IP, MAC, manufacturer, type, role, model, hostname, status, last seen, services/ports where relevant, and notes. Don't show fields with invented meaning merely to fill space. An Edit button opens the edit page on that device.
 5. **Canvas controls:** zoom in/out, zoom percentage, fit-to-view and reset layout. Provide two-dimensional pan by dragging the canvas; selection should remain easy.
 6. **Edit page:** replaces the main view (list, map, details) in the same window, with a way back. A **Devices** tab edits each device's name, role, icon and notes, and can forget a device. A **Roles** tab lists every role with its icon and device count; custom roles can be renamed, given another icon or deleted.
+7. **Discovery page:** replaces the main view like the edit page, with a way back, and says plainly that the scan is simulated. Pick one of the network's subnets and the options (ping sweep, port scan, service detection); Start, Pause/Resume and Stop a run that shows its progress and elapsed time. Results list each host found with its name, IP, MAC, role, how it was found (ARP, SNMP, mDNS…) and a confidence; hosts are flagged New, Unidentified or possible Duplicate (same MAC as a device on the map), with All / New / Unidentified / Duplicates filters showing counts. A log lists what the run did. The selected host's details let a new host be given a role and **added to the map** (with an inferred link to its router) or ignored; a host on the map can be shown there. No OS guessing, schedules, scan profiles or exports.
 
 ## Prototype behaviour
 
@@ -47,7 +48,7 @@ All visible controls should behave plausibly **within the mock UI**:
 - A device's icon follows its role (Other keeps the detected icon); a device can also be given its own icon.
 - Forgetting a device removes it from the mock data until restart, and says so. It is not real device management.
 - Use a sensible set of mock devices with internally consistent names, IPs, MACs and relationships.
-- Make Scan visibly simulate a refresh using local dummy data. Never imply a real scan happened.
+- Make a discovery run visibly simulate a scan using local dummy data, refreshing the sample network's statuses and finding a few sample hosts not on the map. Never imply a real scan happened.
 - Use simple visual states for online, offline, and unknown devices.
 - If an interaction is visible, wire it up to mock state or clearly make it non-interactive. No dead buttons or misleading results.
 
@@ -70,4 +71,4 @@ All visible controls should behave plausibly **within the mock UI**:
 
 ## Definition of done
 
-A runnable Rust/Slint desktop mockup following the design direction above, with an interactive pannable/zoomable device map, device list, selection and details, editable labels and roles, search/filters, and simulated scan. **No real network functionality.**
+A runnable Rust/Slint desktop mockup following the design direction above, with an interactive pannable/zoomable device map, device list, selection and details, editable labels and roles, search/filters, and a simulated scan on the discovery page. **No real network functionality.**

@@ -1,0 +1,98 @@
+import { Bridge, FoundDecision, FoundView } from "../bridge.slint";
+import { Labels } from "../labels.slint";
+import { Theme } from "../theme.slint";
+import { Chip, FlagChip } from "chip.slint";
+import { DeviceIcon } from "device-icon.slint";
+
+// Column sizes shared by the rows and the heading above them, so the columns line up. The name
+// takes the rest of the width.
+export global FoundColumns {
+    out property <length> icon: 20px;
+    out property <length> ip: 104px;
+    out property <length> mac: 128px;
+    out property <length> role: 100px;
+    out property <length> methods: 160px;
+    out property <length> confidence: 44px;
+}
+
+// One host in the discovery results: click to see its details. An ignored host is faded.
+export component FoundRow inherits Rectangle {
+    in property <FoundView> found;
+    // Its place in the shown list, for the stripes.
+    in property <int> index;
+
+    property <bool> selected: found.index == Bridge.selected-found;
+
+    height: Theme.found-row-height;
+    border-radius: Theme.radius;
+    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : Math.mod(index, 2) == 1 ? Theme.stripe : transparent;
+    opacity: found.decision == FoundDecision.ignored ? 0.55 : 1;
+    accessible-role: list-item;
+    accessible-label: Labels.found-name(found.name);
+    accessible-item-selected: selected;
+
+    touch := TouchArea {
+        clicked => { Bridge.select-found(found.index); }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-s;
+        padding-right: Theme.space-s + Theme.scrollbar-width;
+        spacing: Theme.space-m;
+
+        DeviceIcon {
+            icon: found.icon;
+            width: FoundColumns.icon;
+            colorize: found.unidentified ? Theme.unknown : Theme.icon;
+        }
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: Theme.space-s;
+            Text {
+                text: Labels.found-name(found.name);
+                color: found.name == "" ? Theme.text-muted : Theme.text;
+                font-size: Theme.font-body;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                min-width: 60px;
+            }
+            VerticalLayout {
+                alignment: center;
+                FlagChip {
+                    finding: found.finding;
+                    decision: found.decision;
+                }
+            }
+        }
+        for cell in [
+            { text: found.ip, width: FoundColumns.ip },
+            { text: found.mac, width: FoundColumns.mac },
+            { text: found.role, width: FoundColumns.role },
+        ]: Text {
+            text: cell.text;
+            width: cell.width;
+            color: Theme.text;
+            font-size: Theme.font-body;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            width: FoundColumns.methods;
+            alignment: start;
+            spacing: Theme.space-xs;
+            for method in found.methods: VerticalLayout {
+                alignment: center;
+                Chip { text: Labels.method(method); }
+            }
+        }
+        Text {
+            text: @tr("discovery.percent", found.confidence);
+            width: FoundColumns.confidence;
+            color: found.confidence < 60 ? Theme.warning : Theme.text;
+            font-size: Theme.font-body;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+}

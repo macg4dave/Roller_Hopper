@@ -18,6 +18,18 @@ impl Network {
         })
     }
 
+    /// The subnets the cards are on, each once, in device order.
+    pub(crate) fn subnets(&self) -> Vec<Ipv4Net> {
+        let mut subnets = Vec::new();
+        let cards = self.devices.iter().flat_map(|d| &d.cards);
+        for subnet in cards.filter_map(|card| card.address.map(|a| a.trunc())) {
+            if !subnets.contains(&subnet) {
+                subnets.push(subnet);
+            }
+        }
+        subnets
+    }
+
     pub(super) fn next_card_id(&self) -> CardId {
         let cards = self.devices.iter().flat_map(|d| &d.cards);
         CardId(cards.map(|card| card.id.0).max().unwrap_or(0) + 1)

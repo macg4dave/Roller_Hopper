@@ -203,6 +203,80 @@ export struct MapBounds {
     height: float,
 }
 
+// A simulated discovery run, from the Scan button's page.
+export enum DiscoveryPhase { idle, running, paused, finished }
+export enum DiscoveryOption { ping-sweep, port-scan, service-detection }
+// How a found host compares with the map: matched by MAC address.
+export enum FoundFinding { known, new, duplicate }
+export enum FoundDecision { pending, added, ignored }
+export enum FoundFilter { all, new, unidentified, duplicates }
+export enum DiscoveryMethod { arp, ping, snmp, mdns, upnp, onvif, lldp }
+export enum LogEvent { started, sweep, discovered, unidentified, duplicate, paused, resumed, stopped, finished }
+
+/// The discovery run as a whole. `seconds` is how long it has been running.
+export struct DiscoveryView {
+    phase: DiscoveryPhase,
+    // The subnet scanned, or to be scanned, and its place in Bridge.discovery-targets.
+    target: string,
+    target-index: int,
+    ping-sweep: bool,
+    port-scan: bool,
+    service-detection: bool,
+    // Addresses checked so far, of all of them.
+    swept: int,
+    addresses: int,
+    seconds: int,
+    filter: FoundFilter,
+    count-all: int,
+    count-new: int,
+    count-unidentified: int,
+    count-duplicates: int,
+}
+
+/// A host the run found. `index` is its place among all found hosts, which the callbacks take.
+export struct FoundView {
+    index: int,
+    // The device on the map it is (known, or added since), -1 for none; and where that
+    // device's first card sits on the map.
+    device-id: int,
+    map-x: float,
+    map-y: float,
+    // Empty when nothing told its name.
+    name: string,
+    ip: string,
+    mac: string,
+    hostname: string,
+    manufacturer: string,
+    model: string,
+    kind: DeviceKind,
+    // Already translated, like DeviceView.role, and its place in Bridge.roles.
+    role: string,
+    role-index: int,
+    icon: image,
+    // Its open ports, as shown (empty when none).
+    services: string,
+    methods: [DiscoveryMethod],
+    // In per cent.
+    confidence: int,
+    unidentified: bool,
+    finding: FoundFinding,
+    // For a duplicate: the name of the device on the map with the same MAC address.
+    duplicate-of: string,
+    decision: FoundDecision,
+}
+
+/// A line of the discovery log. Which fields are filled depends on the event: `text` is a
+/// subnet or a device's name, `ip` and `mac` a host's, `count` a number of addresses or hosts.
+export struct LogView {
+    seconds: int,
+    warning: bool,
+    event: LogEvent,
+    text: string,
+    ip: string,
+    mac: string,
+    count: int,
+}
+
 export global Bridge {
     // The map's nodes: every network card, drawn with its device's icon and name. Devices are
     // not on the map themselves.
@@ -242,9 +316,20 @@ export global Bridge {
     in property <int> count-all;
     in property <int> count-online;
     in property <int> count-offline;
+    // A discovery run is running or paused.
     in property <bool> scanning;
     // Completed simulated scans.
     in property <int> scans;
+    in property <DiscoveryView> discovery;
+    // The subnets the network's cards are on, for the discovery page's network dropdown.
+    in property <[string]> discovery-targets;
+    // The found hosts the result filter lets through, in address order.
+    in property <[FoundView]> found;
+    // The found host shown in the discovery details (index in FoundView), -1 for none.
+    in property <int> selected-found: -1;
+    in property <FoundView> found-details;
+    // Newest first.
+    in property <[LogView]> discovery-log;
     // Every icon in the icon folder, for the icon picker.
     in property <[IconGroup]> icons;
     // The category of the network card icons in icons, which a card's picker opens on; -1 when
@@ -330,7 +415,20 @@ export global Bridge {
     callback cancel-drag();
     // Brings back the connections as found, and the tidy layout.
     callback reset-layout();
-    callback scan();
+    // The discovery run: start (again), pause or resume, and stop where it got to. Its subnet
+    // (index in discovery-targets) and options can be changed while it is not busy.
+    callback start-discovery();
+    callback pause-discovery();
+    callback stop-discovery();
+    callback set-discovery-target(int);
+    callback set-discovery-option(DiscoveryOption, bool);
+    callback set-found-filter(FoundFilter);
+    // Found hosts by their FoundView.index, -1 for none. A host not on the map can be given a
+    // role (index in roles), then added to the map or ignored.
+    callback select-found(int);
+    callback set-found-role(int, int);
+    callback add-found(int);
+    callback ignore-found(int);
 }
 
 /// Purely visual map preferences from the map's View menu: what each device is labelled with.

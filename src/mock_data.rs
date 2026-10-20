@@ -1,4 +1,9 @@
-//! The sample home network, and the fake refresh the Scan button runs on it.
+//! The sample home network, the fake refresh a discovery run makes of it, and the hosts that
+//! answer the run (see [`answers`]).
+
+mod answers;
+
+pub(crate) use answers::answers;
 
 use std::net::Ipv4Addr;
 

@@ -1,7 +1,7 @@
 //! Adding devices, the virtual machines and containers a device hosts, and forgetting a device
 //! with them.
 
-use super::Network;
+use super::{ConnectionKind, Network};
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::{Device, DeviceId, DeviceKind, Guest, LastSeen, Role, Status};
 
@@ -53,30 +53,18 @@ impl Network {
     /// its card plugged into the host's first card; refused when the host is missing. Any other
     /// device comes last, plugged in nowhere.
     pub(crate) fn add_device(&mut self, guest: Option<Guest>) -> Option<DeviceId> {
-        let (at, host_card) = match guest {
-            Some(Guest { host, .. }) => {
-                let host_card = self.device(host)?.primary_card()?.id;
-                let last = self
-                    .devices
-                    .iter()
-                    .rposition(|d| self.runs_within(d.id, host));
-                (
-                    last.map_or(self.devices.len(), |at| at + 1),
-                    Some(host_card),
-                )
-            }
-            None => (self.devices.len(), None),
+        let host_card = match guest {
+            Some(Guest { host, .. }) => Some(self.device(host)?.primary_card()?.id),
+            None => None,
         };
-        let card = self.next_card_id();
-        let id = DeviceId(self.devices.iter().map(|d| d.id.0).max().unwrap_or(0) + 1);
         let device = Device {
-            id,
+            id: DeviceId(0),
             name: String::new(),
             kind: DeviceKind::Unknown,
             role: Role::Other,
             icon: None,
             status: Status::Unknown,
-            cards: vec![NetworkCard::blank(card)],
+            cards: vec![NetworkCard::blank(CardId(0))],
             guest,
             manufacturer: None,
             model: None,
@@ -84,11 +72,41 @@ impl Network {
             last_seen: LastSeen::default(),
             notes: String::new(),
         };
-        self.devices.insert(at, device);
-        if host_card.is_some() {
-            self.plug(card, host_card, true);
+        let uplink = host_card.map(|card| (card, ConnectionKind::Known));
+        Some(self.insert_device(device, uplink))
+    }
+
+    /// Adds `device` under a fresh id, its cards under fresh ids, and returns its id. A guest
+    /// comes after its host's other guests, any other device last. Its first card is plugged
+    /// into `uplink`'s card, as a link of that kind kept when the layout is reset.
+    pub(crate) fn insert_device(
+        &mut self,
+        mut device: Device,
+        uplink: Option<(CardId, ConnectionKind)>,
+    ) -> DeviceId {
+        device.id = DeviceId(self.devices.iter().map(|d| d.id.0).max().unwrap_or(0) + 1);
+        let first_card = self.next_card_id().0;
+        for (card, id) in device.cards.iter_mut().zip(first_card..) {
+            card.id = CardId(id);
         }
-        Some(id)
+        let host = device.guest.map(|g| g.host);
+        let after_guests = host.and_then(|host| {
+            let last = self
+                .devices
+                .iter()
+                .rposition(|d| self.runs_within(d.id, host));
+            last.map(|at| at + 1)
+        });
+        let (id, card) = (device.id, device.primary_card().map(|c| c.id));
+        self.devices
+            .insert(after_guests.unwrap_or(self.devices.len()), device);
+        if let (Some(card), Some((upstream, kind))) = (card, uplink)
+            && self.plug(card, Some(upstream), true)
+        {
+            let links = self.links.iter_mut().chain(&mut self.detected);
+            links.filter(|l| l.card == card).for_each(|l| l.kind = kind);
+        }
+        id
     }
 
     /// Forgets a device with everything that runs on it, the links of their cards and the links

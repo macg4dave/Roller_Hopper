@@ -72,7 +72,7 @@ pub(super) fn filter_to_ui(filter: StatusFilter) -> ui::StatusFilter {
     }
 }
 
-fn kind(kind: DeviceKind) -> ui::DeviceKind {
+pub(super) fn kind(kind: DeviceKind) -> ui::DeviceKind {
     match kind {
         DeviceKind::Router => ui::DeviceKind::Router,
         DeviceKind::Switch => ui::DeviceKind::Switch,

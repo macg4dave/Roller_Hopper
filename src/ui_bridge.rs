@@ -3,11 +3,13 @@
 //! Rust sends data rather than wording, so all user-visible text can be translated in Slint.
 //!
 //! This module owns the state, the selection and the list's search, filter and folding. The
-//! rest is split by area: [`edit`] handles editing, [`map`] the topology map, [`view`] sends
+//! rest is split by area: [`edit`] handles editing, [`map`] the topology map, [`discovery`] the
+//! discovery page's simulated scan, [`view`] sends
 //! the state to the UI, [`convert`] translates between model and UI types, and [`icons`] reads
 //! the icon folder.
 
 mod convert;
+mod discovery;
 mod edit;
 mod i18n;
 mod icons;
@@ -19,21 +21,16 @@ pub(crate) use i18n::select_language;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
-use std::time::Duration;
 
-use slint::{ComponentHandle, SharedString, Timer, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
-use crate::mock_data;
 use crate::model::{
-    Arrangement, CardId, Device, DeviceId, Network, NetworkCard, Positions, StatusFilter,
-    tree_layout,
+    Arrangement, CardId, Device, DeviceId, Discovery, Network, NetworkCard, Positions,
+    StatusFilter, tree_layout,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
 use map::Motion;
-
-/// How long the simulated scan pretends to take, so the refresh is visible.
-const SCAN_DURATION: Duration = Duration::from_millis(1500);
 
 /// What is selected: a device, picked in the lists, or one of its network cards, picked in
 /// the lists or on the map.
@@ -59,7 +56,8 @@ pub(crate) struct AppState {
     collapsed: HashSet<DeviceId>,
     filter: StatusFilter,
     query: String,
-    scanning: bool,
+    /// The discovery page's simulated scan; its finishing runs count as scans.
+    discovery: Discovery,
     scans: u32,
     /// Read from the icon folder by [`connect`], and again when the icon picker opens.
     icons: Icons,
@@ -79,7 +77,7 @@ impl AppState {
             collapsed: HashSet::new(),
             filter: StatusFilter::All,
             query: String::new(),
-            scanning: false,
+            discovery: Discovery::default(),
             scans: 0,
             icons: Icons::default(),
         }
@@ -123,12 +121,6 @@ impl AppState {
             self.collapsed.insert(id);
         }
     }
-
-    fn finish_scan(&mut self) {
-        mock_data::simulate_scan(&mut self.network);
-        self.scanning = false;
-        self.scans += 1;
-    }
 }
 
 /// Wires every `Bridge` callback to the state and shows the initial state.
@@ -153,16 +145,9 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     }));
     edit::connect(ui, state);
     map::connect(ui, state);
+    discovery::connect(ui, state);
     let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_refresh_icons(move || icons::refresh(&icons_ui, &icons_state));
-
-    let start_scan = handler(ui, state, |st, ()| st.scanning = true);
-    let finish_scan = Rc::new(handler(ui, state, |st, ()| st.finish_scan()));
-    bridge.on_scan(move || {
-        start_scan(());
-        let finish_scan = Rc::clone(&finish_scan);
-        Timer::single_shot(SCAN_DURATION, move || finish_scan(()));
-    });
 
     // Shows the initial state, with the icons.
     icons::refresh(&ui.as_weak(), state);
@@ -190,7 +175,7 @@ fn update(ui: &Weak<AppWindow>, state: &RefCell<AppState>, change: impl FnOnce(&
 impl AppState {
     /// The sample network with the device `id` selected.
     fn with_selected(id: u32) -> Self {
-        let mut state = Self::new(mock_data::network());
+        let mut state = Self::new(crate::mock_data::network());
         state.selected = Some(Selection::Device(DeviceId(id)));
         state
     }
@@ -212,6 +197,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mock_data;
 
     #[test]
     fn a_group_folds_up_and_opens_again() {
@@ -220,14 +206,5 @@ mod tests {
         assert!(state.collapsed.contains(&DeviceId(1)));
         state.toggle_group(DeviceId(1));
         assert!(state.collapsed.is_empty());
-    }
-
-    #[test]
-    fn finishing_a_scan_counts_it_and_clears_the_busy_state() {
-        let mut state = AppState::new(mock_data::network());
-        state.scanning = true;
-        state.finish_scan();
-        assert!(!state.scanning);
-        assert_eq!(state.scans, 1);
     }
 }

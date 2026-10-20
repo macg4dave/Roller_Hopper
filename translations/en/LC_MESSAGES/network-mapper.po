@@ -629,3 +629,188 @@ msgstr "Simulated scan complete · {0}, {1} offline"
 
 msgid "status-bar.sample-only"
 msgstr "Sample data only. No real network access."
+
+# Discovery page, opened by the Scan button. The scan is simulated with the sample data.
+msgid "discovery.title"
+msgstr "Discovery"
+
+msgid "discovery.simulated"
+msgstr "A simulated scan of the sample network. Nothing is sent on your network."
+
+msgid "discovery.network"
+msgstr "Network"
+
+msgid "discovery.option.ping-sweep"
+msgstr "Ping sweep"
+
+msgid "discovery.option.port-scan"
+msgstr "Port scan"
+
+msgid "discovery.option.service-detection"
+msgstr "Service detection"
+
+msgid "discovery.start"
+msgstr "Start scan"
+
+msgid "discovery.start-again"
+msgstr "Scan again"
+
+msgid "discovery.pause"
+msgstr "Pause"
+
+msgid "discovery.resume"
+msgstr "Resume"
+
+msgid "discovery.stop"
+msgstr "Stop"
+
+# {} is a subnet, such as 192.168.1.0/24.
+msgid "discovery.heading.idle"
+msgstr "Ready to scan {}"
+
+msgid "discovery.heading.running"
+msgstr "Scanning {}…"
+
+msgid "discovery.heading.paused"
+msgstr "Paused scanning {}"
+
+msgid "discovery.heading.finished"
+msgstr "Finished scanning {}"
+
+# {0} addresses checked of {1}; {2} is the time taken, as time.clock.
+msgid "discovery.progress"
+msgstr "{0} of {1} addresses checked · {2}"
+
+# Minutes and seconds, each two digits.
+msgid "time.clock"
+msgstr "{0}:{1}"
+
+msgid "discovery.filter.all"
+msgstr "All"
+
+msgid "discovery.filter.new"
+msgstr "New"
+
+msgid "discovery.filter.unidentified"
+msgstr "Unidentified"
+
+msgid "discovery.filter.duplicates"
+msgstr "Possible duplicates"
+
+msgid "discovery.column.name"
+msgstr "Name"
+
+msgid "discovery.found-by"
+msgstr "Found by"
+
+msgid "discovery.confidence"
+msgstr "Confidence"
+
+msgid "discovery.percent"
+msgstr "{}%"
+
+msgid "discovery.empty.idle"
+msgstr "Pick a network and start a scan to look for devices."
+
+msgid "discovery.empty.none"
+msgstr "No hosts match this filter."
+
+# A found host that told no name.
+msgid "discovery.unidentified-name"
+msgstr "Unidentified host"
+
+# Flags by a found host's name.
+msgid "flag.new"
+msgstr "New"
+
+msgid "flag.duplicate"
+msgstr "Duplicate?"
+
+msgid "flag.added"
+msgstr "Added"
+
+msgid "flag.ignored"
+msgstr "Ignored"
+
+# How a host was found or identified.
+msgid "method.arp"
+msgstr "ARP"
+
+msgid "method.ping"
+msgstr "Ping"
+
+msgid "method.snmp"
+msgstr "SNMP"
+
+msgid "method.mdns"
+msgstr "mDNS"
+
+msgid "method.upnp"
+msgstr "UPnP"
+
+msgid "method.onvif"
+msgstr "ONVIF"
+
+msgid "method.lldp"
+msgstr "LLDP"
+
+msgid "discovery.details.empty"
+msgstr "Select a host to see what the scan found out about it."
+
+# The device on the map with the same MAC address as a found host.
+msgid "discovery.same-mac-as"
+msgstr "Same MAC as"
+
+msgid "discovery.add"
+msgstr "Add to map"
+
+msgid "discovery.ignore"
+msgstr "Ignore"
+
+msgid "discovery.show-on-map"
+msgstr "Show on map"
+
+msgid "discovery.log.title"
+msgstr "Discovery log"
+
+msgid "log.level.info"
+msgstr "Info"
+
+msgid "log.level.warning"
+msgstr "Warning"
+
+# {} is a subnet.
+msgid "log.started"
+msgstr "Started a simulated scan of {}"
+
+# {} is a number of addresses.
+msgid "log.sweep"
+msgstr "Ping sweep of {} addresses"
+
+# {0} is a device's name, {1} its IP address.
+msgid "log.discovered"
+msgstr "Found {0} at {1}"
+
+# {0} is an IP address, {1} a MAC address.
+msgid "log.unidentified"
+msgstr "Could not tell what the host at {0} is ({1})"
+
+# {0} is an IP address, {1} the name of the device on the map with the same MAC address.
+msgid "log.duplicate"
+msgstr "The host at {0} has the same MAC address as {1}"
+
+msgid "log.paused"
+msgstr "Paused"
+
+msgid "log.resumed"
+msgstr "Resumed"
+
+msgid "log.stopped"
+msgid_plural "log.stopped.plural"
+msgstr[0] "Stopped early · {n} host found"
+msgstr[1] "Stopped early · {n} hosts found"
+
+msgid "log.finished"
+msgid_plural "log.finished.plural"
+msgstr[0] "Finished · {n} host found"
+msgstr[1] "Finished · {n} hosts found"

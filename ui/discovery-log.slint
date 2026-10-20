@@ -1,0 +1,55 @@
+import { ListView } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+
+// What the discovery run did and found, newest first, each line timed from the run's start.
+export component DiscoveryLog inherits VerticalLayout {
+    spacing: Theme.space-xs;
+
+    Text {
+        text: @tr("discovery.log.title");
+        font-size: Theme.font-heading;
+        font-weight: 600;
+        color: Theme.text;
+    }
+
+    Rectangle {
+        vertical-stretch: 1;
+        border-color: Theme.border;
+        border-width: 1px;
+        border-radius: Theme.radius;
+
+        ListView {
+            for entry in Bridge.discovery-log: HorizontalLayout {
+                height: Theme.log-row-height;
+                padding-left: Theme.space-s;
+                padding-right: Theme.space-s + Theme.scrollbar-width;
+                spacing: Theme.space-m;
+                Text {
+                    text: Labels.clock(entry.seconds);
+                    width: 40px;
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: entry.warning ? @tr("log.level.warning") : @tr("log.level.info");
+                    width: 56px;
+                    font-size: Theme.font-small;
+                    font-weight: 600;
+                    color: entry.warning ? Theme.warning : Theme.text-muted;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: Labels.log-message(entry);
+                    horizontal-stretch: 1;
+                    font-size: Theme.font-small;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}

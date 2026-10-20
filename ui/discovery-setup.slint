@@ -1,0 +1,88 @@
+import { Button, CheckBox, ComboBox, ProgressIndicator } from "std-widgets.slint";
+import { Bridge, DiscoveryOption, DiscoveryPhase } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+
+// What to scan and how, the controls of the run, and how far it has got. The network and the
+// options are fixed while a run is busy.
+export component DiscoverySetup inherits VerticalLayout {
+    property <DiscoveryPhase> phase: Bridge.discovery.phase;
+    property <bool> busy: phase == DiscoveryPhase.running || phase == DiscoveryPhase.paused;
+
+    spacing: Theme.space-m;
+
+    HorizontalLayout {
+        spacing: Theme.space-m;
+
+        Text {
+            text: @tr("discovery.network");
+            color: Theme.text-muted;
+            font-size: Theme.font-body;
+            vertical-alignment: center;
+        }
+        ComboBox {
+            width: 170px;
+            model: Bridge.discovery-targets;
+            current-index: Bridge.discovery.target-index;
+            enabled: !busy;
+            accessible-label: @tr("discovery.network");
+            selected => { Bridge.set-discovery-target(self.current-index); }
+        }
+        for option in [
+            { option: DiscoveryOption.ping-sweep, label: @tr("discovery.option.ping-sweep"), on: Bridge.discovery.ping-sweep },
+            { option: DiscoveryOption.port-scan, label: @tr("discovery.option.port-scan"), on: Bridge.discovery.port-scan },
+            { option: DiscoveryOption.service-detection, label: @tr("discovery.option.service-detection"), on: Bridge.discovery.service-detection },
+        ]: CheckBox {
+            text: option.label;
+            checked: option.on;
+            enabled: !busy;
+            toggled => { Bridge.set-discovery-option(option.option, self.checked); }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        Button {
+            text: phase == DiscoveryPhase.finished ? @tr("discovery.start-again") : @tr("discovery.start");
+            icon: @image-url("icons/scan.svg");
+            colorize-icon: true;
+            primary: true;
+            enabled: !busy && Bridge.discovery-targets.length > 0;
+            clicked => { Bridge.start-discovery(); }
+        }
+        Button {
+            text: phase == DiscoveryPhase.paused ? @tr("discovery.resume") : @tr("discovery.pause");
+            // Wide enough for both labels, so the buttons do not shift.
+            min-width: 90px;
+            enabled: busy;
+            clicked => { Bridge.pause-discovery(); }
+        }
+        Button {
+            text: @tr("discovery.stop");
+            enabled: busy;
+            clicked => { Bridge.stop-discovery(); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: Theme.space-xs;
+        HorizontalLayout {
+            spacing: Theme.space-m;
+            Text {
+                text: Labels.discovery-heading(phase, Bridge.discovery.target);
+                font-size: Theme.font-heading;
+                font-weight: 600;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            if phase != DiscoveryPhase.idle: Text {
+                text: @tr("discovery.progress", Bridge.discovery.swept, Bridge.discovery.addresses, Labels.clock(Bridge.discovery.seconds));
+                font-size: Theme.font-body;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+        }
+        ProgressIndicator {
+            progress: Bridge.discovery.addresses > 0 ? Bridge.discovery.swept / Bridge.discovery.addresses : 0;
+        }
+    }
+}

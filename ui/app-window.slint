@@ -7,9 +7,13 @@ import { DeviceList } from "device-list.slint";
 import { TopologyCanvas } from "topology-canvas.slint";
 import { DetailsPanel } from "details-panel.slint";
 import { EditPage } from "edit-page.slint";
+import { DiscoveryPage } from "discovery-page.slint";
 import { Splitter } from "components/splitter.slint";
 
 export { Bridge, Labels }
+
+// What the window shows under the header: the map view, or a page over it.
+enum Page { map, edit, discovery }
 
 export component AppWindow inherits Window {
     title: @tr("app.title");
@@ -23,9 +27,9 @@ export component AppWindow inherits Window {
     // The design is light-only; without this, std-widgets follow a dark system theme.
     init => { Palette.color-scheme = ColorScheme.light; }
 
-    // The edit page covers the map view rather than replacing it, so the map keeps its zoom and
-    // pan while the page is open.
-    property <bool> editing;
+    // The edit and discovery pages cover the map view rather than replacing it, so the map keeps
+    // its zoom and pan while a page is open.
+    property <Page> page: Page.map;
     // Panel widths the user dragged to; kept here so they survive leaving and reopening the
     // edit page.
     property <length> list-width: Theme.list-width;
@@ -34,13 +38,15 @@ export component AppWindow inherits Window {
     property <length> edit-roles-width: Theme.edit-roles-width;
 
     VerticalLayout {
-        Header { }
+        Header {
+            scan => { page = Page.discovery; }
+        }
 
         Rectangle {
             vertical-stretch: 1;
 
             Rectangle {
-                visible: !editing;
+                visible: page == Page.map;
 
                 HorizontalLayout {
                     // A narrow window squeezes the map first, then the panels down to their minimum.
@@ -49,7 +55,7 @@ export component AppWindow inherits Window {
                         min-width: Theme.panel-min-width;
                         horizontal-stretch: 0;
                         show-on-map(device) => { canvas.centre-on(device.x, device.y); }
-                        edit => { editing = true; }
+                        edit => { page = Page.edit; }
                         // The new device is selected; its details open ready to fill in.
                         add => {
                             Bridge.add-device(GuestKind.none);
@@ -85,10 +91,19 @@ export component AppWindow inherits Window {
                 }
             }
 
-            if editing: EditPage {
+            if page == Page.edit: EditPage {
                 list-width <=> root.edit-list-width;
                 roles-width <=> root.edit-roles-width;
-                back => { editing = false; }
+                back => { page = Page.map; }
+            }
+
+            if page == Page.discovery: DiscoveryPage {
+                back => { page = Page.map; }
+                show-on-map(id, x, y) => {
+                    Bridge.select(id);
+                    page = Page.map;
+                    canvas.centre-on(x, y);
+                }
             }
         }
 
