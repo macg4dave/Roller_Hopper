@@ -1,6 +1,7 @@
 import { Button } from "std-widgets.slint";
 import { Bridge, MapSettings } from "bridge.slint";
 import { Theme } from "theme.slint";
+import { JoinBlob } from "components/join-blob.slint";
 import { MapNode } from "components/map-node.slint";
 
 // The pannable, zoomable topology map. Pan and zoom are visual state and live here.
@@ -143,6 +144,12 @@ export component TopologyCanvas inherits Rectangle {
             commands: Bridge.strand.commands;
             stroke: Theme.accent;
             stroke-width: (Theme.strand-width + (Theme.line-width - Theme.strand-width) * Bridge.strand.pull) / zoom;
+        }
+
+        JoinBlob {
+            strand: Bridge.strand;
+            origin-x: Bridge.bounds.x;
+            origin-y: Bridge.bounds.y;
         }
 
         for device in Bridge.devices: MapNode {

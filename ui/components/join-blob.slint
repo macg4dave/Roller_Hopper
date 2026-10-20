@@ -1,0 +1,39 @@
+import { Strand } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// The blob where a dragged device's strand joins a line. It pops in when the strand catches,
+// swells as the device comes closer and, when the strand lets go or the device is dropped,
+// shrinks away where it joined. Placed in map units; `origin-x`/`origin-y` are the map units at
+// this element's top-left.
+export component JoinBlob {
+    in property <Strand> strand;
+    in property <float> origin-x;
+    in property <float> origin-y;
+
+    property <bool> caught: strand.commands != "";
+    // Where it last joined, so it can shrink away in place once the strand has gone.
+    property <float> at-x;
+    property <float> at-y;
+    property <length> size: caught ? Theme.blob-size * (1 - 0.5 * strand.pull) : 0;
+    animate size {
+        duration: 260ms;
+        easing: ease-out-back;
+    }
+
+    changed strand => {
+        if caught {
+            at-x = strand.join-x;
+            at-y = strand.join-y;
+        }
+    }
+
+    Rectangle {
+        // The pop overshoots past nothing on the way out, so never go below it.
+        width: max(0px, size);
+        height: self.width;
+        x: (at-x - origin-x) * 1px - self.width / 2;
+        y: (at-y - origin-y) * 1px - self.height / 2;
+        border-radius: self.width / 2;
+        background: Theme.accent;
+    }
+}

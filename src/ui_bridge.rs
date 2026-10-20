@@ -235,7 +235,10 @@ impl AppState {
 
     /// Moves the map one frame on; true once everything has settled.
     fn step_motion(&mut self) -> bool {
-        self.motion.step(&self.positions, FRAME.as_secs_f32());
+        let dt = FRAME.as_secs_f32();
+        let strand = self.strand();
+        self.motion.step(&self.positions, dt);
+        self.motion.step_strand(strand.as_ref(), dt);
         self.motion.settled(&self.positions)
     }
 
@@ -298,7 +301,12 @@ fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
             st.drag_to(id, Point { x, y });
         }
     });
-    bridge.on_move_device(move |id, x, y| move_device((id, x, y)));
+    // While dragging, the strand swings after the pointer.
+    let move_settle = Rc::clone(&settle);
+    bridge.on_move_device(move |id, x, y| {
+        move_device((id, x, y));
+        move_settle();
+    });
     let drop_device = handler(ui, state, |st, ()| st.drop_dragged());
     bridge.on_drop_device(move || {
         drop_device(());

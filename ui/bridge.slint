@@ -113,9 +113,12 @@ export struct LineSet {
 
 /// The stretchy strand from a dragged device to the line it would join, as SVG path commands in
 /// map units; empty when there is none. `pull` runs from 0 (slack) to 1 (about to let go).
+/// `join-x`/`join-y` mark where it joins that line, in map units.
 export struct Strand {
     commands: string,
     pull: float,
+    join-x: float,
+    join-y: float,
 }
 
 /// The map area that holds every node and label, in map units.

@@ -10,8 +10,6 @@ use crate::model::{
 };
 use crate::ui::{self, Labels};
 
-/// How far a slack strand sags under its own weight, as a share of its length.
-const SAG: f32 = 0.3;
 /// Dash and gap lengths of inferred links, in map units.
 const DASH: f32 = 6.0;
 const GAP: f32 = 4.0;
@@ -321,18 +319,18 @@ pub(super) fn bounds(positions: &Positions) -> ui::MapBounds {
     }
 }
 
-/// The stretchy strand from the line a dragged device would join to the device: it sags when
-/// slack and pulls straight as it stretches. No commands when there is none.
-pub(super) fn strand(snap: Option<&Snap>) -> ui::Strand {
+/// The stretchy strand from the line a dragged device would join to the device, curving through
+/// `bend` as it swings (see [`super::motion`]). No commands when there is none.
+pub(super) fn strand(snap: Option<&Snap>, bend: Option<Point>) -> ui::Strand {
     let Some(snap) = snap else {
         return ui::Strand::default();
     };
     let [from, to] = snap.line;
-    let sag = (to.x - from.x).hypot(to.y - from.y) * SAG * (1.0 - snap.pull);
-    let bend = Point {
+    // Straight until the bend starts to swing.
+    let bend = bend.unwrap_or(Point {
         x: f32::midpoint(from.x, to.x),
-        y: f32::midpoint(from.y, to.y) + sag,
-    };
+        y: f32::midpoint(from.y, to.y),
+    });
     let commands = format!(
         "M{:.1} {:.1} Q{:.1} {:.1} {:.1} {:.1}",
         from.x, from.y, bend.x, bend.y, to.x, to.y
@@ -340,6 +338,8 @@ pub(super) fn strand(snap: Option<&Snap>) -> ui::Strand {
     ui::Strand {
         commands: commands.into(),
         pull: snap.pull,
+        join_x: from.x,
+        join_y: from.y,
     }
 }
 
@@ -388,27 +388,26 @@ mod tests {
     }
 
     #[test]
-    fn a_strand_sags_when_slack_and_pulls_straight_when_stretched() {
+    fn a_strand_bends_where_it_swings_and_marks_where_it_joins() {
         let network = crate::mock_data::network();
         let arrangement = crate::model::Arrangement::default();
         let positions = crate::model::tree_layout(&network, &arrangement);
         let (pc, nas) = (DeviceId(5), DeviceId(4));
         let any =
             crate::model::snap_target(&network, &arrangement, &positions, pc, positions[&nas]);
-        let snap = |pull| Snap {
-            line: [Point { x: 0.0, y: 0.0 }, Point { x: 40.0, y: 0.0 }],
-            pull,
+        let snap = Snap {
+            line: [Point { x: 10.0, y: 0.0 }, Point { x: 50.0, y: 0.0 }],
             ..any.unwrap()
         };
+        let swinging = strand(Some(&snap), Some(Point { x: 30.0, y: 6.0 }));
+        assert_eq!(swinging.commands, "M10.0 0.0 Q30.0 6.0 50.0 0.0");
+        assert_eq!((swinging.join_x, swinging.join_y), (10.0, 0.0));
+        let caught = strand(Some(&snap), None);
         assert_eq!(
-            strand(Some(&snap(0.5))).commands,
-            "M0.0 0.0 Q20.0 6.0 40.0 0.0"
+            caught.commands, "M10.0 0.0 Q30.0 0.0 50.0 0.0",
+            "straight at first"
         );
-        assert_eq!(
-            strand(Some(&snap(1.0))).commands,
-            "M0.0 0.0 Q20.0 0.0 40.0 0.0"
-        );
-        assert_eq!(strand(None).commands, "");
+        assert_eq!(strand(None, None).commands, "");
     }
 
     #[test]

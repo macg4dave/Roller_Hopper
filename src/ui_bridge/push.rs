@@ -44,7 +44,10 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
 
     let highlighted = state.dragging.or(state.selected);
     let lines = convert::lines(network, &state.links(), &trunks, on_map, highlighted);
-    bridge.set_strand(convert::strand(state.strand().as_ref()));
+    bridge.set_strand(convert::strand(
+        state.strand().as_ref(),
+        state.motion.bend(),
+    ));
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }
