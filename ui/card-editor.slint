@@ -1,82 +1,156 @@
-import { Button, ComboBox, LineEdit } from "std-widgets.slint";
-import { Bridge } from "bridge.slint";
+import { Button, ComboBox } from "std-widgets.slint";
+import { Bridge, CardField } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
+import { DetailField } from "components/detail-field.slint";
+import { NameEdit } from "components/name-edit.slint";
 
-// The selected device's network cards on the edit page: remove any but the last, or add one at
-// its own address, plugged into a device of the user's choosing or into none.
-export component CardEditor inherits VerticalLayout {
-    property <bool> adding;
-    // Half-typed cards belong to the device they were typed for.
-    property <int> selected-id: Bridge.selected-id;
-    changed selected-id => { adding = false; }
+// One setting of the selected card. It is kept on Enter or when the field loses focus. A
+// refused value is replaced by the card's own, with a hint saying what is expected.
+component CardSetting inherits VerticalLayout {
+    in property <CardField> field;
+    in property <string> value;
+    in property <string> hint;
+    in property <bool> enabled: true;
+    // What a screen reader calls the field.
+    in property <string> label;
+    property <bool> refused;
+    // A hint belongs to the card it was given for.
+    property <int> selected-card: Bridge.selected-card;
+    changed selected-card => { refused = false; }
 
     spacing: Theme.space-xs;
     horizontal-stretch: 1;
 
-    // Cards are identified to Rust by their index in Bridge.cards.
-    for card[i] in Bridge.cards: HorizontalLayout {
-        spacing: Theme.space-xs;
-        Text {
-            text: Labels.card(card.address, card.via-name, card.inferred);
-            horizontal-stretch: 1;
-            vertical-alignment: center;
-            font-size: Theme.font-body;
-            color: Theme.text;
-            overflow: elide;
-        }
-        Button {
-            icon: @image-url("icons/delete.svg");
-            colorize-icon: true;
-            accessible-label: @tr("edit.card-remove");
-            // Every device keeps at least one card.
-            enabled: Bridge.cards.length > 1;
-            clicked => { Bridge.remove-card(i); }
-        }
+    NameEdit {
+        name: root.value;
+        enabled: root.enabled;
+        accessible-label: root.label;
+        commit(text) => { root.refused = !Bridge.edit-card(root.field, text); }
     }
-    if !adding: HorizontalLayout {
-        alignment: start;
-        Button {
-            text: @tr("edit.card-add");
-            icon: @image-url("icons/plus.svg");
-            colorize-icon: true;
-            clicked => { adding = true; }
-        }
+    if refused: Text {
+        text: root.hint;
+        font-size: Theme.font-small;
+        color: Theme.text-muted;
+        wrap: word-wrap;
     }
-    if adding: HorizontalLayout {
-        spacing: Theme.space-xs;
+}
 
-        // As with ports, the row stays open for the next card; a refused address stays in the
-        // field to be corrected.
-        function add() {
-            if Bridge.add-card(address-field.text, via-field.current-index) {
-                address-field.text = "";
-                address-field.focus();
+// Edit page, right side, while a network card is selected: its name and IPv4 settings, what it
+// is plugged into, and removing it. A card is a child of its device, which it leads back to.
+export component CardEditor inherits VerticalLayout {
+    alignment: start;
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        alignment: start;
+        padding-bottom: Theme.space-s;
+        Button {
+            text: Labels.device-name(Bridge.details.name);
+            icon: @image-url("icons/chevron-left.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.card-back");
+            clicked => { Bridge.select(Bridge.selected-id); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.space-m;
+        padding-bottom: Theme.space-m;
+        Image {
+            source: @image-url("icons/network-card.svg");
+            width: 44px;
+            height: 44px;
+            colorize: Theme.accent;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+            Text {
+                text: Labels.card-name(Bridge.card.name, Bridge.card.index);
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            Text {
+                text: @tr("edit.card-of", Labels.device-name(Bridge.details.name));
+                font-size: Theme.font-body;
+                color: Theme.text-muted;
+                overflow: elide;
             }
         }
+    }
 
-        address-field := LineEdit {
-            width: 150px;
-            placeholder-text: @tr("edit.card-address");
-            init => { self.focus(); }
-            accepted => { add(); }
+    DetailField {
+        label: @tr("details.name");
+        CardSetting {
+            field: CardField.name;
+            value: Bridge.card.name;
+            label: @tr("details.name");
         }
-        via-field := ComboBox {
+    }
+    DetailField {
+        label: @tr("details.ip");
+        CardSetting {
+            field: CardField.address;
+            value: Bridge.card.ip;
+            hint: @tr("edit.card-ip-hint");
+            label: @tr("details.ip");
+        }
+    }
+    DetailField {
+        label: @tr("details.mask");
+        // A subnet belongs to an address, so the mask waits for one.
+        CardSetting {
+            field: CardField.mask;
+            value: Bridge.card.mask;
+            enabled: Bridge.card.ip != "";
+            hint: @tr("edit.card-mask-hint");
+            label: @tr("details.mask");
+        }
+    }
+    DetailField {
+        label: @tr("details.gateway");
+        CardSetting {
+            field: CardField.gateway;
+            value: Bridge.card.gateway;
+            hint: @tr("edit.card-gateway-hint");
+            label: @tr("details.gateway");
+        }
+    }
+    DetailField {
+        label: @tr("details.mac");
+        CardSetting {
+            field: CardField.mac;
+            value: Bridge.card.mac;
+            hint: @tr("edit.card-mac-hint");
+            label: @tr("details.mac");
+        }
+    }
+    DetailField {
+        label: @tr("details.plugged-into");
+        // A guest's first card reaches the network through its host, so it plugs in nowhere.
+        ComboBox {
             horizontal-stretch: 1;
             model: Bridge.upstream-choices;
-            accessible-label: @tr("edit.card-via");
+            current-index: Bridge.card-plug-index;
+            enabled: Bridge.card.pluggable;
+            accessible-label: @tr("details.plugged-into");
+            selected => { Bridge.plug-card(self.current-index); }
         }
+    }
+
+    Rectangle { height: Theme.space-m; }
+    HorizontalLayout {
+        alignment: start;
+        // Every device keeps at least one card.
         Button {
-            text: @tr("edit.confirm-add");
-            primary: true;
-            enabled: address-field.text != "";
-            clicked => { add(); }
-        }
-        Button {
-            icon: @image-url("icons/close.svg");
+            text: @tr("edit.card-remove");
+            icon: @image-url("icons/delete.svg");
             colorize-icon: true;
-            accessible-label: @tr("edit.cancel");
-            clicked => { root.adding = false; }
+            enabled: Bridge.cards.length > 1;
+            clicked => { Bridge.remove-card(); }
         }
     }
 }

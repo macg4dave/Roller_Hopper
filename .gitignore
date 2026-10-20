@@ -1,4 +1,5 @@
 /target
+/tools/target/
 *.pdb
 .vscode/*
 !.vscode/extensions.json

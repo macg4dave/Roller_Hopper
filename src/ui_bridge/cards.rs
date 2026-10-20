@@ -1,56 +1,238 @@
-//! Editing what the selected device holds: its network cards, and the virtual machines and
-//! containers it runs.
+//! Network cards in the UI. A card is a child of its device: a row under it in the lists and,
+//! drawn as a ghost, a node on the map. This module builds their views and handles editing
+//! the selected card (its IPv4 settings, where it is plugged in, removing it), adding cards,
+//! and adding virtual machines and containers to the selected device.
 
 use std::cell::RefCell;
+use std::net::Ipv4Addr;
 use std::rc::Rc;
 
-use slint::ComponentHandle;
+use ipnet::Ipv4Net;
+use slint::{ComponentHandle, SharedString};
 
-use super::motion::Motion;
 use super::{AppState, convert, handler, update};
-use crate::model::{DeviceId, GuestKind};
-use crate::ui::{AppWindow, Bridge};
+use crate::model::{
+    CardId, ConnectionKind, Device, GuestKind, MacAddr, Network, NetworkCard, Node,
+};
+use crate::ui::{self, AppWindow, Bridge, Labels};
+
+/// The card's address without its prefix, as shown; empty when it has none.
+pub(super) fn ip(card: &NetworkCard) -> SharedString {
+    let ip = card.address.map(|net| net.addr().to_string());
+    ip.unwrap_or_default().into()
+}
+
+/// The MAC address as shown; empty when there is none.
+pub(super) fn mac(card: &NetworkCard) -> SharedString {
+    let mac = card.mac.map(|mac| mac.to_string());
+    mac.unwrap_or_default().into()
+}
+
+/// Where `card` sits among its device's cards, from 0, for its placeholder name.
+fn index_of(device: &Device, card: CardId) -> i32 {
+    let at = device.cards.iter().position(|c| c.id == card);
+    at.and_then(|at| i32::try_from(at).ok()).unwrap_or_default()
+}
+
+/// The row or ghost of `card`, made from `device_row`, the row of its device.
+pub(super) fn card_row(
+    device_row: &ui::DeviceView,
+    device: &Device,
+    card: &NetworkCard,
+) -> ui::DeviceView {
+    ui::DeviceView {
+        card_id: convert::ui_card_id(card.id),
+        card_index: index_of(device, card.id),
+        card_name: card.name.trim().into(),
+        ip: ip(card),
+        mac: mac(card),
+        depth: device_row.depth + 1,
+        ..device_row.clone()
+    }
+}
+
+/// The name of the card `socket` in the "plugged into" dropdown: its device's name, with the
+/// card's own when the device has several.
+pub(super) fn socket_name(labels: &Labels<'_>, network: &Network, socket: CardId) -> SharedString {
+    let Some(device) = network.card_owner(socket) else {
+        return SharedString::new();
+    };
+    let card = device.cards.iter().find(|c| c.id == socket);
+    let several = device.cards.len() > 1;
+    let index = if several {
+        index_of(device, socket)
+    } else {
+        -1
+    };
+    let name = card.map(|c| c.name.trim()).unwrap_or_default();
+    labels.invoke_card_of(device.name.trim().into(), name.into(), index)
+}
+
+/// The network cards of `device`, each with where it is plugged in.
+pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView> {
+    let views = device.cards.iter().map(|card| {
+        let link = network.link(card.id);
+        let via = link.and_then(|l| Some((l.upstream, network.card_owner(l.upstream)?)));
+        let via_card = via.and_then(|(id, d)| d.cards.iter().find(|c| c.id == id));
+        let several = via.is_some_and(|(_, d)| d.cards.len() > 1);
+        let guests_first =
+            device.guest.is_some() && device.primary_card().map(|c| c.id) == Some(card.id);
+        ui::CardView {
+            id: convert::ui_card_id(card.id),
+            index: index_of(device, card.id),
+            name: card.name.trim().into(),
+            ip: ip(card),
+            mask: card
+                .address
+                .map(|n| n.netmask().to_string())
+                .unwrap_or_default()
+                .into(),
+            gateway: card
+                .gateway
+                .map(|g| g.to_string())
+                .unwrap_or_default()
+                .into(),
+            mac: mac(card),
+            via_name: via.map(|(_, d)| d.name.trim()).unwrap_or_default().into(),
+            via_card: via_card.map(|c| c.name.trim()).unwrap_or_default().into(),
+            via_index: match via {
+                Some((id, d)) if several => index_of(d, id),
+                Some(_) | None => -1,
+            },
+            inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
+            pluggable: !guests_first,
+        }
+    });
+    views.collect()
+}
+
+/// A subnet prefix as typed: a mask such as `255.255.255.0`, or a length such as `24` or `/24`.
+fn prefix(text: &str) -> Option<u8> {
+    let text = text.trim();
+    let length = text.strip_prefix('/').unwrap_or(text).parse::<u8>();
+    match length {
+        Ok(length) => Some(length).filter(|&l| l <= 32),
+        Err(_) => ipnet::ipv4_mask_to_prefix(text.parse().ok()?).ok(),
+    }
+}
+
+/// An optional value as typed: empty is none; anything else must parse.
+fn optional<T: std::str::FromStr>(text: &str) -> Result<Option<T>, T::Err> {
+    let text = text.trim();
+    if text.is_empty() {
+        Ok(None)
+    } else {
+        text.parse().map(Some)
+    }
+}
 
 impl AppState {
-    /// The devices a new card of the selected device can be plugged into, in dropdown order
-    /// after "none": any outside its own branch, which would form a loop.
-    pub(super) fn upstream_choices(&self) -> Vec<DeviceId> {
-        let Some(selected) = self.selected else {
+    /// The cards the selected card can be plugged into, in dropdown order after "none": the
+    /// cards of the other devices, in device order. Cards of its own device, and those behind
+    /// any part of it, are left out, as they would form a loop.
+    pub(super) fn upstream_choices(&self) -> Vec<CardId> {
+        let owner = self
+            .selected_card()
+            .and_then(|c| self.network.card_owner(c));
+        let Some(owner) = owner.map(|d| d.id) else {
             return Vec::new();
         };
-        let ids = self.network.devices().iter().map(|d| d.id);
-        ids.filter(|&id| !self.network.is_within(id, selected))
-            .collect()
+        let cards = self.network.devices().iter().flat_map(|d| &d.cards);
+        let free = |&card: &CardId| {
+            let node = self.network.node_of_card(card);
+            node.is_some_and(|n| !self.network.within_device(n, owner))
+        };
+        cards.map(|c| c.id).filter(free).collect()
     }
 
-    /// Adds a card at `address` as typed to the selected device, plugged into the device at
-    /// `choice` in the dropdown, where 0 is none. False if refused, so the UI can keep what was
-    /// typed.
-    fn add_card(&mut self, address: &str, choice: usize) -> bool {
+    /// Where the selected card is plugged in, as its index in the dropdown: 0 for none.
+    pub(super) fn plug_choice(&self) -> usize {
+        let link = self.selected_card().and_then(|c| self.network.link(c));
+        let at = link.and_then(|l| {
+            self.upstream_choices()
+                .iter()
+                .position(|&c| c == l.upstream)
+        });
+        at.map_or(0, |at| at + 1)
+    }
+
+    /// Adds a blank card to the selected device and selects it, so it can be filled in.
+    fn add_card(&mut self) {
+        let Some(device) = self.selected_device() else {
+            return;
+        };
+        if let Some(card) = self.network.add_card(device) {
+            self.selected = Some(Node::Card(card));
+            self.lay_out_at_rest();
+        }
+    }
+
+    /// Removes the selected card, unless it is its device's last, and selects its device.
+    fn remove_card(&mut self) {
+        let (Some(card), Some(device)) = (self.selected_card(), self.selected_device()) else {
+            return;
+        };
+        if self.network.remove_card(card) {
+            self.selected = Some(Node::Device(device));
+            self.lay_out_at_rest();
+        }
+    }
+
+    /// Sets one field of the selected card as typed. False if refused, so the UI can keep what
+    /// was typed and say so. An address typed without a prefix keeps the card's subnet, and a
+    /// subnet mask needs an address.
+    fn edit_card(&mut self, field: ui::CardField, text: &str) -> bool {
+        let Some(card) = self.selected_card() else {
+            return false;
+        };
+        let current = self.network.card(card).and_then(|c| c.address);
+        match field {
+            ui::CardField::Name => self
+                .network
+                .card_mut(card)
+                .map(|c| text.clone_into(&mut c.name))
+                .is_some(),
+            ui::CardField::Address => {
+                let prefix = current.map_or(convert::TYPED_PREFIX, |n| n.prefix_len());
+                let address = match optional::<Ipv4Addr>(text) {
+                    Ok(ip) => ip.and_then(|ip| Ipv4Net::new(ip, prefix).ok()),
+                    Err(_) => match convert::address(text) {
+                        Some(net) => Some(net),
+                        None => return false,
+                    },
+                };
+                self.network.set_card_address(card, address)
+            }
+            ui::CardField::Mask => {
+                let net = current
+                    .zip(prefix(text))
+                    .and_then(|(n, p)| Ipv4Net::new(n.addr(), p).ok());
+                net.is_some_and(|net| self.network.set_card_address(card, Some(net)))
+            }
+            ui::CardField::Gateway => optional::<Ipv4Addr>(text)
+                .ok()
+                .and_then(|gateway| self.network.card_mut(card).map(|c| c.gateway = gateway))
+                .is_some(),
+            ui::CardField::Mac => optional::<MacAddr>(text)
+                .ok()
+                .and_then(|mac| self.network.card_mut(card).map(|c| c.mac = mac))
+                .is_some(),
+        }
+    }
+
+    /// Plugs the selected card into the card at `choice` in the dropdown, where 0 is none.
+    fn plug_card(&mut self, choice: usize) {
         let upstream = match choice.checked_sub(1) {
             None => None,
             Some(at) => match self.upstream_choices().get(at) {
-                Some(&id) => Some(id),
-                None => return false,
+                Some(&card) => Some(card),
+                None => return,
             },
         };
-        let (Some(device), Some(address)) = (self.selected, convert::address(address)) else {
-            return false;
-        };
-        let added = self.network.add_card(device, address, upstream).is_some();
-        if added {
-            self.lay_out_at_rest();
-        }
-        added
-    }
-
-    /// Removes the selected device's card at `index`, unless it is the last.
-    fn remove_card(&mut self, index: usize) {
-        let device = self.selected.and_then(|id| self.network.device(id));
-        let Some((device, card)) = device.and_then(|d| Some((d.id, d.cards.get(index)?.id))) else {
+        let Some(card) = self.selected_card() else {
             return;
         };
-        if self.network.remove_card(device, card) {
+        if self.network.plug_card(card, upstream) {
             self.lay_out_at_rest();
         }
     }
@@ -58,7 +240,8 @@ impl AppState {
     /// Adds a guest named `name` to the selected device, with its first card at `address` as
     /// typed. False if refused, so the UI can keep what was typed.
     fn add_guest(&mut self, kind: GuestKind, name: &str, address: &str) -> bool {
-        let (Some(host), Some(address)) = (self.selected, convert::address(address)) else {
+        let (Some(host), Some(address)) = (self.selected_device(), convert::address(address))
+        else {
             return false;
         };
         let added = self.network.add_guest(host, kind, name, address).is_some();
@@ -67,29 +250,27 @@ impl AppState {
         }
         added
     }
-
-    /// Lays the map out again at rest: it is out of sight on the edit page, where these edits
-    /// are made.
-    fn lay_out_at_rest(&mut self) {
-        self.lay_out();
-        self.motion = Motion::new(self.positions.clone());
-    }
 }
 
-/// Adding and removing the selected device's cards, and adding guests to it. A guest is then a
-/// device of its own: edited, moved among its host's guests and forgotten like any other.
+/// Adding, editing, plugging in and removing network cards, and adding guests to the selected
+/// device. A guest is then a device of its own: edited, moved among its host's guests and
+/// forgotten like any other.
 pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
-    let (card_ui, card_state) = (ui.as_weak(), Rc::clone(state));
-    bridge.on_add_card(move |address, choice| {
-        let mut added = false;
-        update(&card_ui, &card_state, |st| {
-            added = st.add_card(&address, convert::index(choice));
+    let add_card = handler(ui, state, |st, ()| st.add_card());
+    bridge.on_add_card(move || add_card(()));
+    let remove_card = handler(ui, state, |st, ()| st.remove_card());
+    bridge.on_remove_card(move || remove_card(()));
+    let (edit_ui, edit_state) = (ui.as_weak(), Rc::clone(state));
+    bridge.on_edit_card(move |field, text| {
+        let mut accepted = false;
+        update(&edit_ui, &edit_state, |st| {
+            accepted = st.edit_card(field, &text);
         });
-        added
+        accepted
     });
-    bridge.on_remove_card(handler(ui, state, |st, index| {
-        st.remove_card(convert::index(index));
+    bridge.on_plug_card(handler(ui, state, |st, choice| {
+        st.plug_card(convert::index(choice));
     }));
     let (guest_ui, guest_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_add_guest(move |kind, name, address| {
@@ -108,59 +289,128 @@ pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>)
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::DeviceId;
 
-    const SWITCH: DeviceId = DeviceId(2);
     const PC: DeviceId = DeviceId(5);
     const DOCKER_HOST: DeviceId = DeviceId(19);
+    const LAB_ROUTER: DeviceId = DeviceId(22);
+
+    /// A state with a blank card just added to the PC, and selected.
+    fn with_new_card() -> (AppState, CardId) {
+        let mut state = AppState::new(mock_data::network());
+        state.selected = Some(Node::Device(PC));
+        state.add_card();
+        let card = state.selected_card().unwrap();
+        (state, card)
+    }
 
     #[test]
-    fn a_card_is_plugged_into_the_device_chosen() {
-        let mut state = AppState::new(mock_data::network());
-        assert!(!state.add_card("10.0.0.7", 0), "nothing selected");
-        state.selected = Some(SWITCH);
-        let choices = state.upstream_choices();
-        assert!(!choices.contains(&SWITCH), "not into itself");
-        assert!(!choices.contains(&PC), "nor into its own branch");
-
-        state.selected = Some(PC);
-        let router = 1 + state
-            .upstream_choices()
-            .iter()
-            .position(|&id| id == DeviceId(1))
-            .unwrap();
-        assert!(!state.add_card("10.0.0", router));
-        assert!(!state.add_card("10.0.0.7", 999));
-        assert!(state.add_card(" 10.0.0.7/16 ", router));
-        assert!(state.add_card("10.0.0.8", 0), "plugged into none");
-
-        let pc = state.network.device(PC).unwrap();
-        let added: Vec<_> = pc
-            .cards
-            .iter()
-            .skip(1)
-            .map(|c| c.address.to_string())
-            .collect();
-        assert_eq!(added, ["10.0.0.7/16", "10.0.0.8/24"]);
-        let cross = state.network.cross_links();
+    fn adding_a_card_selects_it_under_its_device_and_on_the_map() {
+        let (state, card) = with_new_card();
+        assert_eq!(state.selected_device(), Some(PC));
+        assert_eq!(state.network.card(card), Some(&NetworkCard::blank(card)));
+        let ghost = state.positions[&Node::Card(card)];
         assert!(
-            cross
-                .iter()
-                .any(|c| (c.upstream, c.downstream) == (DeviceId(1), PC))
+            ghost.y > state.positions[&Node::Device(PC)].y,
+            "below the PC"
         );
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
     }
 
     #[test]
-    fn a_card_is_removed_by_its_index_but_never_the_last() {
-        let mut state = AppState::new(mock_data::network());
-        state.selected = Some(DOCKER_HOST);
-        let cards = |st: &AppState| st.network.device(DOCKER_HOST).map(|d| d.cards.len());
-        state.remove_card(9);
-        assert_eq!(cards(&state), Some(2));
-        state.remove_card(1);
-        assert_eq!(cards(&state), Some(1));
-        state.remove_card(0);
-        assert_eq!(cards(&state), Some(1), "the last stays");
+    fn a_typed_address_and_mask_are_kept_only_when_valid() {
+        let (mut state, card) = with_new_card();
+        let edit = |st: &mut AppState, field, text: &str| st.edit_card(field, text);
+        assert!(
+            !edit(&mut state, ui::CardField::Mask, "255.255.0.0"),
+            "no address yet"
+        );
+        assert!(!edit(&mut state, ui::CardField::Address, "10.0.0"));
+        assert!(
+            !edit(&mut state, ui::CardField::Address, "192.168.1.1"),
+            "the router's"
+        );
+        assert!(edit(&mut state, ui::CardField::Address, " 10.0.0.7 "));
+        assert!(edit(&mut state, ui::CardField::Mask, "255.255.0.0"));
+        assert!(
+            edit(&mut state, ui::CardField::Address, "10.0.0.8"),
+            "keeps the subnet"
+        );
+        assert!(!edit(&mut state, ui::CardField::Mask, "255.0.255.0"));
+        let address = state.network.card(card).and_then(|c| c.address);
+        assert_eq!(
+            address.map(|a| a.to_string()).as_deref(),
+            Some("10.0.0.8/16")
+        );
+        assert!(edit(&mut state, ui::CardField::Address, ""), "cleared");
+        assert_eq!(state.network.card(card).and_then(|c| c.address), None);
+    }
+
+    #[test]
+    fn a_typed_gateway_mac_and_name_are_kept_only_when_valid() {
+        let (mut state, card) = with_new_card();
+        let edit = |st: &mut AppState, field, text: &str| st.edit_card(field, text);
+        assert!(edit(&mut state, ui::CardField::Gateway, "10.0.0.1"));
+        assert!(!edit(&mut state, ui::CardField::Gateway, "router"));
+        assert!(edit(&mut state, ui::CardField::Mac, "aa-bb-cc-dd-ee-ff"));
+        assert!(!edit(&mut state, ui::CardField::Mac, "aa-bb"));
+        assert!(edit(&mut state, ui::CardField::Name, "Lab"));
+        let edited = state.network.card(card).unwrap();
+        assert_eq!(edited.gateway, Some(Ipv4Addr::new(10, 0, 0, 1)));
+        assert_eq!(
+            edited.mac.map(|m| m.to_string()).as_deref(),
+            Some("AA:BB:CC:DD:EE:FF")
+        );
+        assert_eq!(edited.name, "Lab");
+        assert!(edit(&mut state, ui::CardField::Gateway, " "), "cleared");
+        assert_eq!(state.network.card(card).and_then(|c| c.gateway), None);
+    }
+
+    #[test]
+    fn a_mask_is_read_as_dotted_or_as_a_length() {
+        assert_eq!(prefix("255.255.255.0"), Some(24));
+        assert_eq!(prefix(" /16 "), Some(16));
+        assert_eq!(prefix("8"), Some(8));
+        for refused in ["33", "255.0.255.0", "", "mask"] {
+            assert_eq!(prefix(refused), None, "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn a_card_is_plugged_into_a_card_chosen_away_from_its_own_device() {
+        let (mut state, card) = with_new_card();
+        let choices = state.upstream_choices();
+        let own: Vec<_> = state
+            .network
+            .device(PC)
+            .unwrap()
+            .cards
+            .iter()
+            .map(|c| c.id)
+            .collect();
+        assert!(choices.iter().all(|c| !own.contains(c)));
+        let lab = state.network.device(LAB_ROUTER).unwrap().cards[0].id;
+        let at = choices.iter().position(|&c| c == lab).unwrap();
+        state.plug_card(at + 1);
+        assert_eq!(state.plug_choice(), at + 1);
+        let uplink = state.network.uplink(Node::Card(card)).map(|c| c.upstream);
+        assert_eq!(uplink, Some(Node::Device(LAB_ROUTER)));
+        state.plug_card(999);
+        assert_eq!(state.plug_choice(), at + 1, "out of range");
+        state.plug_card(0);
+        assert_eq!(state.plug_choice(), 0);
+    }
+
+    #[test]
+    fn removing_a_card_selects_its_device_but_the_last_stays() {
+        let (mut state, card) = with_new_card();
+        state.remove_card();
+        assert_eq!(state.selected, Some(Node::Device(PC)));
+        assert!(state.network.card(card).is_none());
+        let only = state.network.device(PC).unwrap().cards[0].id;
+        state.selected = Some(Node::Card(only));
+        state.remove_card();
+        assert!(state.network.card(only).is_some(), "the last stays");
     }
 
     #[test]
@@ -171,7 +421,7 @@ mod tests {
             !state.add_guest(kind, "Web", "172.17.0.9/16"),
             "nothing selected"
         );
-        state.selected = Some(DOCKER_HOST);
+        state.selected = Some(Node::Device(DOCKER_HOST));
         assert!(!state.add_guest(kind, "Web", "172.17.0"));
         assert!(!state.add_guest(kind, "  ", "172.17.0.9/16"));
         assert!(state.add_guest(kind, "Web", "172.17.0.9/16"));
@@ -184,7 +434,8 @@ mod tests {
             .unwrap()
             .id;
         assert_eq!(state.network.host(web), Some(DOCKER_HOST));
-        assert!(state.positions[&web].y > state.positions[&DOCKER_HOST].y);
+        let (web, host) = (Node::Device(web), Node::Device(DOCKER_HOST));
+        assert!(state.positions[&web].y > state.positions[&host].y);
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
     }
 }

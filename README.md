@@ -31,7 +31,8 @@ All UI text is translatable. To add or change a language, see
 src/main.rs        wiring only: build state, create window, connect callbacks, run
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices with their network cards, virtual machines and
-                   containers; connections, roles, groups, map layout) — no Slint imports
+                   containers; the map's tree of devices and card ghosts, roles, groups,
+                   layout) — no Slint imports
 src/mock_data.rs   the sample network
 src/ui_bridge/     model ↔ Slint conversion, callback handlers, map motion, reading the icon folder
 ui/                .slint files: app window, panels, canvas, components/, theme
@@ -41,7 +42,9 @@ translations/      all UI text: one gettext .po file per language (English in en
 docs/agents/       the agent guides indexed by AGENTS.md
 ```
 
-Agent tooling, when added, is a separate crate in `tools/`, run with `cargo tool`.
+Development tooling is a separate crate in `tools/`, run with `cargo tool`. Use
+`cargo tool repo gate` for the tools and app quality gates, or `cargo tool icons audit` to
+check the icon library's paths and identifiers. See [tools/README.md](tools/README.md).
 
 ## Contributing (humans and AI agents)
 

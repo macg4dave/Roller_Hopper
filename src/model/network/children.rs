@@ -1,10 +1,8 @@
-//! What a device holds: its network cards, and the virtual machines and containers it hosts.
-
-use std::net::Ipv4Addr;
+//! The virtual machines and containers a device hosts, and forgetting a device with them.
 
 use ipnet::Ipv4Net;
 
-use super::{CardLink, ConnectionKind, Network};
+use super::Network;
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::{
     Device, DeviceId, DeviceKind, Guest, GuestKind, LastSeen, Role, Status,
@@ -54,65 +52,6 @@ impl Network {
         hosts.take(self.devices.len()).count()
     }
 
-    fn address_taken(&self, address: Ipv4Addr) -> bool {
-        let mut cards = self.devices.iter().flat_map(|d| &d.cards);
-        cards.any(|card| card.address.addr() == address)
-    }
-
-    fn next_card_id(&self) -> CardId {
-        let cards = self.devices.iter().flat_map(|d| &d.cards);
-        CardId(cards.map(|card| card.id.0).max().unwrap_or(0) + 1)
-    }
-
-    /// Adds a network card to `device` at `address`, plugged into `upstream` if given, and
-    /// returns it. Refused when the device is missing, the address is in use, or `upstream` is
-    /// missing or within the device's branch. A link given here is kept when the layout is reset.
-    pub(crate) fn add_card(
-        &mut self,
-        device: DeviceId,
-        address: Ipv4Net,
-        upstream: Option<DeviceId>,
-    ) -> Option<CardId> {
-        let bad_upstream =
-            upstream.is_some_and(|up| self.device(up).is_none() || self.is_within(up, device));
-        if bad_upstream || self.address_taken(address.addr()) {
-            return None;
-        }
-        let id = self.next_card_id();
-        let card = NetworkCard {
-            id,
-            address,
-            mac: None,
-        };
-        self.device_mut(device)?.cards.push(card);
-        if let Some(upstream) = upstream {
-            let link = CardLink {
-                upstream,
-                card: id,
-                kind: ConnectionKind::Known,
-            };
-            self.links.push(link);
-            self.detected.push(link);
-        }
-        Some(id)
-    }
-
-    /// Removes a network card and its link. Refused for a device's last card.
-    pub(crate) fn remove_card(&mut self, device: DeviceId, card: CardId) -> bool {
-        let Some(owner) = self.device_mut(device).filter(|d| d.cards.len() > 1) else {
-            return false;
-        };
-        let before = owner.cards.len();
-        owner.cards.retain(|c| c.id != card);
-        if owner.cards.len() == before {
-            return false;
-        }
-        for links in [&mut self.links, &mut self.detected] {
-            links.retain(|l| l.card != card);
-        }
-        true
-    }
-
     /// Adds a virtual machine or container named `name` to `host`, with one network card at
     /// `address` that reaches the network through the host, and returns it. Nothing about it
     /// was detected. Refused when the host is missing, the name is blank or the address is in
@@ -125,7 +64,7 @@ impl Network {
         address: Ipv4Net,
     ) -> Option<DeviceId> {
         let name = name.trim();
-        let refused = self.device(host).is_none() || self.address_taken(address.addr());
+        let refused = self.device(host).is_none() || self.address_taken(address.addr(), None);
         if refused || name.is_empty() {
             return None;
         }
@@ -138,9 +77,8 @@ impl Network {
             icon: None,
             status: Status::Unknown,
             cards: vec![NetworkCard {
-                id: self.next_card_id(),
-                address,
-                mac: None,
+                address: Some(address),
+                ..NetworkCard::blank(self.next_card_id())
             }],
             guest: Some(Guest { host, kind }),
             manufacturer: None,
@@ -159,8 +97,9 @@ impl Network {
         Some(id)
     }
 
-    /// Forgets a device with everything that runs on it, and their links, and returns those it
-    /// forgot. Devices behind them stay, as separate branches of the map.
+    /// Forgets a device with everything that runs on it, the links of their cards and the links
+    /// into them, and returns those it forgot. Devices behind them stay, as separate branches of
+    /// the map.
     pub(crate) fn remove_device(&mut self, id: DeviceId) -> Vec<DeviceId> {
         let forgotten = self.devices.iter().filter(|d| self.runs_within(d.id, id));
         let (ids, cards): (Vec<DeviceId>, Vec<Vec<CardId>>) = forgotten
@@ -169,7 +108,7 @@ impl Network {
         let cards = cards.concat();
         self.devices.retain(|d| !ids.contains(&d.id));
         for links in [&mut self.links, &mut self.detected] {
-            links.retain(|l| !ids.contains(&l.upstream) && !cards.contains(&l.card));
+            links.retain(|l| !cards.contains(&l.upstream) && !cards.contains(&l.card));
         }
         ids
     }
@@ -179,8 +118,8 @@ impl Network {
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::network::Node;
 
-    const ROUTER: DeviceId = DeviceId(1);
     const SWITCH: DeviceId = DeviceId(2);
     const PC: DeviceId = DeviceId(5);
     const LINUX_SERVER: DeviceId = DeviceId(6);
@@ -200,9 +139,9 @@ mod tests {
             network
                 .connections()
                 .iter()
-                .all(|c| c.upstream != SWITCH && c.downstream != SWITCH)
+                .all(|c| ![c.upstream, c.downstream].contains(&Node::Device(SWITCH)))
         );
-        assert!(network.uplink(PC).is_none(), "stands alone");
+        assert!(network.uplink(Node::Device(PC)).is_none(), "stands alone");
     }
 
     #[test]
@@ -218,7 +157,14 @@ mod tests {
         let forgotten = network.remove_device(LINUX_SERVER);
         assert!(forgotten.contains(&DOCKER_HOST));
         assert!(on_docker.iter().all(|id| forgotten.contains(id)));
-        assert!(network.cross_links().is_empty(), "Docker Host's lab card");
+        let lab_card = Node::Card(CardId(100));
+        assert!(
+            network
+                .connections()
+                .iter()
+                .all(|c| c.downstream != lab_card),
+            "Docker Host's lab card"
+        );
         assert!(network.device(LAB_ROUTER).is_some());
     }
 
@@ -228,64 +174,20 @@ mod tests {
         assert_eq!(network.remove_device(LAB_ROUTER), [LAB_ROUTER]);
         let docker = network.device(DOCKER_HOST).unwrap();
         assert_eq!(docker.cards.len(), 2);
-        assert!(network.cross_links().is_empty());
-    }
-
-    #[test]
-    fn a_card_is_added_at_a_free_address_behind_another_device() {
-        let mut network = mock_data::network();
-        let router_ip = network.device(ROUTER).unwrap().cards[0].address;
-        let free = net("10.0.0.7/24");
-        assert_eq!(network.add_card(PC, router_ip, None), None, "taken");
-        assert_eq!(network.add_card(PC, free, Some(PC)), None, "behind itself");
-        assert_eq!(network.add_card(SWITCH, free, Some(PC)), None, "loop");
-        assert_eq!(network.add_card(PC, free, Some(DeviceId(999))), None);
-        assert_eq!(network.add_card(DeviceId(999), free, None), None);
-
-        let card = network.add_card(PC, free, Some(LAB_ROUTER)).unwrap();
-        let pc = network.device(PC).unwrap();
+        let lab = docker.cards[1].id;
+        let uplink = network.uplink(Node::Card(lab)).map(|c| c.upstream);
         assert_eq!(
-            pc.cards.last().map(|c| (c.id, c.address, c.mac)),
-            Some((card, free, None))
+            uplink,
+            Some(Node::Device(DOCKER_HOST)),
+            "back under its device"
         );
-        assert_eq!(
-            network.uplink(PC).map(|c| c.upstream),
-            Some(SWITCH),
-            "unmoved"
-        );
-        let crossing = network.cross_links();
-        assert!(
-            crossing
-                .iter()
-                .any(|c| (c.upstream, c.downstream) == (LAB_ROUTER, PC))
-        );
-        network.restore_connections();
-        assert_eq!(network.cross_links(), crossing, "kept on reset");
-        assert_eq!(network.add_card(DOCKER_HOST, free, None), None, "now taken");
-    }
-
-    #[test]
-    fn a_card_is_removed_with_its_link_but_never_the_last() {
-        let mut network = mock_data::network();
-        let docker = network.device(DOCKER_HOST).unwrap().clone();
-        let [home, lab] = [0, 1].map(|at| docker.cards[at].id);
-        assert!(!network.remove_card(DOCKER_HOST, CardId(999)));
-        assert!(
-            !network.remove_card(PC, network.device(PC).unwrap().cards[0].id),
-            "last"
-        );
-        assert!(network.remove_card(DOCKER_HOST, lab));
-        assert!(network.cross_links().is_empty());
-        network.restore_connections();
-        assert!(network.cross_links().is_empty(), "gone for good");
-        assert!(!network.remove_card(DOCKER_HOST, home), "now the last");
     }
 
     #[test]
     fn a_guest_is_added_under_its_host_after_the_hosts_other_guests() {
         let mut network = mock_data::network();
         let free = net("172.17.0.9/16");
-        let taken = network.device(PC).unwrap().cards[0].address;
+        let taken = network.device(PC).unwrap().cards[0].address.unwrap();
         let vm = GuestKind::VirtualMachine;
         assert_eq!(network.add_guest(DOCKER_HOST, vm, " ", free), None);
         assert_eq!(network.add_guest(DOCKER_HOST, vm, "Web", taken), None);
@@ -297,7 +199,10 @@ mod tests {
         let added = network.device(web).unwrap();
         assert_eq!(added.name, "Web");
         assert_eq!(added.guest.map(|g| g.kind), Some(GuestKind::Container));
-        assert_eq!(network.uplink(web).map(|c| c.upstream), Some(DOCKER_HOST));
+        assert_eq!(
+            network.uplink(Node::Device(web)).map(|c| c.upstream),
+            Some(Node::Device(DOCKER_HOST))
+        );
         assert_eq!(network.depth(web), 2, "on a virtual machine");
 
         let ids: Vec<_> = network.devices().iter().map(|d| d.id).collect();

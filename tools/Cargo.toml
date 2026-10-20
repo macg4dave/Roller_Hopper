@@ -1,0 +1,43 @@
+[package]
+name = "network-mapper-tools"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+
+[workspace]
+
+[dependencies]
+clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
+walkdir = "2.5.0"
+
+# Protected: see docs/agents/rust.md and AGENTS.md "Protected files". Do not loosen without explicit user approval.
+[lints.rust]
+unsafe_code = "deny"  # not forbid: Slint generated code needs a local allow
+rust_2018_idioms = { level = "warn", priority = -1 }
+unreachable_pub = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Panics and placeholders
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+indexing_slicing = "warn"
+# Lint suppression must be explicit and justified: #[expect(lint, reason = "...")]
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+# Clarity and ownership
+clone_on_ref_ptr = "warn"
+redundant_clone = "warn"
+shadow_unrelated = "warn"
+wildcard_enum_match_arm = "warn"
+cognitive_complexity = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+let_underscore_must_use = "warn"
+mod_module_files = "warn"

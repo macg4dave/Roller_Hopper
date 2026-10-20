@@ -4,16 +4,20 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
+#[cfg(test)]
+use crate::model::Node;
 use crate::model::{
     CardId, CardLink, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Guest, GuestKind,
     Icon, LastSeen, LineStyle, MacAddr, Network, NetworkCard, Role, Services, Status,
 };
 
-/// The home network's /24, that of the separate lab network behind the Lab Router, and the
-/// Docker Host's /16 bridge network for its containers.
+/// The home network's /24, that of the separate lab network behind the Lab Router, the
+/// Docker Host's /16 bridge network for its containers, and the router's side of the internet
+/// connection (a documentation range, RFC 5737).
 const HOME: [u8; 3] = [192, 168, 1];
 const LAB: [u8; 3] = [10, 0, 0];
 const DOCKER: [u8; 3] = [172, 17, 0];
+const WAN: [u8; 3] = [203, 0, 113];
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
 const FLAKY_DEVICE: DeviceId = DeviceId(13);
@@ -30,7 +34,7 @@ const CONTAINER: &str = "Container";
 const CONTAINER_ICON: &str = "Computers/Container";
 
 /// A sample device. Its first network card has the same id as the device, so the links below
-/// read as links between devices.
+/// read as links between devices (or the router's first card).
 struct Spec {
     id: u32,
     name: &'static str,
@@ -87,9 +91,9 @@ impl Spec {
 /// the tests check every sample device has its cards.
 fn card(id: u32, [a, b, c]: [u8; 3], host: u8, prefix: u8, mac: [u8; 6]) -> Option<NetworkCard> {
     Some(NetworkCard {
-        id: CardId(id),
-        address: Ipv4Net::new(Ipv4Addr::new(a, b, c, host), prefix).ok()?,
+        address: Some(Ipv4Net::new(Ipv4Addr::new(a, b, c, host), prefix).ok()?),
         mac: Some(MacAddr(mac)),
+        ..NetworkCard::blank(CardId(id))
     })
 }
 
@@ -466,23 +470,48 @@ fn devices() -> Vec<Device> {
 
 /// The Docker Host's second virtual network card, on the lab network.
 const DOCKER_LAB_CARD: u32 = 100;
+/// The router's second card, towards the internet.
+const ROUTER_WAN_CARD: u32 = 101;
 
+/// The sample devices, with the router's and the Docker Host's second cards, and names for the
+/// cards of devices that have several.
 fn devices_with_further_cards() -> Vec<Device> {
     let mut devices = devices();
+    let wan_card = card(
+        ROUTER_WAN_CARD,
+        WAN,
+        2,
+        24,
+        [0x04, 0xD9, 0xF5, 0x3C, 0x4D, 0x5F],
+    )
+    .map(|card| NetworkCard {
+        name: "WAN".into(),
+        gateway: Some(Ipv4Addr::new(203, 0, 113, 1)),
+        ..card
+    });
     let lab_card = card(
         DOCKER_LAB_CARD,
         LAB,
         23,
         24,
         [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13],
-    );
-    if let Some(docker) = devices.iter_mut().find(|d| d.id == DeviceId(19)) {
-        docker.cards.extend(lab_card);
+    )
+    .map(|card| NetworkCard {
+        name: "Lab".into(),
+        ..card
+    });
+    for (id, first_name, further) in [(1, "LAN", wan_card), (19, "Home", lab_card)] {
+        if let Some(device) = devices.iter_mut().find(|d| d.id == DeviceId(id)) {
+            if let Some(first) = device.cards.first_mut() {
+                first.name = first_name.into();
+            }
+            device.cards.extend(further);
+        }
     }
     devices
 }
 
-/// Each card's link, as (upstream device, card, kind).
+/// Each card's link, as (upstream card, card, kind).
 fn links() -> Vec<CardLink> {
     use ConnectionKind::{Inferred, Known};
     [
@@ -506,7 +535,7 @@ fn links() -> Vec<CardLink> {
     ]
     .into_iter()
     .map(|(up, card, kind)| CardLink {
-        upstream: DeviceId(up),
+        upstream: CardId(up),
         card: CardId(card),
         kind,
     })
@@ -634,7 +663,8 @@ mod tests {
         let cards: Vec<_> = devices.iter().flat_map(|d| &d.cards).collect();
         let card_ids: Vec<_> = cards.iter().map(|c| c.id).collect();
         assert!(all_unique(&card_ids));
-        let ips: Vec<_> = cards.iter().map(|c| c.address.addr()).collect();
+        let ips: Option<Vec<_>> = cards.iter().map(|c| c.address.map(|a| a.addr())).collect();
+        let ips = ips.expect("every sample card has an address");
         assert!(all_unique(&ips));
         let macs: Option<Vec<_>> = cards.iter().map(|c| c.mac).collect();
         let macs = macs.expect("every sample card has a MAC");
@@ -644,24 +674,43 @@ mod tests {
     #[test]
     fn a_further_card_joins_its_device_to_another_subnet() {
         let network = network();
-        let mut cross = network.cross_links();
-        assert_eq!(cross.len(), 1);
-        let link = cross.pop().unwrap();
-        let docker = network.device(link.downstream).unwrap();
-        let upstream = network.device(link.upstream).unwrap();
-        let [home, lab] = [0, 1].map(|at| docker.cards[at].address);
+        let ghost = Node::Card(CardId(DOCKER_LAB_CARD));
+        let link = network.uplink(ghost).unwrap();
+        let docker = network.node_device(ghost).unwrap();
+        let upstream = network.node_device(link.upstream).unwrap();
+        let [home, lab] = [0, 1].map(|at| docker.cards[at].address.unwrap());
         assert_ne!(home.network(), lab.network());
-        let lab_router = upstream.primary_card().unwrap().address;
+        let lab_router = upstream.primary_card().unwrap().address.unwrap();
         assert!(lab_router.contains(&lab.addr()), "{lab} on {lab_router}");
     }
 
     #[test]
-    fn connections_reference_existing_devices_and_form_trees() {
+    fn the_routers_cards_are_on_their_own_subnets_with_a_gateway_out() {
         let network = network();
-        for link in network.card_links() {
-            assert!(network.device(link.upstream).is_some(), "{link:?}");
-            assert!(network.card_owner(link.card).is_some(), "{link:?}");
+        let router = network.device(DeviceId(1)).unwrap();
+        let [lan, wan] = [0, 1].map(|at| &router.cards[at]);
+        let wan_net = wan.address.unwrap();
+        assert_ne!(lan.address.unwrap().network(), wan_net.network());
+        assert!(wan.gateway.is_some_and(|g| wan_net.contains(&g)));
+    }
+
+    #[test]
+    fn connections_reference_existing_cards_and_form_trees() {
+        let network = network();
+        let cards = network.devices().iter().flat_map(|d| &d.cards);
+        for link in cards.filter_map(|card| network.link(card.id)) {
+            assert!(network.card_owner(link.upstream).is_some(), "{link:?}");
         }
+        assert_eq!(
+            links().len(),
+            network
+                .devices()
+                .iter()
+                .flat_map(|d| &d.cards)
+                .filter(|c| network.link(c.id).is_some())
+                .count(),
+            "every link is of a sample card"
+        );
         let downstream: HashSet<_> = network.connections().iter().map(|c| c.downstream).collect();
         assert_eq!(
             downstream.len(),
@@ -669,7 +718,7 @@ mod tests {
             "one uplink per device"
         );
         assert_eq!(
-            network.devices().len() - downstream.len(),
+            network.nodes().len() - downstream.len(),
             2,
             "the home network and the lab network"
         );

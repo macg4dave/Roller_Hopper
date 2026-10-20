@@ -33,11 +33,18 @@ export enum GroupColour { none, red, orange, yellow, green, blue, purple }
 // What a device runs as on its host; `none` for a physical device.
 export enum GuestKind { none, virtual-machine, container }
 
-/// One device as drawn on the map and in the list. `x`/`y` are map units (icon centre).
+/// One device as drawn on the map and in the lists, or one of its network cards: a row under
+/// the device in the lists, and its ghost on the map. `x`/`y` are map units (icon centre).
 export struct DeviceView {
+    // The device's id, also for one of its cards.
     id: int,
+    // For a card: its id, its place among its device's cards from 0, and its name, empty when
+    // it has none. -1 for the device itself.
+    card-id: int,
+    card-index: int,
+    card-name: string,
     name: string,
-    // Of its first network card.
+    // Of its first network card, or of the card itself.
     ip: string,
     mac: string,
     // Empty when the device gave none.
@@ -49,19 +56,19 @@ export struct DeviceView {
     // The colour of the role's group.
     colour: GroupColour,
     status: DeviceStatus,
-    // Its settled spot in the layout, which the list centres the map on. Where it is drawn
-    // while it moves is in Bridge.places.
+    // Its settled spot in the layout, which the list centres the map on; for a card without a
+    // ghost, its device's. Where it is drawn while it moves is in Bridge.places.
     x: float,
     y: float,
     // Hidden by the current search or filter: faded on the map.
     dimmed: bool,
     // How many hosts it runs within: a guest comes after its host in the lists, indented
-    // under it.
+    // under it. A card's row is indented one more, under its device.
     depth: int,
 }
 
-/// Where a device in Bridge.devices is drawn on the map right now, at the same index. Kept apart
-/// from DeviceView so a moving device does not redo its labels every frame.
+/// Where a node in Bridge.nodes is drawn on the map right now, at the same index. Kept apart
+/// from DeviceView so a moving node does not redo its labels every frame.
 export struct NodePlace {
     x: float,
     y: float,
@@ -70,15 +77,28 @@ export struct NodePlace {
     root-y: float,
 }
 
-/// A network card of the selected device, in its order: its address with the subnet prefix,
-/// its MAC (empty if none was detected), and the name of the device it is plugged into, empty
-/// when it has no link of its own.
+/// A network card of the selected device, in its order. Settings not given are empty.
 export struct CardView {
-    address: string,
+    id: int,
+    // Its place among its device's cards, from 0, and its name, empty when it has none.
+    index: int,
+    name: string,
+    ip: string,
+    mask: string,
+    gateway: string,
     mac: string,
+    // Where it is plugged in: the device's name, empty when nowhere, and the card's name and
+    // place there, -1 when that device has only the one card.
     via-name: string,
+    via-card: string,
+    via-index: int,
     inferred: bool,
+    // False for a guest's first card, which reaches the network through its host.
+    pluggable: bool,
 }
+
+/// A setting of the selected network card, typed on the edit page.
+export enum CardField { name, address, mask, gateway, mac }
 
 /// Read-only details of the selected device. Empty strings are not shown.
 export struct DeviceDetails {
@@ -166,20 +186,30 @@ export struct MapBounds {
 }
 
 export global Bridge {
-    in property <[DeviceView]> devices;
+    // The map's nodes: the devices, each followed by the ghosts of its further network cards.
+    in property <[DeviceView]> nodes;
     in property <[NodePlace]> places;
-    // The devices the search and filter let through, in the order of Bridge.devices.
+    // The devices the search and filter let through, each followed by its network cards.
     in property <[DeviceView]> list;
+    // Every device, each followed by its network cards, for the edit page.
+    in property <[DeviceView]> rows;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
     in property <Strand> strand;
     in property <MapBounds> bounds;
+    // The selected device, also while one of its cards is selected.
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[CardView]> cards;
-    // What a new card of the selected device can be plugged into: first none, then the names of
-    // the devices outside its own branch, in device order.
+    // The selected network card, -1 for none; whether it is drawn as a ghost (else the map shows
+    // it as its device); and its view.
+    in property <int> selected-card: -1;
+    in property <bool> selected-ghost;
+    in property <CardView> card;
+    // What the selected card can be plugged into: first none, then the cards of the devices
+    // away from its own, in device order; and where it is plugged in now.
     in property <[string]> upstream-choices;
+    in property <int> card-plug-index;
     in property <[PortView]> ports;
     in property <[string]> roles;
     in property <[RoleView]> role-list;
@@ -205,7 +235,9 @@ export global Bridge {
     in-out property <string> notes-draft;
     in-out property <int> role-index;
 
+    // Selects a device by its id, or nothing on -1; select-card selects a network card.
     callback select(int);
+    callback select-card(int);
     callback search(string);
     callback set-filter(StatusFilter);
     callback rename(string);
@@ -225,12 +257,16 @@ export global Bridge {
     callback set-port-number(int, string);
     callback set-port-description(int, string);
     callback remove-port(int);
-    // A network card for the selected device, at an address as typed (`a.b.c.d/nn`, or a bare
-    // address on a /24), plugged into the device at an index in upstream-choices. Refused
-    // (false) when the address is not IPv4 or is already in use.
-    callback add-card(string, int) -> bool;
-    // Removes the card at an index in cards, unless it is the last.
-    callback remove-card(int);
+    // Adds a blank network card to the selected device, and selects it.
+    callback add-card();
+    // Removes the selected card, unless it is its device's last, and selects the device.
+    callback remove-card();
+    // A setting of the selected card as typed; empty clears it. Refused (false) when it does
+    // not parse, an address is already in use, or a subnet mask is given before an address.
+    // An address may carry its prefix (`a.b.c.d/nn`).
+    callback edit-card(CardField, string) -> bool;
+    // Plugs the selected card into the card at an index in upstream-choices; 0 for none.
+    callback plug-card(int);
     // A virtual machine or container on the selected device, with a name and its first card's
     // address as typed. Refused (false) when the name is blank or the address is refused.
     callback add-guest(GuestKind, string, string) -> bool;
@@ -253,10 +289,11 @@ export global Bridge {
     callback set-group-line-style(int, int);
     // The group's roles are left in no group.
     callback delete-group(int);
-    // Dragging a device previews the line it would join; dropping it joins that line, or leaves
-    // it standing alone away from every line. Ignored when nothing was dragged.
-    callback move-device(int, float, float);
-    callback drop-device();
+    // Dragging a node (by its index in nodes) previews the line it would join; dropping it joins
+    // that line, or leaves it standing alone away from every line (a ghost goes back under its
+    // device). Ignored when nothing was dragged.
+    callback move-node(int, float, float);
+    callback drop-node();
     // Brings back the connections as found, and the tidy layout.
     callback reset-layout();
     callback scan();

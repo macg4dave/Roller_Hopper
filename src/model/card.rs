@@ -1,6 +1,9 @@
-//! A device's network cards: each has its own address on a subnet, and links on its own.
+//! A device's network cards: each is a child of its device, with its own IPv4 settings, and
+//! plugs into a card of another device on its own.
 
 use std::fmt;
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 
 use ipnet::Ipv4Net;
 
@@ -19,21 +22,86 @@ impl fmt::Display for MacAddr {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Why a typed MAC address was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BadMac;
+
+impl FromStr for MacAddr {
+    type Err = BadMac;
+
+    /// Six pairs of hex digits, separated by colons or dashes, in either case.
+    fn from_str(text: &str) -> Result<Self, BadMac> {
+        let mut octets = [0; 6];
+        let mut parts = text.trim().split([':', '-']);
+        for octet in &mut octets {
+            let part = parts.next().filter(|p| p.len() == 2).ok_or(BadMac)?;
+            *octet = u8::from_str_radix(part, 16).map_err(|_| BadMac)?;
+        }
+        match parts.next() {
+            None => Ok(Self(octets)),
+            Some(_) => Err(BadMac),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct NetworkCard {
     pub(crate) id: CardId,
-    /// The card's address and the prefix length of its subnet.
-    pub(crate) address: Ipv4Net,
-    /// Detected with the card; `None` for a card the user added.
+    /// The user's name for it, such as "LAN"; empty shows a numbered placeholder.
+    pub(crate) name: String,
+    /// The card's address and the prefix length of its subnet; `None` until the user gives one
+    /// to a card they added.
+    pub(crate) address: Option<Ipv4Net>,
+    pub(crate) gateway: Option<Ipv4Addr>,
+    /// Detected with the card, or typed by the user.
     pub(crate) mac: Option<MacAddr>,
 }
 
 impl NetworkCard {
+    /// A card the user added, with nothing filled in yet.
+    pub(crate) fn blank(id: CardId) -> Self {
+        Self {
+            id,
+            name: String::new(),
+            address: None,
+            gateway: None,
+            mac: None,
+        }
+    }
+
     /// Case-insensitive match on the address or MAC address; `query` is already lower case.
     pub(crate) fn matches(&self, query: &str) -> bool {
-        self.address.addr().to_string().contains(query)
+        self.address
+            .is_some_and(|net| net.addr().to_string().contains(query))
             || self
                 .mac
                 .is_some_and(|mac| mac.to_string().to_lowercase().contains(query))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_mac_address_is_read_with_colons_or_dashes_in_either_case() {
+        let mac = MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c]);
+        assert_eq!(" 8c:79:F5:1a:2B:3c ".parse(), Ok(mac));
+        assert_eq!("8C-79-F5-1A-2B-3C".parse(), Ok(mac));
+        assert_eq!(mac.to_string().parse(), Ok(mac), "round trip");
+        for bad in [
+            "",
+            "8C:79:F5:1A:2B",
+            "8C:79:F5:1A:2B:3C:00",
+            "8C:79:F5:1A:2B:3G",
+            "8C79F51A2B3C",
+        ] {
+            assert_eq!(bad.parse::<MacAddr>(), Err(BadMac), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_blank_card_matches_no_search() {
+        assert!(!NetworkCard::blank(CardId(1)).matches("1"));
     }
 }

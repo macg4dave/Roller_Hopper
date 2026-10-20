@@ -171,7 +171,8 @@ pub(crate) struct Device {
     /// An icon picked for this device alone; `None` follows the role.
     pub(crate) icon: Option<Icon>,
     pub(crate) status: Status,
-    /// Every device has at least one; the first is the one its address is shown from.
+    /// Its children on the map and in the lists. Every device has at least one; the first is
+    /// the one its address is shown from.
     pub(crate) cards: Vec<NetworkCard>,
     /// The host it runs on, for a virtual machine or container; `None` for a physical device.
     pub(crate) guest: Option<Guest>,
@@ -213,14 +214,13 @@ mod tests {
             status: Status::Online,
             cards: vec![
                 NetworkCard {
-                    id: CardId(1),
-                    address: "192.168.1.50/24".parse().unwrap(),
+                    address: Some("192.168.1.50/24".parse().unwrap()),
                     mac: Some(MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c])),
+                    ..NetworkCard::blank(CardId(1))
                 },
                 NetworkCard {
-                    id: CardId(2),
-                    address: "10.0.0.9/24".parse().unwrap(),
-                    mac: None,
+                    address: Some("10.0.0.9/24".parse().unwrap()),
+                    ..NetworkCard::blank(CardId(2))
                 },
             ],
             guest: None,

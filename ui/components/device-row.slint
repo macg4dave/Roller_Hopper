@@ -1,21 +1,24 @@
-import { DeviceStatus, DeviceView } from "../bridge.slint";
+import { Bridge, DeviceStatus, DeviceView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { StatusDot } from "status-dot.slint";
 
-// One entry in the device list. Its background stops short of the list's scroll bar, which
-// floats over the right-hand edge of the rows. A guest follows its host as a child: its icon
-// sits under the host's name.
+// One entry in a device list: a device, or one of its network cards nested under it. Its
+// background stops short of the list's scroll bar, which floats over the right-hand edge of the
+// rows. A guest follows its host as a child, and a card its device: the icon sits under the
+// name above. Clicking selects the device or card.
 export component DeviceRow inherits Rectangle {
     in property <DeviceView> device;
-    in property <bool> selected;
-    callback clicked;
     callback double-clicked;
 
-    height: Theme.row-height;
+    property <bool> card: device.card-id >= 0;
+    property <bool> selected: card ? device.card-id == Bridge.selected-card : device.id == Bridge.selected-id && Bridge.selected-card < 0;
+    property <string> name: card ? Labels.card-name(device.card-name, device.card-index) : Labels.device-name(device.name);
+
+    height: card ? Theme.card-row-height : Theme.row-height;
     accessible-role: list-item;
-    accessible-label: Labels.device-name(device.name);
+    accessible-label: card ? Labels.card-of(device.name, device.card-name, device.card-index) : name;
     accessible-item-selected: selected;
 
     Rectangle {
@@ -25,7 +28,13 @@ export component DeviceRow inherits Rectangle {
     }
 
     touch := TouchArea {
-        clicked => { root.clicked(); }
+        clicked => {
+            if card {
+                Bridge.select-card(device.card-id);
+            } else {
+                Bridge.select(device.id);
+            }
+        }
         double-clicked => { root.double-clicked(); }
     }
 
@@ -39,29 +48,29 @@ export component DeviceRow inherits Rectangle {
         spacing: Theme.space-m;
 
         DeviceIcon {
-            icon: device.icon;
+            icon: card ? @image-url("../icons/network-card.svg") : device.icon;
             width: icon-width;
-            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
+            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline || card ? Theme.icon-faded : Theme.icon);
         }
 
         VerticalLayout {
             alignment: center;
             spacing: 2px;
             Text {
-                text: Labels.device-name(device.name);
-                font-size: Theme.font-body;
-                font-weight: 600;
+                text: name;
+                font-size: card ? Theme.font-small : Theme.font-body;
+                font-weight: card ? 400 : 600;
                 color: Theme.text;
                 overflow: elide;
             }
-            Text {
+            if device.ip != "": Text {
                 text: device.ip;
                 font-size: Theme.font-small;
                 color: Theme.text-muted;
             }
         }
 
-        Text {
+        if !card: Text {
             text: device.role;
             font-size: Theme.font-small;
             color: Theme.text-muted;
@@ -71,7 +80,7 @@ export component DeviceRow inherits Rectangle {
             max-width: 90px;
         }
 
-        VerticalLayout {
+        if !card: VerticalLayout {
             alignment: center;
             StatusDot { status: device.status; }
         }

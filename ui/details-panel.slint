@@ -6,7 +6,8 @@ import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
 import { StatusDot } from "components/status-dot.slint";
 
-// Right panel: everything known about the selected device. Editing happens on the edit page.
+// Right panel: everything known about the selected device, or about the selected network card
+// under its device's name. Editing happens on the edit page.
 export component DetailsPanel inherits Rectangle {
     // Open the edit page on the selected device.
     callback edit();
@@ -88,29 +89,54 @@ export component DetailsPanel inherits Rectangle {
                 }
             }
 
-            DetailField { label: @tr("details.role"); value: Bridge.details.role; }
-            if Bridge.details.guest != GuestKind.none: DetailField {
-                label: @tr("details.runs-on");
-                value: Labels.runs-on(Bridge.details.host-name, Bridge.details.guest);
-            }
-            for card in Bridge.cards: VerticalLayout {
+            if Bridge.selected-card >= 0: VerticalLayout {
                 DetailField {
                     label: @tr("details.card");
-                    value: Labels.card(card.address, card.via-name, card.inferred);
+                    value: Labels.card-name(Bridge.card.name, Bridge.card.index);
                 }
-                if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
+                DetailField { label: @tr("details.ip"); value: Bridge.card.ip == "" ? @tr("card.no-address") : Bridge.card.ip; }
+                if Bridge.card.mask != "": DetailField { label: @tr("details.mask"); value: Bridge.card.mask; }
+                if Bridge.card.gateway != "": DetailField { label: @tr("details.gateway"); value: Bridge.card.gateway; }
+                if Bridge.card.mac != "": DetailField { label: @tr("details.mac"); value: Bridge.card.mac; }
+                DetailField {
+                    label: @tr("details.plugged-into");
+                    value: Labels.plugged-into(Bridge.card.via-name, Bridge.card.via-card, Bridge.card.via-index, Bridge.card.inferred);
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    padding-top: Theme.space-s;
+                    Button {
+                        text: @tr("details.show-device");
+                        clicked => { Bridge.select(Bridge.selected-id); }
+                    }
+                }
             }
-            DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
-            if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
-            if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }
-            if Bridge.details.hostname != "": DetailField { label: @tr("details.hostname"); value: Bridge.details.hostname; }
-            DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
-            if Bridge.details.uplink-name != "": DetailField {
-                label: @tr("details.connected-to");
-                value: Labels.uplink(Bridge.details.uplink-name, Bridge.details.uplink-inferred);
+
+            if Bridge.selected-card < 0: VerticalLayout {
+                DetailField { label: @tr("details.role"); value: Bridge.details.role; }
+                if Bridge.details.guest != GuestKind.none: DetailField {
+                    label: @tr("details.runs-on");
+                    value: Labels.runs-on(Bridge.details.host-name, Bridge.details.guest);
+                }
+                for card in Bridge.cards: VerticalLayout {
+                    DetailField {
+                        label: Labels.card-name(card.name, card.index);
+                        value: Labels.card(card.ip, card.via-name, card.via-card, card.via-index, card.inferred);
+                    }
+                    if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
+                }
+                DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
+                if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
+                if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }
+                if Bridge.details.hostname != "": DetailField { label: @tr("details.hostname"); value: Bridge.details.hostname; }
+                DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
+                if Bridge.details.uplink-name != "": DetailField {
+                    label: @tr("details.connected-to");
+                    value: Labels.uplink(Bridge.details.uplink-name, Bridge.details.uplink-inferred);
+                }
+                if Bridge.details.services != "": DetailField { label: @tr("details.open-ports"); value: Bridge.details.services; }
+                if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
             }
-            if Bridge.details.services != "": DetailField { label: @tr("details.open-ports"); value: Bridge.details.services; }
-            if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
         }
     }
 }

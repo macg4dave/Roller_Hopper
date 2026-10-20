@@ -16,9 +16,14 @@ the task. A missing command is a problem to solve, not a reason to stop or skip 
   when needed; do not assume a Unix command has the same meaning in PowerShell.
 - Ordinary pipes and short, readable shell commands are encouraged. Use an existing tool for
   the job it already does well: `jq` for JSON, `rg` or `grep` for search, and so on.
-- Python and Node may run existing tools or small, clear operations when appropriate. MUST NOT
-  replace an available tool with a large or opaque Bash/PowerShell one-liner or inline
-  Python/Node program. Put substantial custom logic in a tested repository tool.
+- MUST NOT write or run one-off Python scripts for repository work. This includes inline
+  programs (`python -c`, heredocs), temporary scripts and scripts deleted after use. Python
+  and Node may launch established tools, but MUST NOT contain ad hoc task logic. Do not move
+  that logic into a Node program or a Bash/PowerShell script to bypass this rule.
+- MUST use existing repository tooling when it covers the task. If it falls short, improve
+  the closest existing command; if no suitable command exists, implement the smallest tested
+  Rust command in `tools/` and use it in the same task, even if the immediate need is one-off.
+  Direct use of established utilities and short pipelines as described above remains allowed.
 - If a preferred utility is missing, first use a suitable installed equivalent, an existing
   repository command or a built-in file tool. Do not install or reimplement a utility merely
   because it is your usual choice.

@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::model::{DeviceId, Point, Positions, Snap};
+use crate::model::{Node, Point, Positions, Snap};
 
 /// Spring stiffness (per second²) and damping (per second): devices settle in about a third of
 /// a second, overshooting by under a tenth of the way, so the map feels alive but stays calm.
@@ -41,7 +41,7 @@ struct Spring {
 #[derive(Debug, Default)]
 pub(super) struct Motion {
     shown: Positions,
-    velocity: HashMap<DeviceId, Point>,
+    velocity: HashMap<Node, Point>,
     /// The strand's bend point and its velocity, while there is a strand.
     bend: Option<(Point, Point)>,
 }
@@ -89,18 +89,13 @@ impl Motion {
     }
 
     /// Puts a device straight at `at`, so a dragged device follows the pointer exactly.
-    pub(super) fn place(&mut self, id: DeviceId, at: Point) {
+    pub(super) fn place(&mut self, id: Node, at: Point) {
         self.shown.insert(id, at);
         self.velocity.remove(&id);
     }
 
-    pub(super) fn forget(&mut self, id: DeviceId) {
-        self.shown.remove(&id);
-        self.velocity.remove(&id);
-    }
-
     /// Nudges the devices down, so they bob as if taking a weight.
-    pub(super) fn jiggle(&mut self, ids: impl IntoIterator<Item = DeviceId>) {
+    pub(super) fn jiggle(&mut self, ids: impl IntoIterator<Item = Node>) {
         for id in ids {
             self.velocity.entry(id).or_default().y += JIGGLE;
         }
@@ -150,9 +145,10 @@ fn spring(at: &mut Point, velocity: &mut Point, goal: Point, spring: Spring, dt:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::DeviceId;
 
     const FRAME: f32 = 1.0 / 60.0;
-    const ID: DeviceId = DeviceId(1);
+    const ID: Node = Node::Device(DeviceId(1));
 
     fn at(x: f32, y: f32) -> Positions {
         Positions::from([(ID, Point { x, y })])
@@ -210,7 +206,7 @@ mod tests {
         let network = crate::mock_data::network();
         let arrangement = crate::model::Arrangement::default();
         let positions = crate::model::tree_layout(&network, &arrangement);
-        let (pc, nas) = (DeviceId(5), DeviceId(4));
+        let (pc, nas) = (Node::Device(DeviceId(5)), Node::Device(DeviceId(4)));
         let any =
             crate::model::snap_target(&network, &arrangement, &positions, pc, positions[&nas]);
         Snap {

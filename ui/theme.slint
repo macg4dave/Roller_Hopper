@@ -58,6 +58,8 @@ export global Theme {
     out property <length> line-width-thick: 2.5px;
     // Inferred links are drawn faded, in whatever style their group has.
     out property <float> inferred-opacity: 0.45;
+    // The ghost of a device's network card on the map, until it is selected.
+    out property <float> ghost-opacity: 0.55;
     // A slack strand to a dragged device; it thins to line-width as it stretches.
     out property <length> strand-width: 3px;
     // The small circle at the foot of each device's trunk.
@@ -87,6 +89,8 @@ export global Theme {
     // The std-widgets scroll bar floats over a list's right edge; rows keep this much clear.
     out property <length> scrollbar-width: 14px;
     out property <length> row-height: 52px;
+    // A network card's row, nested under its device's.
+    out property <length> card-row-height: 38px;
     out property <length> map-icon: 36px;
     out property <length> map-label-width: 130px;
     out property <length> grid-spacing: 32px;

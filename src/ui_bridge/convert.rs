@@ -8,8 +8,8 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle, Network,
-    NetworkCard, Point, Role, Snap, Status, StatusFilter,
+    CardId, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle,
+    Network, Node, Point, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -19,7 +19,7 @@ const PAD_SIDE: f32 = 80.0;
 const PAD_TOP: f32 = 40.0;
 const PAD_BOTTOM: f32 = 115.0;
 /// The subnet prefix of an address typed without one: that of most home networks.
-const TYPED_PREFIX: u8 = 24;
+pub(super) const TYPED_PREFIX: u8 = 24;
 
 pub(super) fn ui_id(id: DeviceId) -> i32 {
     // Ids come from our own data and stay far below i32::MAX; -1 means "no device" to the UI.
@@ -33,6 +33,15 @@ pub(super) fn index(index: i32) -> usize {
 
 pub(super) fn device_id(id: i32) -> Option<DeviceId> {
     u32::try_from(id).ok().map(DeviceId)
+}
+
+pub(super) fn ui_card_id(id: CardId) -> i32 {
+    // As with devices, -1 means "no card" to the UI.
+    i32::try_from(id.0).unwrap_or(-1)
+}
+
+pub(super) fn card_id(id: i32) -> Option<CardId> {
+    u32::try_from(id).ok().map(CardId)
 }
 
 pub(super) fn filter_from_ui(filter: ui::StatusFilter) -> StatusFilter {
@@ -140,7 +149,8 @@ pub(super) fn colour_from_ui(colour: ui::GroupColour) -> Option<GroupColour> {
     }
 }
 
-/// A device whose settled spot is `at`; the caller dims it when the search or filter hides it.
+/// A device whose settled spot is `at`; the caller dims it when the search or filter hides it,
+/// and makes a card's row or ghost from it.
 pub(super) fn device_view(
     network: &Network,
     icons: &Icons,
@@ -151,13 +161,13 @@ pub(super) fn device_view(
     let primary = device.primary_card();
     ui::DeviceView {
         id: ui_id(device.id),
+        card_id: -1,
+        card_index: 0,
+        card_name: SharedString::new(),
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
-        ip: primary
-            .map(|card| card.address.addr().to_string())
-            .unwrap_or_default()
-            .into(),
-        mac: primary.map(mac).unwrap_or_default(),
+        ip: primary.map(super::cards::ip).unwrap_or_default(),
+        mac: primary.map(super::cards::mac).unwrap_or_default(),
         hostname: device.hostname.unwrap_or_default().into(),
         role,
         icon: icons.image(&network.icon(device)),
@@ -168,29 +178,6 @@ pub(super) fn device_view(
         dimmed: false,
         depth: i32::try_from(network.depth(device.id)).unwrap_or(i32::MAX),
     }
-}
-
-/// The MAC address as shown; empty for a card the user added.
-fn mac(card: &NetworkCard) -> SharedString {
-    card.mac
-        .map(|mac| mac.to_string())
-        .unwrap_or_default()
-        .into()
-}
-
-/// The network cards of `device`, each with the name of the device it is plugged into.
-pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView> {
-    let views = device.cards.iter().map(|card| {
-        let link = network.card_links().iter().find(|l| l.card == card.id);
-        let via = link.and_then(|l| network.device(l.upstream));
-        ui::CardView {
-            address: card.address.to_string().into(),
-            mac: mac(card),
-            via_name: via.map(|d| d.name.trim()).unwrap_or_default().into(),
-            inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
-        }
-    });
-    views.collect()
 }
 
 pub(super) fn guest_kind_from_ui(kind: ui::GuestKind) -> Option<GuestKind> {
@@ -238,16 +225,20 @@ pub(super) fn details(
     role: SharedString,
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
-    let name_of = |id| network.device(id).map(|d| d.name.trim());
+    let name_of = |node| network.node_device(node).map(|d| d.name.trim());
     // A guest connects through its host, which is shown as where it runs instead.
-    let uplink = network.uplink(device.id).filter(|_| device.guest.is_none());
+    let uplink = network
+        .uplink(Node::Device(device.id))
+        .filter(|_| device.guest.is_none());
     let uplink = uplink.and_then(|link| {
         Some((
             name_of(link.upstream)?,
             link.kind == ConnectionKind::Inferred,
         ))
     });
-    let host = device.guest.and_then(|guest| name_of(guest.host));
+    let host = device
+        .guest
+        .and_then(|guest| name_of(Node::Device(guest.host)));
     ui::DeviceDetails {
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
@@ -393,7 +384,7 @@ mod tests {
         let network = crate::mock_data::network();
         let arrangement = crate::model::Arrangement::default();
         let positions = crate::model::tree_layout(&network, &arrangement);
-        let (pc, nas) = (DeviceId(5), DeviceId(4));
+        let (pc, nas) = (Node::Device(DeviceId(5)), Node::Device(DeviceId(4)));
         let any =
             crate::model::snap_target(&network, &arrangement, &positions, pc, positions[&nas]);
         let snap = Snap {

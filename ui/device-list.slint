@@ -4,7 +4,7 @@ import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
 
 // Left panel: search, the way to the edit page, All / Online / Offline filters and the
-// matching devices.
+// matching devices, each with its network cards.
 export component DeviceList inherits Rectangle {
     // A device was double-clicked: bring it into view on the map.
     callback show-on-map(DeviceView);
@@ -60,8 +60,6 @@ export component DeviceList inherits Rectangle {
             vertical-stretch: 1;
             for device in Bridge.list: DeviceRow {
                 device: device;
-                selected: device.id == Bridge.selected-id;
-                clicked => { Bridge.select(device.id); }
                 double-clicked => { root.show-on-map(device); }
             }
         }

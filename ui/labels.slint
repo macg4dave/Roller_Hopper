@@ -69,8 +69,8 @@ export global Labels {
         return @tr("groups.none");
     }
 
-    // First in the dropdown of what a new network card is plugged into. Rust calls this to
-    // build that list.
+    // First in the dropdown of what a network card is plugged into. Rust calls this to build
+    // that list.
     public pure function no-link() -> string {
         return @tr("edit.card-no-link");
     }
@@ -100,9 +100,27 @@ export global Labels {
         return inferred ? @tr("uplink.inferred", device-name(name)) : @tr("uplink.known", device-name(name));
     }
 
-    // A network card's address, and the device it is plugged into, if any.
-    public pure function card(address: string, via-name: string, inferred: bool) -> string {
-        return via-name == "" ? address : @tr("details.card.value", address, uplink(via-name, inferred));
+    // A network card's name; a card the user has not named is numbered by its place, from 0.
+    public pure function card-name(name: string, index: int) -> string {
+        return name == "" ? @tr("card.unnamed", index + 1) : name;
+    }
+
+    // A device's card where it stands in for the device: a ghost on the map, or something to
+    // plug into. Just the device for a device with one card (index -1). Rust calls this to
+    // build the "plugged into" dropdown.
+    public pure function card-of(device: string, card: string, index: int) -> string {
+        return index < 0 ? device-name(device) : @tr("card.of", device-name(device), card-name(card, index));
+    }
+
+    // Where a network card is plugged in (see CardView), or that it is plugged in nowhere.
+    public pure function plugged-into(via-name: string, via-card: string, via-index: int, inferred: bool) -> string {
+        return via-name == "" ? no-link() : uplink(card-of(via-name, via-card, via-index), inferred);
+    }
+
+    // A network card's address, and where it is plugged in, if anywhere.
+    public pure function card(ip: string, via-name: string, via-card: string, via-index: int, inferred: bool) -> string {
+        let address = ip == "" ? @tr("card.no-address") : ip;
+        return via-name == "" ? address : @tr("details.card.value", address, plugged-into(via-name, via-card, via-index, inferred));
     }
 
     public pure function scan-status(scanning: bool, scans: int, devices: int, offline: int) -> string {

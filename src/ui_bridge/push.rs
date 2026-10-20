@@ -2,8 +2,8 @@
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use super::{AppState, convert, lines};
-use crate::model::{Device, Network, Role, StatusFilter};
+use super::{AppState, cards, convert, lines};
+use crate::model::{Device, Network, Node, Role, StatusFilter};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
@@ -11,30 +11,23 @@ use crate::ui::{self, AppWindow, Bridge, Labels};
 pub(super) fn push(ui: &AppWindow, state: &AppState) {
     let bridge = ui.global::<Bridge<'_>>();
     let labels = ui.global::<Labels<'_>>();
-    let (network, icons) = (&state.network, &state.icons);
-    // Rows carry the settled spot, which changes only when the layout does, so the labels are
-    // not redone on every frame of motion; where each device is drawn goes in `places`.
-    let settled = |id| state.positions.get(&id).copied().unwrap_or_default();
-    let view = |d: &Device| {
-        let role = convert::role_label(&labels, network, &d.role);
-        convert::device_view(network, icons, d, role, settled(d.id))
+    let network = &state.network;
+    let views = Views {
+        state,
+        labels: &labels,
     };
 
-    let node = |d: &Device| {
-        let shown = state.filter.admits(d.status) && d.matches(&state.query);
-        ui::DeviceView {
-            dimmed: !shown,
-            ..view(d)
-        }
-    };
-    let nodes = network.devices().iter().map(node);
-    if let Some(model) = sync(&bridge.get_devices(), nodes.collect()) {
-        bridge.set_devices(model);
+    if let Some(model) = sync(&bridge.get_nodes(), views.nodes()) {
+        bridge.set_nodes(model);
     }
     push_map(&bridge, state);
-    let list = network.filtered(state.filter, &state.query).map(view);
-    if let Some(model) = sync(&bridge.get_list(), list.collect()) {
+    let list = views.rows(network.filtered(state.filter, &state.query));
+    if let Some(model) = sync(&bridge.get_list(), list) {
         bridge.set_list(model);
+    }
+    let rows = views.rows(network.devices().iter());
+    if let Some(model) = sync(&bridge.get_rows(), rows) {
+        bridge.set_rows(model);
     }
     push_roles(&bridge, &labels, state);
     bridge.set_filter(convert::filter_to_ui(state.filter));
@@ -44,17 +37,74 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     bridge.set_scanning(state.scanning);
     bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
     push_selection(&bridge, &labels, state);
+    push_card(&bridge, &labels, state);
 }
 
-/// Where each device is drawn right now, the lines between them, and the area they take up.
+/// Builds the rows of the lists and the nodes of the map.
+struct Views<'a> {
+    state: &'a AppState,
+    labels: &'a Labels<'a>,
+}
+
+impl Views<'_> {
+    /// The row of `device`, carrying the settled spot of `node` (the device's own, or its ghost's
+    /// for a card), which changes only when the layout does, so the labels are not redone on
+    /// every frame of motion; where each node is drawn goes in `places`.
+    fn view(&self, device: &Device, node: Node) -> ui::DeviceView {
+        let network = &self.state.network;
+        let at = self.state.positions.get(&node).copied().unwrap_or_default();
+        let role = convert::role_label(self.labels, network, &device.role);
+        convert::device_view(network, &self.state.icons, device, role, at)
+    }
+
+    /// The map's nodes, in the order of [`crate::model::Network::nodes`], faded where the search
+    /// or filter hides their device.
+    fn nodes(&self) -> Vec<ui::DeviceView> {
+        let (network, state) = (&self.state.network, self.state);
+        let node = |node: Node| {
+            let device = network.node_device(node)?;
+            let shown = state.filter.admits(device.status) && device.matches(&state.query);
+            let row = ui::DeviceView {
+                dimmed: !shown,
+                ..self.view(device, node)
+            };
+            Some(match node {
+                Node::Device(_) => row,
+                Node::Card(id) => {
+                    let card = device.cards.iter().find(|c| c.id == id)?;
+                    cards::card_row(&row, device, card)
+                }
+            })
+        };
+        network.nodes().into_iter().filter_map(node).collect()
+    }
+
+    /// Each of `devices` followed by its network cards, as the lists show them.
+    fn rows<'d>(&self, devices: impl Iterator<Item = &'d Device>) -> Vec<ui::DeviceView> {
+        let network = &self.state.network;
+        let rows = devices.flat_map(|device| {
+            let row = self.view(device, Node::Device(device.id));
+            let card_rows = device.cards.iter().map(|card| {
+                let node = network
+                    .node_of_card(card.id)
+                    .unwrap_or(Node::Device(device.id));
+                cards::card_row(&self.view(device, node), device, card)
+            });
+            std::iter::once(row).chain(card_rows.collect::<Vec<_>>())
+        });
+        rows.collect()
+    }
+}
+
+/// Where each node is drawn right now, the lines between them, and the area they take up.
 fn push_map(bridge: &Bridge<'_>, state: &AppState) {
     let on_map = state.motion.shown();
     let trunks = state.trunks();
-    let places = state.network.devices().iter().map(|d| {
-        let at = on_map.get(&d.id).copied().unwrap_or_default();
+    let places = state.network.nodes().into_iter().map(|node| {
+        let at = on_map.get(&node).copied().unwrap_or_default();
         let root = trunks
             .iter()
-            .find(|(id, _)| *id == d.id)
+            .find(|(id, _)| *id == node)
             .map(|(_, [_, root])| root);
         ui::NodePlace {
             x: at.x,
@@ -67,9 +117,8 @@ fn push_map(bridge: &Bridge<'_>, state: &AppState) {
         bridge.set_places(model);
     }
 
-    let highlighted = state.dragging.or(state.selected);
-    let cross = lines::cross_lines(&state.network, on_map);
-    let lines = lines::lines(&state.network, &state.links(), &cross, &trunks, highlighted);
+    let highlighted = state.dragging.or_else(|| state.selected_node());
+    let lines = lines::lines(&state.network, &state.links(), &trunks, highlighted);
     bridge.set_strand(convert::strand(
         state.strand().as_ref(),
         state.motion.bend(),
@@ -113,8 +162,11 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     }
 }
 
+/// The selected device (that of the selected card, if a card is selected) and its cards.
 fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
-    let selected = state.selected.and_then(|id| state.network.device(id));
+    let selected = state
+        .selected_device()
+        .and_then(|id| state.network.device(id));
     let id = selected.map_or(-1, |d| convert::ui_id(d.id));
     if let Some(device) = selected {
         // Edit buffers are reset only when the selection changes, so typing is never disturbed.
@@ -136,20 +188,34 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_ports(model);
     }
     let cards = selected
-        .map(|d| convert::card_views(&state.network, d))
+        .map(|d| cards::card_views(&state.network, d))
         .unwrap_or_default();
     if let Some(model) = sync(&bridge.get_cards(), cards) {
         bridge.set_cards(model);
     }
-    let upstream_names = state.upstream_choices().into_iter().filter_map(|upstream| {
-        let device = state.network.device(upstream)?;
-        Some(labels.invoke_device_name(device.name.trim().into()))
+    bridge.set_selected_id(id);
+}
+
+/// The selected card: its view, and what it can be plugged into.
+fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let network = &state.network;
+    let card = state.selected_card();
+    let id = card.map_or(-1, convert::ui_card_id);
+    let view = card.and_then(|card| {
+        let device = network.card_owner(card)?;
+        let mut views = cards::card_views(network, device).into_iter();
+        views.find(|v| v.id == id)
     });
-    let choices = std::iter::once(labels.invoke_no_link()).chain(upstream_names);
+    bridge.set_card(view.unwrap_or_default());
+    bridge.set_selected_ghost(card.is_some_and(|c| network.has_ghost(c)));
+    let sockets = state.upstream_choices().into_iter();
+    let names = sockets.map(|socket| cards::socket_name(labels, network, socket));
+    let choices = std::iter::once(labels.invoke_no_link()).chain(names);
     if let Some(model) = sync(&bridge.get_upstream_choices(), choices.collect()) {
         bridge.set_upstream_choices(model);
     }
-    bridge.set_selected_id(id);
+    bridge.set_card_plug_index(i32::try_from(state.plug_choice()).unwrap_or_default());
+    bridge.set_selected_card(id);
 }
 
 fn count(network: &Network, filter: StatusFilter) -> i32 {

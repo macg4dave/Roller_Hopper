@@ -119,10 +119,40 @@ msgstr "Runs on"
 msgid "details.card"
 msgstr "Network card"
 
-# A network card's address with its subnet prefix, then the device it is plugged into (see
-# uplink.*), e.g. "192.168.1.20/24, Main Switch (known link)".
+# A network card's address, then where it is plugged in (see details.plugged-into),
+# e.g. "192.168.1.20, Main Switch (known link)".
 msgid "details.card.value"
 msgstr "{}, {}"
+
+# A network card's settings.
+msgid "details.ip"
+msgstr "IP address"
+
+msgid "details.mask"
+msgstr "Subnet mask"
+
+msgid "details.gateway"
+msgstr "Gateway"
+
+# The card of another device a network card is plugged into (see card.of and uplink.*).
+msgid "details.plugged-into"
+msgstr "Plugged into"
+
+# While a network card is selected: shows its device's details instead.
+msgid "details.show-device"
+msgstr "Show device details"
+
+# A network card the user has not named; {} is its place among its device's cards.
+msgid "card.unnamed"
+msgstr "Network card {}"
+
+# A device's network card where it stands in for the device: on the map, and in the list of
+# what a card can be plugged into. {0} is the device, {1} the card.
+msgid "card.of"
+msgstr "{0} · {1}"
+
+msgid "card.no-address"
+msgstr "No IP address"
 
 msgid "details.mac"
 msgstr "MAC address"
@@ -191,25 +221,45 @@ msgstr "Cancel"
 msgid "edit.confirm-add"
 msgstr "Add"
 
-# The network cards of the device being edited. A new card has its own IP address and is
-# plugged into another device, chosen from a dropdown, or into none.
+# The network cards of the device being edited, which are listed under it. A new card starts
+# blank and is selected, so its IP address and the rest can be filled in.
 msgid "edit.cards"
 msgstr "Network cards"
 
+# The address of a new virtual machine's or container's network card.
 msgid "edit.card-address"
 msgstr "IP address, e.g. 10.0.0.5/24"
 
-msgid "edit.card-via"
-msgstr "Plugged into"
-
+# First in the dropdown of what a network card is plugged into.
 msgid "edit.card-no-link"
 msgstr "Not connected"
 
 msgid "edit.card-add"
-msgstr "Add network card"
+msgstr "Add interface"
 
 msgid "edit.card-remove"
 msgstr "Remove network card"
+
+# The button leading from a network card back to its device, which is named on the button.
+msgid "edit.card-back"
+msgstr "Back to the device"
+
+# Under the name of the network card being edited; {} is its device.
+msgid "edit.card-of"
+msgstr "Network card of {}"
+
+# Shown under a network card setting that was not accepted.
+msgid "edit.card-ip-hint"
+msgstr "Enter an IPv4 address that no other card has, such as 192.168.1.20 or 10.0.0.5/24."
+
+msgid "edit.card-mask-hint"
+msgstr "Enter a subnet mask such as 255.255.255.0, or a prefix length such as 24."
+
+msgid "edit.card-gateway-hint"
+msgstr "Enter an IPv4 address, such as 192.168.1.1."
+
+msgid "edit.card-mac-hint"
+msgstr "Enter six pairs of hexadecimal digits, such as 3C:22:FB:1A:2B:3C."
 
 # Adding a virtual machine or container to the device being edited (see guest.*).
 msgid "edit.guests"

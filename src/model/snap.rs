@@ -1,12 +1,11 @@
-//! Where a dragged device would join the map: the nearest trunk, root circle or line, and the
+//! Where a dragged device or ghost would join the map: the nearest trunk, root circle or line, and the
 //! place on that trunk it was dropped at.
 
 use std::collections::HashMap;
 
 use super::arrangement::{Arrangement, Level, Side, Slot, Tier};
-use super::device::DeviceId;
 use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, link_route, trunk};
-use super::network::Network;
+use super::network::{Network, Node};
 
 /// How near a line a dragged device's own line must end for it to join that line, above or
 /// below it. Rows are close together, so this stays small.
@@ -18,8 +17,8 @@ const SNAP_REACH_SIDEWAYS: f32 = 110.0;
 /// Where a dragged device would join the map if dropped now.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Snap {
-    /// The device whose trunk it would hang from.
-    pub(crate) upstream: DeviceId,
+    /// The node whose trunk it would hang from.
+    pub(crate) upstream: Node,
     /// Where on that trunk.
     pub(crate) slot: Slot,
     /// A short line showing the join: from the nearest point of the trunk or line it would join
@@ -31,14 +30,13 @@ pub(crate) struct Snap {
 }
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: on the trunk, root circle
-/// or lines of the nearest device, at the place on that trunk where it was dropped. Never the
-/// dragged device or one behind it, which would form a loop; a guest only ever joins its own
-/// host. `None` when nothing is near.
+/// or lines of the nearest node it can join (see [`can_join`]), at the place on that trunk where
+/// it was dropped. `None` when nothing is near.
 pub(crate) fn snap_target(
     network: &Network,
     arrangement: &Arrangement,
     positions: &Positions,
-    dragged: DeviceId,
+    dragged: Node,
     at: Point,
 ) -> Option<Snap> {
     // The map without the dragged branch, whose lines and trunks move with it.
@@ -53,11 +51,10 @@ pub(crate) fn snap_target(
         y: at.y - LINE_TOP_GAP,
     };
     let inner = arrangement.inner_neighbours(network, Some(dragged));
-    let host = network.host(dragged);
     let candidates = others
         .keys()
         .copied()
-        .filter(|&id| host.is_none_or(|h| h == id));
+        .filter(|&id| can_join(network, dragged, id));
     let near = candidates.filter_map(|id| {
         let lines = Lines {
             network,
@@ -80,17 +77,35 @@ pub(crate) fn snap_target(
         })
 }
 
+/// Whether `dragged` may hang from `target`. A guest only ever joins its own host. A ghost may
+/// go back under its own device. Anything else joins a node it can plug into, away from every
+/// node of its own device, which would form a loop.
+fn can_join(network: &Network, dragged: Node, target: Node) -> bool {
+    let Some(owner) = network.node_device(dragged) else {
+        return false;
+    };
+    match dragged {
+        Node::Device(_) if owner.guest.is_some() => {
+            network.host(owner.id).map(Node::Device) == Some(target)
+        }
+        Node::Card(_) if target == Node::Device(owner.id) => true,
+        Node::Device(_) | Node::Card(_) => {
+            network.socket(target).is_some() && !network.within_device(target, owner.id)
+        }
+    }
+}
+
 /// The trunks and lines of the map without the dragged branch, as drawn.
 struct Lines<'a> {
     network: &'a Network,
     positions: &'a Positions,
-    inner: &'a HashMap<DeviceId, DeviceId>,
+    inner: &'a HashMap<Node, Node>,
 }
 
 impl Lines<'_> {
     /// The point nearest `end` on what belongs to `id`: its trunk down to its root circle, and
     /// its lines to the devices behind it.
-    fn nearest_on(&self, id: DeviceId, end: Point) -> Option<Point> {
+    fn nearest_on(&self, id: Node, end: Point) -> Option<Point> {
         let [top, root] = trunk(self.network, self.positions, id)?;
         let lines = self
             .network
@@ -162,11 +177,14 @@ mod tests {
     use crate::mock_data;
     use crate::model::tree_layout;
 
-    const ROUTER: DeviceId = DeviceId(1);
-    const SWITCH: DeviceId = DeviceId(2);
-    const ACCESS_POINT: DeviceId = DeviceId(3);
-    const NAS: DeviceId = DeviceId(4);
-    const PC: DeviceId = DeviceId(5);
+    use crate::model::{CardId, DeviceId};
+
+    /// The router's LAN card, which the home network hangs from.
+    const ROUTER: Node = Node::Card(CardId(1));
+    const SWITCH: Node = Node::Device(DeviceId(2));
+    const ACCESS_POINT: Node = Node::Device(DeviceId(3));
+    const NAS: Node = Node::Device(DeviceId(4));
+    const PC: Node = Node::Device(DeviceId(5));
 
     fn map() -> (Network, Arrangement, Positions) {
         let network = mock_data::network();
@@ -254,6 +272,32 @@ mod tests {
                 "{device:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_ghost_joins_where_its_card_can_plug_in_or_goes_back_under_its_device() {
+        let (network, arrangement, positions) = map();
+        let on_root = |id| {
+            let [_, root] = trunk(&network, &positions, id).unwrap();
+            Point {
+                x: root.x,
+                y: root.y + LINE_TOP_GAP,
+            }
+        };
+        let ghost = Node::Card(CardId(100));
+        let target = |id| snap_target(&network, &arrangement, &positions, ghost, on_root(id));
+        let (lab_pi, docker, portainer) = (
+            Node::Device(DeviceId(23)),
+            Node::Device(DeviceId(19)),
+            Node::Device(DeviceId(24)),
+        );
+        assert_eq!(target(lab_pi).map(|s| s.upstream), Some(lab_pi));
+        assert_eq!(target(docker).map(|s| s.upstream), Some(docker), "its own");
+        assert_ne!(
+            target(portainer).map(|s| s.upstream),
+            Some(portainer),
+            "on its own device"
+        );
     }
 
     #[test]

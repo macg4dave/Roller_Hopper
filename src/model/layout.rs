@@ -8,8 +8,7 @@
 use std::collections::HashMap;
 
 use super::arrangement::{Arrangement, Side};
-use super::device::DeviceId;
-use super::network::Network;
+use super::network::{Connection, Network, Node};
 
 const COLUMN_WIDTH: f32 = 150.0;
 pub(super) const ROW_HEIGHT: f32 = 150.0;
@@ -28,18 +27,18 @@ pub(crate) struct Point {
     pub(crate) y: f32,
 }
 
-pub(crate) type Positions = HashMap<DeviceId, Point>;
+pub(crate) type Positions = HashMap<Node, Point>;
 
 /// Lays the network out as top-down trees, side by side, starting from devices with no uplink.
 pub(crate) fn tree_layout(network: &Network, arrangement: &Arrangement) -> Positions {
     let tree = Tree {
         network,
         arrangement,
-        max_depth: network.devices().len(),
+        max_depth: network.nodes().len(),
     };
     let mut positions = Positions::new();
     let mut left = 0.0;
-    let roots = network.devices().iter().map(|d| d.id);
+    let roots = network.nodes().into_iter();
     for root in roots.filter(|&id| network.uplink(id).is_none()) {
         let shape = tree.shape(root, 0);
         let spot = Spot {
@@ -78,9 +77,9 @@ fn route(from_x: f32, downstream: Point) -> [Point; 3] {
 /// [`route`]). `None` while either end is off the map.
 pub(crate) fn link_route(
     positions: &Positions,
-    inner: &HashMap<DeviceId, DeviceId>,
-    upstream: DeviceId,
-    downstream: DeviceId,
+    inner: &HashMap<Node, Node>,
+    upstream: Node,
+    downstream: Node,
 ) -> Option<[Point; 3]> {
     let neighbour = inner.get(&downstream).and_then(|n| positions.get(n));
     let from = neighbour.or_else(|| positions.get(&upstream))?;
@@ -88,8 +87,8 @@ pub(crate) fn link_route(
 }
 
 /// The trunk of `id`: from below its labels down to its root circle, which sits below the lowest
-/// device in its branch, so the trunk runs past every tier hanging off it.
-pub(crate) fn trunk(network: &Network, positions: &Positions, id: DeviceId) -> Option<[Point; 2]> {
+/// node in its branch, so the trunk runs past every tier hanging off it.
+pub(crate) fn trunk(network: &Network, positions: &Positions, id: Node) -> Option<[Point; 2]> {
     let top = positions.get(&id)?;
     let start = Point {
         x: top.x,
@@ -102,20 +101,22 @@ pub(crate) fn trunk(network: &Network, positions: &Positions, id: DeviceId) -> O
     Some([start, root])
 }
 
-/// How far down the branch of `id` reaches: the lowest of its devices.
-fn lowest(network: &Network, positions: &Positions, id: DeviceId) -> f32 {
-    reach(network, positions, id, network.devices().len())
+/// How far down the branch of `id` reaches: the lowest of its nodes.
+fn lowest(network: &Network, positions: &Positions, id: Node) -> f32 {
+    // Worked out once here rather than at every node of the branch: this runs every frame.
+    let lines = network.connections();
+    reach(&lines, positions, id, network.nodes().len())
 }
 
-/// [`lowest`], going no more than `depth` devices deeper, which guards against cycles in the
-/// connection data: no real tree is deeper than its size.
-fn reach(network: &Network, positions: &Positions, id: DeviceId, depth: usize) -> f32 {
+/// [`lowest`] along the tree's `lines`, going no more than `depth` nodes deeper, which guards
+/// against cycles in the connection data: no real tree is deeper than its size.
+fn reach(lines: &[Connection], positions: &Positions, id: Node, depth: usize) -> f32 {
     let Some(top) = positions.get(&id) else {
         return f32::MIN;
     };
-    let behind = network.behind(id).filter(|_| depth > 0);
+    let behind = lines.iter().filter(|c| c.upstream == id && depth > 0);
     behind
-        .map(|d| reach(network, positions, d, depth - 1))
+        .map(|c| reach(lines, positions, c.downstream, depth - 1))
         .fold(top.y, f32::max)
 }
 
@@ -136,7 +137,7 @@ struct Tree<'a> {
 }
 
 impl Tree<'_> {
-    fn shape(&self, id: DeviceId, depth: usize) -> Shape {
+    fn shape(&self, id: Node, depth: usize) -> Shape {
         let mut shape = Shape {
             left: 0.5,
             right: 0.5,
@@ -156,7 +157,7 @@ impl Tree<'_> {
     }
 
     /// The width of devices side by side, and the rows the deepest of them takes.
-    fn side_shape(&self, ids: &[DeviceId], depth: usize) -> (f32, usize) {
+    fn side_shape(&self, ids: &[Node], depth: usize) -> (f32, usize) {
         let shapes = ids.iter().map(|&id| self.shape(id, depth));
         shapes.fold((0.0, 0), |(width, rows), s| {
             (width + s.left + s.right, rows.max(s.rows))
@@ -164,7 +165,7 @@ impl Tree<'_> {
     }
 
     /// Places `id` at `spot`, and its tiers below, each below the deepest branch of the one above.
-    fn place(&self, id: DeviceId, spot: Spot, out: &mut Positions) {
+    fn place(&self, id: Node, spot: Spot, out: &mut Positions) {
         let at = Point {
             x: spot.trunk * COLUMN_WIDTH,
             y: units(spot.row) * ROW_HEIGHT,
@@ -187,8 +188,8 @@ impl Tree<'_> {
 
     /// Places one side of a tier, side by side going out from the trunk at `tier`, and returns
     /// the rows the deepest of them takes.
-    fn place_side(&self, side: Side, ids: &[DeviceId], tier: Spot, out: &mut Positions) -> usize {
-        let (outward, direction): (Vec<DeviceId>, f32) = match side {
+    fn place_side(&self, side: Side, ids: &[Node], tier: Spot, out: &mut Positions) -> usize {
+        let (outward, direction): (Vec<Node>, f32) = match side {
             Side::Left => (ids.iter().rev().copied().collect(), -1.0),
             Side::Right => (ids.to_vec(), 1.0),
         };
@@ -228,9 +229,12 @@ mod tests {
     use crate::mock_data;
     use crate::model::arrangement::{Level, Slot};
 
-    const ROUTER: DeviceId = DeviceId(1);
-    const SWITCH: DeviceId = DeviceId(2);
-    const PC: DeviceId = DeviceId(5);
+    use crate::model::{CardId, DeviceId};
+
+    /// The router's LAN card, which the home network hangs from.
+    const ROUTER: Node = Node::Card(CardId(1));
+    const SWITCH: Node = Node::Device(DeviceId(2));
+    const PC: Node = Node::Device(DeviceId(5));
 
     fn layout(network: &Network) -> Positions {
         tree_layout(network, &Arrangement::default())
@@ -240,7 +244,7 @@ mod tests {
     fn every_device_gets_its_own_spot() {
         let network = mock_data::network();
         let positions = layout(&network);
-        assert_eq!(positions.len(), network.devices().len());
+        assert_eq!(positions.len(), network.nodes().len());
         let spots: std::collections::HashSet<_> = positions
             .values()
             .map(|p| (p.x.to_bits(), p.y.to_bits()))

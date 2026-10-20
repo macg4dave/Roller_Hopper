@@ -1,0 +1,2 @@
+[alias]
+tool = "run --manifest-path tools/Cargo.toml --"
