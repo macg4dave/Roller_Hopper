@@ -32,7 +32,8 @@ pub(crate) struct Snap {
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: on the trunk, root circle
 /// or lines of the nearest device, at the place on that trunk where it was dropped. Never the
-/// dragged device or one behind it, which would form a loop. `None` when nothing is near.
+/// dragged device or one behind it, which would form a loop; a guest only ever joins its own
+/// host. `None` when nothing is near.
 pub(crate) fn snap_target(
     network: &Network,
     arrangement: &Arrangement,
@@ -52,7 +53,11 @@ pub(crate) fn snap_target(
         y: at.y - LINE_TOP_GAP,
     };
     let inner = arrangement.inner_neighbours(network, Some(dragged));
-    let candidates = others.keys().copied();
+    let host = network.host(dragged);
+    let candidates = others
+        .keys()
+        .copied()
+        .filter(|&id| host.is_none_or(|h| h == id));
     let near = candidates.filter_map(|id| {
         let lines = Lines {
             network,

@@ -6,7 +6,8 @@ import { DetailField } from "components/detail-field.slint";
 import { DeviceRow } from "components/device-row.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { Splitter } from "components/splitter.slint";
-import { InterfaceEditor } from "interface-editor.slint";
+import { CardEditor } from "card-editor.slint";
+import { GuestEditor } from "guest-editor.slint";
 import { PortEditor } from "port-editor.slint";
 
 // Edit page, left side: every device on the left, the selected one's editable fields on the right.
@@ -78,8 +79,8 @@ export component DeviceEditor inherits HorizontalLayout {
                         color: Theme.text;
                         overflow: elide;
                     }
-                    Text {
-                        text: Bridge.details.ip;
+                    if Bridge.cards.length > 0: Text {
+                        text: Bridge.cards[0].address;
                         font-size: Theme.font-body;
                         color: Theme.text-muted;
                     }
@@ -103,10 +104,13 @@ export component DeviceEditor inherits HorizontalLayout {
                     selected => { Bridge.choose-role(self.current-index); }
                 }
             }
-            // An interface's own interfaces would be the same machine again.
-            if !Bridge.details.interface: DetailField {
-                label: @tr("edit.interfaces");
-                InterfaceEditor { }
+            DetailField {
+                label: @tr("edit.cards");
+                CardEditor { }
+            }
+            DetailField {
+                label: @tr("edit.guests");
+                GuestEditor { }
             }
             DetailField {
                 label: @tr("details.open-ports");

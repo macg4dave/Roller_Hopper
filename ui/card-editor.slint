@@ -1,22 +1,43 @@
 import { Button, ComboBox, LineEdit } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
+import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 
-// Adds further interfaces to the selected device on the edit page, each at its own address and
-// connected behind a device of the user's choosing. An added interface is a device of its own,
-// listed under this one, and edited like any other.
-export component InterfaceEditor inherits VerticalLayout {
+// The selected device's network cards on the edit page: remove any but the last, or add one at
+// its own address, plugged into a device of the user's choosing or into none.
+export component CardEditor inherits VerticalLayout {
     property <bool> adding;
-    // Half-typed interfaces belong to the device they were typed for.
+    // Half-typed cards belong to the device they were typed for.
     property <int> selected-id: Bridge.selected-id;
     changed selected-id => { adding = false; }
 
+    spacing: Theme.space-xs;
     horizontal-stretch: 1;
 
+    // Cards are identified to Rust by their index in Bridge.cards.
+    for card[i] in Bridge.cards: HorizontalLayout {
+        spacing: Theme.space-xs;
+        Text {
+            text: Labels.card(card.address, card.via-name, card.inferred);
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            font-size: Theme.font-body;
+            color: Theme.text;
+            overflow: elide;
+        }
+        Button {
+            icon: @image-url("icons/delete.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.card-remove");
+            // Every device keeps at least one card.
+            enabled: Bridge.cards.length > 1;
+            clicked => { Bridge.remove-card(i); }
+        }
+    }
     if !adding: HorizontalLayout {
         alignment: start;
         Button {
-            text: @tr("edit.interface-add");
+            text: @tr("edit.card-add");
             icon: @image-url("icons/plus.svg");
             colorize-icon: true;
             clicked => { adding = true; }
@@ -25,30 +46,30 @@ export component InterfaceEditor inherits VerticalLayout {
     if adding: HorizontalLayout {
         spacing: Theme.space-xs;
 
-        // As with ports, the row stays open for the next interface; a refused address stays in
-        // the field to be corrected.
+        // As with ports, the row stays open for the next card; a refused address stays in the
+        // field to be corrected.
         function add() {
-            if Bridge.add-interface(ip-field.text, via-field.current-index) {
-                ip-field.text = "";
-                ip-field.focus();
+            if Bridge.add-card(address-field.text, via-field.current-index) {
+                address-field.text = "";
+                address-field.focus();
             }
         }
 
-        ip-field := LineEdit {
-            width: 140px;
-            placeholder-text: @tr("details.ip");
+        address-field := LineEdit {
+            width: 150px;
+            placeholder-text: @tr("edit.card-address");
             init => { self.focus(); }
             accepted => { add(); }
         }
         via-field := ComboBox {
             horizontal-stretch: 1;
             model: Bridge.upstream-choices;
-            accessible-label: @tr("edit.interface-via");
+            accessible-label: @tr("edit.card-via");
         }
         Button {
-            text: @tr("edit.interface-confirm-add");
+            text: @tr("edit.confirm-add");
             primary: true;
-            enabled: ip-field.text != "";
+            enabled: address-field.text != "";
             clicked => { add(); }
         }
         Button {

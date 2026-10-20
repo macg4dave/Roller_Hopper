@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { DeviceKind, DeviceStatus, GroupColour, RoleKind } from "bridge.slint";
+import { DeviceKind, DeviceStatus, GroupColour, GuestKind, RoleKind } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -69,6 +69,12 @@ export global Labels {
         return @tr("groups.none");
     }
 
+    // First in the dropdown of what a new network card is plugged into. Rust calls this to
+    // build that list.
+    public pure function no-link() -> string {
+        return @tr("edit.card-no-link");
+    }
+
     public pure function group-colour(colour: GroupColour) -> string {
         if colour == GroupColour.red { return @tr("groups.colour.red"); }
         if colour == GroupColour.orange { return @tr("groups.colour.orange"); }
@@ -79,18 +85,24 @@ export global Labels {
         return @tr("groups.colour.none");
     }
 
-    // A further interface of a device, named after it in the lists.
-    public pure function ghost-name(name: string) -> string {
-        return @tr("map.ghost", device-name(name));
+    public pure function guest-kind(kind: GuestKind) -> string {
+        if kind == GuestKind.container { return @tr("guest.container"); }
+        return @tr("guest.virtual-machine");
     }
 
-    // A further address of a device and the device it connects through, if any.
-    public pure function other-address(ip: string, via-name: string) -> string {
-        return via-name == "" ? ip : @tr("details.other-address.value", ip, via-name);
+    // The device a guest runs on, and what it runs as.
+    public pure function runs-on(host-name: string, kind: GuestKind) -> string {
+        if kind == GuestKind.container { return @tr("runs-on.container", device-name(host-name)); }
+        return @tr("runs-on.virtual-machine", device-name(host-name));
     }
 
     public pure function uplink(name: string, inferred: bool) -> string {
         return inferred ? @tr("uplink.inferred", device-name(name)) : @tr("uplink.known", device-name(name));
+    }
+
+    // A network card's address, and the device it is plugged into, if any.
+    public pure function card(address: string, via-name: string, inferred: bool) -> string {
+        return via-name == "" ? address : @tr("details.card.value", address, uplink(via-name, inferred));
     }
 
     public pure function scan-status(scanning: bool, scans: int, devices: int, offline: int) -> string {

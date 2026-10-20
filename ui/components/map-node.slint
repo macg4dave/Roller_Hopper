@@ -36,8 +36,6 @@ export component MapNode inherits Rectangle {
     // The map zoom, used only to keep the icon crisp under the canvas's scale transform.
     in property <float> zoom: 1;
     in property <bool> selected;
-    // A further interface of another device is faded, as a ghost of it.
-    property <bool> ghost: device.ghost;
     out property <length> icon-size: Theme.map-icon;
     callback clicked;
     // Pointer movement since the press, while dragging.
@@ -47,9 +45,9 @@ export component MapNode inherits Rectangle {
 
     width: Theme.map-label-width;
     height: layout.preferred-height;
-    opacity: device.dimmed ? 0.3 : ghost && !selected ? Theme.ghost-opacity : 1;
+    opacity: device.dimmed ? 0.3 : 1;
     accessible-role: button;
-    accessible-label: ghost ? Labels.ghost-name(device.name) : Labels.device-name(device.name);
+    accessible-label: Labels.device-name(device.name);
 
     touch := TouchArea {
         mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.pointer;

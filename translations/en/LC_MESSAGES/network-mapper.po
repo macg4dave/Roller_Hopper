@@ -70,9 +70,6 @@ msgstr "Fit to view"
 msgid "map.reset-layout"
 msgstr "Reset layout"
 
-msgid "map.ghost"
-msgstr "{} (other interface)"
-
 # The View button at the top right of the map, and the switches it opens.
 msgid "view.button"
 msgstr "View"
@@ -114,18 +111,18 @@ msgstr "Name"
 msgid "details.role"
 msgstr "Role"
 
-msgid "details.ip"
-msgstr "IP address"
+# For a virtual machine or container: the device it runs on (see runs-on.*).
+msgid "details.runs-on"
+msgstr "Runs on"
 
-msgid "details.other-address"
-msgstr "Other address"
+# One of the device's network cards.
+msgid "details.card"
+msgstr "Network card"
 
-msgid "details.other-address.value"
-msgstr "{} via {}"
-
-# Shown for a further network interface: the device it belongs to.
-msgid "details.interface-of"
-msgstr "Interface of"
+# A network card's address with its subnet prefix, then the device it is plugged into (see
+# uplink.*), e.g. "192.168.1.20/24, Main Switch (known link)".
+msgid "details.card.value"
+msgstr "{}, {}"
 
 msgid "details.mac"
 msgstr "MAC address"
@@ -183,7 +180,7 @@ msgid "edit.forget"
 msgstr "Forget device"
 
 msgid "edit.forget-question"
-msgstr "Remove this device from the map and the list? It comes back when the app restarts."
+msgstr "Remove this device, with any virtual machines and containers on it, from the map and the list? It comes back when the app restarts."
 
 msgid "edit.forget-confirm"
 msgstr "Forget"
@@ -191,19 +188,38 @@ msgstr "Forget"
 msgid "edit.cancel"
 msgstr "Cancel"
 
-# Adding a further network interface to the device being edited: it has its own IP address and
-# connects behind another device, chosen from a dropdown. It is then listed under the device.
-msgid "edit.interfaces"
-msgstr "Other interfaces"
-
-msgid "edit.interface-via"
-msgstr "Connected behind"
-
-msgid "edit.interface-add"
-msgstr "Add interface"
-
-msgid "edit.interface-confirm-add"
+msgid "edit.confirm-add"
 msgstr "Add"
+
+# The network cards of the device being edited. A new card has its own IP address and is
+# plugged into another device, chosen from a dropdown, or into none.
+msgid "edit.cards"
+msgstr "Network cards"
+
+msgid "edit.card-address"
+msgstr "IP address, e.g. 10.0.0.5/24"
+
+msgid "edit.card-via"
+msgstr "Plugged into"
+
+msgid "edit.card-no-link"
+msgstr "Not connected"
+
+msgid "edit.card-add"
+msgstr "Add network card"
+
+msgid "edit.card-remove"
+msgstr "Remove network card"
+
+# Adding a virtual machine or container to the device being edited (see guest.*).
+msgid "edit.guests"
+msgstr "Guests"
+
+msgid "edit.guest-kind"
+msgstr "Type"
+
+msgid "edit.guest-add"
+msgstr "Add virtual machine or container"
 
 # The open ports of the device being edited.
 msgid "edit.port-number"
@@ -473,6 +489,20 @@ msgid "last-seen.days"
 msgid_plural "last-seen.days.plural"
 msgstr[0] "{n} day ago"
 msgstr[1] "{n} days ago"
+
+# What a guest runs as on its host.
+msgid "guest.virtual-machine"
+msgstr "Virtual machine"
+
+msgid "guest.container"
+msgstr "Container"
+
+# {} is the name of the device a guest runs on.
+msgid "runs-on.virtual-machine"
+msgstr "{} (virtual machine)"
+
+msgid "runs-on.container"
+msgstr "{} (container)"
 
 # {} is the name of the device it connects through.
 msgid "uplink.known"

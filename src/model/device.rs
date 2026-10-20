@@ -3,9 +3,7 @@
 //! User-visible wording for these types lives in the UI (`ui/labels.slint`) so it can be
 //! translated; only language-neutral formats (such as the MAC address) are produced here.
 
-use std::fmt;
-use std::net::Ipv4Addr;
-
+use super::card::NetworkCard;
 use super::services::Services;
 
 /// Stable identifier of a device; not an index into any list.
@@ -144,15 +142,18 @@ impl Role {
     }
 }
 
-/// A MAC address, shown in the usual colon-separated upper-case form.
+/// What a guest runs as on its host.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct MacAddr(pub(crate) [u8; 6]);
+pub(crate) enum GuestKind {
+    VirtualMachine,
+    Container,
+}
 
-impl fmt::Display for MacAddr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let octets: Vec<String> = self.0.iter().map(|octet| format!("{octet:02X}")).collect();
-        f.write_str(&octets.join(":"))
-    }
+/// A device that runs on another one, which may itself be a guest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct Guest {
+    pub(crate) host: DeviceId,
+    pub(crate) kind: GuestKind,
 }
 
 /// How long before the latest (simulated) scan the device was last seen.
@@ -170,13 +171,10 @@ pub(crate) struct Device {
     /// An icon picked for this device alone; `None` follows the role.
     pub(crate) icon: Option<Icon>,
     pub(crate) status: Status,
-    pub(crate) ip: Ipv4Addr,
-    /// Detected with the device; `None` for an interface the user added.
-    pub(crate) mac: Option<MacAddr>,
-    /// The device this is a further network interface of, if it is one. It has its own address,
-    /// name, role and icon, and connects on its own, often on another subnet; the map and the
-    /// lists show it as a ghost of that device.
-    pub(crate) parent: Option<DeviceId>,
+    /// Every device has at least one; the first is the one its address is shown from.
+    pub(crate) cards: Vec<NetworkCard>,
+    /// The host it runs on, for a virtual machine or container; `None` for a physical device.
+    pub(crate) guest: Option<Guest>,
     pub(crate) manufacturer: Option<&'static str>,
     pub(crate) model: Option<&'static str>,
     pub(crate) hostname: Option<&'static str>,
@@ -186,21 +184,24 @@ pub(crate) struct Device {
 }
 
 impl Device {
-    /// Case-insensitive match on name, IP address or MAC address.
+    /// Case-insensitive match on name, or any card's IP or MAC address.
     pub(crate) fn matches(&self, query: &str) -> bool {
         let query = query.trim().to_lowercase();
         query.is_empty()
             || self.name.to_lowercase().contains(&query)
-            || self.ip.to_string().contains(&query)
-            || self
-                .mac
-                .is_some_and(|mac| mac.to_string().to_lowercase().contains(&query))
+            || self.cards.iter().any(|card| card.matches(&query))
+    }
+
+    /// The card its address is shown from.
+    pub(crate) fn primary_card(&self) -> Option<&NetworkCard> {
+        self.cards.first()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::card::{CardId, MacAddr};
 
     fn device() -> Device {
         Device {
@@ -210,9 +211,19 @@ mod tests {
             role: Role::Other,
             icon: None,
             status: Status::Online,
-            ip: Ipv4Addr::new(192, 168, 1, 50),
-            mac: Some(MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c])),
-            parent: None,
+            cards: vec![
+                NetworkCard {
+                    id: CardId(1),
+                    address: "192.168.1.50/24".parse().unwrap(),
+                    mac: Some(MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c])),
+                },
+                NetworkCard {
+                    id: CardId(2),
+                    address: "10.0.0.9/24".parse().unwrap(),
+                    mac: None,
+                },
+            ],
+            guest: None,
             manufacturer: None,
             model: None,
             hostname: None,
@@ -228,6 +239,8 @@ mod tests {
         assert!(d.matches("living"));
         assert!(d.matches("1.50"));
         assert!(d.matches("8c:79"));
+        assert!(d.matches("10.0.0.9"), "any card");
+        assert!(!d.matches("/24"), "not the prefix");
         assert!(d.matches("  "));
         assert!(!d.matches("printer"));
     }

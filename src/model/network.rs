@@ -1,11 +1,11 @@
 //! The network as a whole: devices, how they connect, the roles on offer and their groups.
 
-use std::net::Ipv4Addr;
+mod children;
 
+use super::card::CardId;
 use super::device::{Device, DeviceId, Icon, Role, Status};
 use super::groups::{GroupColour, GroupId, Groups, LineStyle};
 use super::roles::Roles;
-use super::services::Services;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,7 +14,17 @@ pub(crate) enum ConnectionKind {
     Inferred,
 }
 
-/// A link from a device towards the router (`upstream`) to one further away (`downstream`).
+/// A network card's link to the device it is plugged into, towards the router.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct CardLink {
+    pub(crate) upstream: DeviceId,
+    pub(crate) card: CardId,
+    pub(crate) kind: ConnectionKind,
+}
+
+/// A line of the map's tree, from a device towards the router (`upstream`) to one further away
+/// (`downstream`): through the downstream device's network card, or from a guest's host to the
+/// guest, which is known.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Connection {
     pub(crate) upstream: DeviceId,
@@ -43,22 +53,22 @@ impl StatusFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Network {
-    /// Each device's further interfaces come straight after it, so every list shows them as
-    /// its children.
+    /// Each guest comes after its host, among the host's other guests, so every list shows the
+    /// guests under their host.
     devices: Vec<Device>,
-    connections: Vec<Connection>,
-    /// The connections as first found or added, which [`Self::restore_connections`] brings back.
-    detected: Vec<Connection>,
+    links: Vec<CardLink>,
+    /// The links as first found or added, which [`Self::restore_connections`] brings back.
+    detected: Vec<CardLink>,
     roles: Roles,
     groups: Groups,
 }
 
 impl Network {
-    pub(crate) fn new(devices: Vec<Device>, connections: Vec<Connection>) -> Self {
+    pub(crate) fn new(devices: Vec<Device>, links: Vec<CardLink>) -> Self {
         Self {
-            devices,
-            detected: connections.clone(),
-            connections,
+            devices: children::hosts_first(devices),
+            detected: links.clone(),
+            links,
             roles: Roles::default(),
             groups: Groups::default(),
         }
@@ -72,57 +82,6 @@ impl Network {
         self.devices.iter_mut()
     }
 
-    pub(crate) fn connections(&self) -> &[Connection] {
-        &self.connections
-    }
-
-    /// The further interfaces of `id`, in the order they were found or added.
-    pub(crate) fn interfaces_of(&self, id: DeviceId) -> impl Iterator<Item = &Device> {
-        self.devices.iter().filter(move |d| d.parent == Some(id))
-    }
-
-    /// Adds a further interface of `device` at `ip`, connected behind `upstream`, and returns
-    /// it. It starts with the device's name, role and icon, and is the same machine, but has no
-    /// MAC or ports yet. Refused when either device is missing, they are the same, `device` is
-    /// itself an interface, or `ip` is taken.
-    pub(crate) fn add_interface(
-        &mut self,
-        device: DeviceId,
-        upstream: DeviceId,
-        ip: Ipv4Addr,
-    ) -> Option<DeviceId> {
-        let parent = self.device(device).filter(|d| d.parent.is_none())?;
-        let taken = self.devices.iter().any(|d| d.ip == ip);
-        if upstream == device || self.device(upstream).is_none() || taken {
-            return None;
-        }
-        let id = DeviceId(self.devices.iter().map(|d| d.id.0).max().unwrap_or(0) + 1);
-        let interface = Device {
-            id,
-            ip,
-            mac: None,
-            parent: Some(device),
-            services: Services::default(),
-            notes: String::new(),
-            ..parent.clone()
-        };
-        let last = self
-            .devices
-            .iter()
-            .rposition(|d| d.id == device || d.parent == Some(device));
-        self.devices
-            .insert(last.map_or(self.devices.len(), |at| at + 1), interface);
-        let link = Connection {
-            upstream,
-            downstream: id,
-            kind: ConnectionKind::Known,
-        };
-        // Resetting the layout keeps it where it was added.
-        self.connections.push(link);
-        self.detected.push(link);
-        Some(id)
-    }
-
     pub(crate) fn device(&self, id: DeviceId) -> Option<&Device> {
         self.devices.iter().find(|d| d.id == id)
     }
@@ -131,26 +90,78 @@ impl Network {
         self.devices.iter_mut().find(|d| d.id == id)
     }
 
-    /// Forgets a device with its further interfaces, and their links, and returns those it
-    /// forgot. Devices behind them stay, as separate branches of the map.
-    pub(crate) fn remove_device(&mut self, id: DeviceId) -> Vec<DeviceId> {
-        let forgotten: Vec<DeviceId> = self
-            .devices
-            .iter()
-            .filter(|d| d.id == id || d.parent == Some(id))
-            .map(|d| d.id)
-            .collect();
-        self.devices.retain(|d| !forgotten.contains(&d.id));
-        for links in [&mut self.connections, &mut self.detected] {
-            links
-                .retain(|c| !forgotten.contains(&c.upstream) && !forgotten.contains(&c.downstream));
-        }
-        forgotten
+    pub(crate) fn card_links(&self) -> &[CardLink] {
+        &self.links
     }
 
-    /// The connection leading from `id` towards the router, if any.
-    pub(crate) fn uplink(&self, id: DeviceId) -> Option<&Connection> {
-        self.connections.iter().find(|c| c.downstream == id)
+    /// The device a network card belongs to.
+    pub(crate) fn card_owner(&self, card: CardId) -> Option<&Device> {
+        let mut devices = self.devices.iter();
+        devices.find(|d| d.cards.iter().any(|c| c.id == card))
+    }
+
+    /// The link of the card a physical device hangs from in the tree: its first card that has
+    /// one. A guest hangs from its host instead.
+    fn tree_link(&self, device: &Device) -> Option<&CardLink> {
+        if device.guest.is_some() {
+            return None;
+        }
+        let mut links = device.cards.iter().map(|card| card.id);
+        links.find_map(|card| self.links.iter().find(|l| l.card == card))
+    }
+
+    /// Whether `link` is one of the tree's lines rather than a card's further link.
+    fn in_tree(&self, link: &CardLink) -> bool {
+        let owner = self.card_owner(link.card);
+        owner.is_some_and(|d| self.tree_link(d) == Some(link))
+    }
+
+    fn connection(&self, link: &CardLink) -> Option<Connection> {
+        Some(Connection {
+            upstream: link.upstream,
+            downstream: self.card_owner(link.card)?.id,
+            kind: link.kind,
+        })
+    }
+
+    /// The lines of the map's tree: those through cards in the order they were found or made,
+    /// then those to guests.
+    pub(crate) fn connections(&self) -> Vec<Connection> {
+        let tree = self.links.iter().filter(|l| self.in_tree(l));
+        let through_cards = tree.filter_map(|l| self.connection(l));
+        let hosted = self.devices.iter().filter_map(|d| {
+            Some(Connection {
+                upstream: d.guest?.host,
+                downstream: d.id,
+                kind: ConnectionKind::Known,
+            })
+        });
+        through_cards.chain(hosted).collect()
+    }
+
+    /// Links of further cards, which join a device to another part of the map, often another
+    /// subnet, without moving it there.
+    pub(crate) fn cross_links(&self) -> Vec<Connection> {
+        let cross = self.links.iter().filter(|l| !self.in_tree(l));
+        cross.filter_map(|l| self.connection(l)).collect()
+    }
+
+    /// The line leading from `id` towards the router, if any: a guest's leads to its host.
+    pub(crate) fn uplink(&self, id: DeviceId) -> Option<Connection> {
+        let device = self.device(id)?;
+        if let Some(guest) = device.guest {
+            return Some(Connection {
+                upstream: guest.host,
+                downstream: id,
+                kind: ConnectionKind::Known,
+            });
+        }
+        self.connection(self.tree_link(device)?)
+    }
+
+    /// The device `id` runs on, for a guest.
+    pub(crate) fn host(&self, id: DeviceId) -> Option<DeviceId> {
+        Some(self.device(id)?.guest?.host)
     }
 
     /// Whether `id` is `branch` itself or a device connected behind it.
@@ -169,37 +180,45 @@ impl Network {
         false
     }
 
-    /// The devices connected straight behind `id`, in the order their links were found or made.
+    /// The devices connected straight behind `id`, in the order of [`Self::connections`].
     pub(crate) fn behind(&self, id: DeviceId) -> impl Iterator<Item = DeviceId> {
-        let links = self.connections.iter();
+        let links = self.connections().into_iter();
         links
             .filter(move |c| c.upstream == id)
             .map(|c| c.downstream)
     }
 
-    /// Connects `id` behind `upstream`, as a link the user made, or leaves it standing alone on
-    /// `None`; the devices behind it go with it. Refused when it would form a loop. A device that
-    /// stays behind the same upstream keeps the link it had.
+    /// Connects `id` behind `upstream`, as a link the user made to the card it hangs from, or
+    /// leaves it standing alone on `None`; the devices behind it go with it. Refused for a
+    /// guest, which stays on its host, and when it would form a loop. A device that stays behind
+    /// the same upstream keeps the link it had.
     pub(crate) fn connect(&mut self, id: DeviceId, upstream: Option<DeviceId>) {
         let unchanged = self.uplink(id).map(|link| link.upstream) == upstream;
         let refused =
             upstream.is_some_and(|up| self.device(up).is_none() || self.is_within(up, id));
-        if unchanged || refused || self.device(id).is_none() {
+        let Some(device) = self.device(id).filter(|d| d.guest.is_none()) else {
+            return;
+        };
+        let primary = device.primary_card().map(|c| c.id);
+        let Some(card) = self.tree_link(device).map(|l| l.card).or(primary) else {
+            return;
+        };
+        if unchanged || refused {
             return;
         }
-        self.connections.retain(|c| c.downstream != id);
+        self.links.retain(|l| l.card != card);
         if let Some(upstream) = upstream {
-            self.connections.push(Connection {
+            self.links.push(CardLink {
                 upstream,
-                downstream: id,
+                card,
                 kind: ConnectionKind::Known,
             });
         }
     }
 
-    /// Undoes [`Self::connect`]: back to the connections as found, less any forgotten devices.
+    /// Undoes [`Self::connect`]: back to the links as found, less any forgotten devices.
     pub(crate) fn restore_connections(&mut self) {
-        self.connections.clone_from(&self.detected);
+        self.links.clone_from(&self.detected);
     }
 
     pub(crate) fn filtered<'a>(
@@ -212,11 +231,9 @@ impl Network {
             .filter(move |d| filter.admits(d.status) && d.matches(query))
     }
 
-    /// How many devices the filter lets through, not counting further interfaces: those are
-    /// the same machines again.
+    /// How many devices, virtual machines and containers the filter lets through.
     pub(crate) fn count(&self, filter: StatusFilter) -> usize {
-        let devices = self.filtered(filter, "");
-        devices.filter(|d| d.parent.is_none()).count()
+        self.filtered(filter, "").count()
     }
 
     /// Standard roles followed by the custom ones, in the order they were added.
@@ -347,12 +364,7 @@ mod tests {
         assert!(offline.iter().all(|d| d.status == Status::Offline));
 
         let total = network.count(StatusFilter::All);
-        let interfaces = network.devices().iter().filter(|d| d.parent.is_some());
-        assert_eq!(
-            total + interfaces.count(),
-            network.devices().len(),
-            "interfaces are the same machines again"
-        );
+        assert_eq!(total, network.devices().len());
         assert!(
             network.count(StatusFilter::Online) + network.count(StatusFilter::Offline) <= total
         );
@@ -360,11 +372,8 @@ mod tests {
         let routers: Vec<_> = network
             .filtered(StatusFilter::Online, "192.168.1.1")
             .collect();
-        assert!(
-            routers
-                .iter()
-                .all(|d| d.ip.to_string().contains("192.168.1.1"))
-        );
+        assert!(!routers.is_empty());
+        assert!(routers.iter().all(|d| d.matches("192.168.1.1")));
     }
 
     #[test]
@@ -494,160 +503,103 @@ mod tests {
         assert_eq!(network.line_style(&printer), LineStyle::Solid, "deleted");
     }
 
-    #[test]
-    fn forgetting_a_device_drops_it_and_its_links() {
-        let mut network = mock_data::network();
-        let switch = DeviceId(2);
-        network.remove_device(switch);
-        assert!(network.device(switch).is_none());
-        assert!(
-            network
-                .connections()
-                .iter()
-                .all(|c| c.upstream != switch && c.downstream != switch)
-        );
-    }
-
-    /// The Docker Host, and its further interface on the lab network behind the Lab Router.
+    const ROUTER: DeviceId = DeviceId(1);
+    const SWITCH: DeviceId = DeviceId(2);
+    const ACCESS_POINT: DeviceId = DeviceId(3);
+    const PC: DeviceId = DeviceId(5);
+    const LINUX_SERVER: DeviceId = DeviceId(6);
+    /// A virtual machine on the Linux Server, with a further card on the lab network.
     const DOCKER_HOST: DeviceId = DeviceId(19);
-    const DOCKER_LAB: DeviceId = DeviceId(24);
     const LAB_ROUTER: DeviceId = DeviceId(22);
 
     #[test]
-    fn forgetting_a_device_forgets_its_interfaces_but_not_what_they_hang_behind() {
-        let mut network = mock_data::network();
-        let mut forgetful = network.clone();
-        assert_eq!(
-            forgetful.remove_device(DOCKER_HOST),
-            [DOCKER_HOST, DOCKER_LAB]
-        );
-        assert!(forgetful.device(DOCKER_LAB).is_none());
+    fn a_guest_hangs_from_its_host_and_a_further_card_only_crosses_over() {
+        let network = mock_data::network();
+        let uplink = network.uplink(DOCKER_HOST);
+        assert_eq!(uplink.map(|c| c.upstream), Some(LINUX_SERVER));
+        assert!(network.behind(LINUX_SERVER).any(|d| d == DOCKER_HOST));
+        assert!(network.behind(LAB_ROUTER).all(|d| d != DOCKER_HOST));
+        let cross = network.cross_links();
         assert!(
-            forgetful
-                .connections()
+            cross
                 .iter()
-                .all(|c| c.downstream != DOCKER_LAB)
+                .any(|c| (c.upstream, c.downstream) == (LAB_ROUTER, DOCKER_HOST))
         );
-
-        assert_eq!(network.remove_device(LAB_ROUTER), [LAB_ROUTER]);
-        assert!(network.device(DOCKER_LAB).is_some());
-        assert!(network.uplink(DOCKER_LAB).is_none(), "stands alone");
-    }
-
-    #[test]
-    fn an_interface_is_added_only_behind_another_device_at_a_free_address() {
-        let mut network = mock_data::network();
-        let (router, pc) = (DeviceId(1), DeviceId(5));
-        let free = Ipv4Addr::new(10, 0, 0, 7);
-        let router_ip = network.device(router).unwrap().ip;
-        let taken = network.device(DOCKER_LAB).unwrap().ip;
-        assert_eq!(network.add_interface(pc, router, router_ip), None);
-        assert_eq!(network.add_interface(pc, router, taken), None);
-        assert_eq!(network.add_interface(pc, pc, free), None, "behind itself");
-        assert_eq!(network.add_interface(pc, DeviceId(999), free), None);
-        assert_eq!(
-            network.add_interface(DOCKER_LAB, router, free),
-            None,
-            "of one"
-        );
-
-        let id = network.add_interface(pc, router, free).unwrap();
-        let (device, added) = (network.device(pc).unwrap(), network.device(id).unwrap());
-        assert_eq!((added.parent, added.ip, added.mac), (Some(pc), free, None));
-        assert_eq!((&added.name, &added.role), (&device.name, &device.role));
-        let link = network.uplink(id).map(|c| (c.upstream, c.kind));
-        assert_eq!(link, Some((router, ConnectionKind::Known)));
-        network.restore_connections();
-        assert!(network.uplink(id).is_some(), "kept on reset");
-        assert_eq!(
-            network.add_interface(DeviceId(6), router, free),
-            None,
-            "now taken"
-        );
-    }
-
-    #[test]
-    fn interfaces_come_straight_after_their_device_in_the_order_added() {
-        let mut network = mock_data::network();
-        let first = Ipv4Addr::new(10, 0, 0, 7);
-        let second = Ipv4Addr::new(10, 0, 0, 8);
-        let added = [first, second].map(|ip| network.add_interface(DOCKER_HOST, LAB_ROUTER, ip));
-        let ids: Vec<_> = network.devices().iter().map(|d| d.id).collect();
-        let at = ids.iter().position(|&id| id == DOCKER_HOST).unwrap();
-        let after: Vec<_> = ids.iter().skip(at + 1).take(3).copied().map(Some).collect();
-        assert_eq!(after, [Some(DOCKER_LAB), added[0], added[1]]);
-        let interfaces: Vec<_> = network.interfaces_of(DOCKER_HOST).map(|d| d.ip).collect();
-        assert_eq!(interfaces.len(), 3);
-        assert_eq!(interfaces.get(1..), Some([first, second].as_slice()));
+        let tree = network.connections();
+        assert!(cross.iter().all(|c| !tree.contains(c)));
     }
 
     #[test]
     fn a_device_moves_to_another_line_with_its_branch() {
         let mut network = mock_data::network();
-        let (router, switch, access_point, pc) =
-            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(5));
-        network.connect(pc, Some(router));
-        let link = network.uplink(pc).copied();
+        network.connect(PC, Some(ROUTER));
+        let link = network.uplink(PC);
         assert_eq!(
             link.map(|l| (l.upstream, l.kind)),
-            Some((router, ConnectionKind::Known))
+            Some((ROUTER, ConnectionKind::Known))
         );
-        assert_eq!(
-            network
-                .connections()
-                .iter()
-                .filter(|c| c.downstream == pc)
-                .count(),
-            1
-        );
+        let to_pc = network
+            .connections()
+            .into_iter()
+            .filter(|c| c.downstream == PC);
+        assert_eq!(to_pc.count(), 1);
 
-        network.connect(switch, Some(access_point));
-        assert!(network.is_within(pc, router));
-        assert!(!network.is_within(pc, switch), "the PC left the switch");
+        network.connect(SWITCH, Some(ACCESS_POINT));
+        assert!(network.is_within(PC, ROUTER));
+        assert!(!network.is_within(PC, SWITCH), "the PC left the switch");
         assert!(
-            network.is_within(DeviceId(6), access_point),
+            network.is_within(LINUX_SERVER, ACCESS_POINT),
             "the switch kept its devices"
+        );
+        assert!(
+            network.is_within(DOCKER_HOST, ACCESS_POINT),
+            "and their guests"
         );
     }
 
     #[test]
     fn a_new_link_comes_last_and_an_unchanged_one_stays_as_found() {
         let mut network = mock_data::network();
-        let (router, switch, access_point, pc) =
-            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(5));
-        let behind = |n: &Network| n.behind(router).collect::<Vec<_>>();
-        assert_eq!(behind(&network), [DeviceId(4), switch, access_point]);
-        network.connect(pc, Some(router));
-        assert_eq!(behind(&network), [DeviceId(4), switch, access_point, pc]);
+        let behind = |n: &Network| n.behind(ROUTER).collect::<Vec<_>>();
+        assert_eq!(behind(&network), [DeviceId(4), SWITCH, ACCESS_POINT]);
+        network.connect(PC, Some(ROUTER));
+        assert_eq!(behind(&network), [DeviceId(4), SWITCH, ACCESS_POINT, PC]);
 
         let phone = DeviceId(10);
-        let found = network.uplink(phone).copied();
-        network.connect(phone, Some(access_point));
-        assert_eq!(network.uplink(phone).copied(), found);
+        let found = network.uplink(phone);
+        network.connect(phone, Some(ACCESS_POINT));
+        assert_eq!(network.uplink(phone), found);
         assert_eq!(found.map(|l| l.kind), Some(ConnectionKind::Inferred));
     }
 
     #[test]
     fn a_device_cannot_join_its_own_branch() {
         let mut network = mock_data::network();
-        let (switch, pc) = (DeviceId(2), DeviceId(5));
-        let before = network.connections().to_vec();
-        network.connect(switch, Some(pc));
-        network.connect(switch, Some(switch));
-        network.connect(switch, Some(DeviceId(999)));
-        assert_eq!(network.connections(), before.as_slice());
+        let before = network.connections();
+        network.connect(SWITCH, Some(PC));
+        network.connect(SWITCH, Some(SWITCH));
+        network.connect(SWITCH, Some(DeviceId(999)));
+        assert_eq!(network.connections(), before);
+    }
+
+    #[test]
+    fn a_guest_stays_on_its_host() {
+        let mut network = mock_data::network();
+        let before = network.connections();
+        network.connect(DOCKER_HOST, Some(ROUTER));
+        network.connect(DOCKER_HOST, None);
+        assert_eq!(network.connections(), before);
     }
 
     #[test]
     fn a_device_left_alone_heads_its_own_branch_until_restored() {
         let mut network = mock_data::network();
-        let before = network.connections().to_vec();
-        let switch = DeviceId(2);
-        network.connect(switch, None);
-        assert!(network.uplink(switch).is_none());
-        assert!(network.is_within(DeviceId(5), switch));
+        let before = network.connections();
+        network.connect(SWITCH, None);
+        assert!(network.uplink(SWITCH).is_none());
+        assert!(network.is_within(PC, SWITCH));
         network.restore_connections();
-        assert_eq!(network.connections(), before.as_slice());
+        assert_eq!(network.connections(), before);
     }
 
     #[test]

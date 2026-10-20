@@ -68,7 +68,8 @@ fn push_map(bridge: &Bridge<'_>, state: &AppState) {
     }
 
     let highlighted = state.dragging.or(state.selected);
-    let lines = lines::lines(&state.network, &state.links(), &trunks, highlighted);
+    let cross = lines::cross_lines(&state.network, on_map);
+    let lines = lines::lines(&state.network, &state.links(), &cross, &trunks, highlighted);
     bridge.set_strand(convert::strand(
         state.strand().as_ref(),
         state.motion.bend(),
@@ -76,7 +77,6 @@ fn push_map(bridge: &Bridge<'_>, state: &AppState) {
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }
-    bridge.set_jump(lines::jumps(&state.network, on_map, highlighted).into());
     bridge.set_bounds(convert::bounds(on_map.values().copied()));
 }
 
@@ -135,22 +135,18 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     if let Some(model) = sync(&bridge.get_ports(), ports) {
         bridge.set_ports(model);
     }
-    let addresses = selected
-        .map(|d| convert::other_addresses(&state.network, d))
+    let cards = selected
+        .map(|d| convert::card_views(&state.network, d))
         .unwrap_or_default();
-    if let Some(model) = sync(&bridge.get_other_addresses(), addresses) {
-        bridge.set_other_addresses(model);
+    if let Some(model) = sync(&bridge.get_cards(), cards) {
+        bridge.set_cards(model);
     }
-    // Named as in the device list, where an interface is told apart from its device.
     let upstream_names = state.upstream_choices().into_iter().filter_map(|upstream| {
         let device = state.network.device(upstream)?;
-        let name = device.name.trim().into();
-        Some(match device.parent {
-            Some(_) => labels.invoke_ghost_name(name),
-            None => labels.invoke_device_name(name),
-        })
+        Some(labels.invoke_device_name(device.name.trim().into()))
     });
-    if let Some(model) = sync(&bridge.get_upstream_choices(), upstream_names.collect()) {
+    let choices = std::iter::once(labels.invoke_no_link()).chain(upstream_names);
+    if let Some(model) = sync(&bridge.get_upstream_choices(), choices.collect()) {
         bridge.set_upstream_choices(model);
     }
     bridge.set_selected_id(id);

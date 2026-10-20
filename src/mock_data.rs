@@ -2,14 +2,18 @@
 
 use std::net::Ipv4Addr;
 
+use ipnet::Ipv4Net;
+
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LastSeen,
-    LineStyle, MacAddr, Network, Role, Services, Status,
+    CardId, CardLink, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Guest, GuestKind,
+    Icon, LastSeen, LineStyle, MacAddr, Network, NetworkCard, Role, Services, Status,
 };
 
-/// The home network's /24, and that of the separate lab network behind the Lab Router.
+/// The home network's /24, that of the separate lab network behind the Lab Router, and the
+/// Docker Host's /16 bridge network for its containers.
 const HOME: [u8; 3] = [192, 168, 1];
 const LAB: [u8; 3] = [10, 0, 0];
+const DOCKER: [u8; 3] = [172, 17, 0];
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
 const FLAKY_DEVICE: DeviceId = DeviceId(13);
@@ -21,7 +25,12 @@ const SCAN_INTERVAL_MINUTES: u32 = 30;
 const VIRTUAL_MACHINE: &str = "Virtual machine";
 /// The icon the virtual machine role was given, from the icon folder.
 const VIRTUAL_MACHINE_ICON: &str = "Computers/Virtual machine";
+/// The custom role the sample containers share, and its icon.
+const CONTAINER: &str = "Container";
+const CONTAINER_ICON: &str = "Computers/Container";
 
+/// A sample device. Its first network card has the same id as the device, so the links below
+/// read as links between devices.
 struct Spec {
     id: u32,
     name: &'static str,
@@ -30,9 +39,10 @@ struct Spec {
     status: Status,
     subnet: [u8; 3],
     host: u8,
+    prefix: u8,
     mac: [u8; 6],
-    /// The id of the device this is a further interface of.
-    parent: Option<u32>,
+    /// The id of the device it runs on, for a virtual machine or container.
+    guest: Option<(u32, GuestKind)>,
     manufacturer: Option<&'static str>,
     model: Option<&'static str>,
     hostname: Option<&'static str>,
@@ -54,9 +64,13 @@ impl Spec {
             role: self.role,
             icon: None,
             status: self.status,
-            ip: address(self.subnet, self.host),
-            mac: Some(MacAddr(self.mac)),
-            parent: self.parent.map(DeviceId),
+            cards: card(self.id, self.subnet, self.host, self.prefix, self.mac)
+                .into_iter()
+                .collect(),
+            guest: self.guest.map(|(host, kind)| Guest {
+                host: DeviceId(host),
+                kind,
+            }),
             manufacturer: self.manufacturer,
             model: self.model,
             hostname: self.hostname,
@@ -69,8 +83,14 @@ impl Spec {
     }
 }
 
-fn address([a, b, c]: [u8; 3], host: u8) -> Ipv4Addr {
-    Ipv4Addr::new(a, b, c, host)
+/// A detected network card. `None` only for a prefix over 32, which the sample data never uses:
+/// the tests check every sample device has its cards.
+fn card(id: u32, [a, b, c]: [u8; 3], host: u8, prefix: u8, mac: [u8; 6]) -> Option<NetworkCard> {
+    Some(NetworkCard {
+        id: CardId(id),
+        address: Ipv4Net::new(Ipv4Addr::new(a, b, c, host), prefix).ok()?,
+        mac: Some(MacAddr(mac)),
+    })
 }
 
 /// Shorthand for the many devices that share most defaults, on the home network.
@@ -83,8 +103,9 @@ fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -
         status: Status::Online,
         subnet: HOME,
         host,
+        prefix: 24,
         mac,
-        parent: None,
+        guest: None,
         manufacturer: None,
         model: None,
         hostname: None,
@@ -93,6 +114,9 @@ fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -
         notes: "",
     }
 }
+
+const ON_LINUX_SERVER: Option<(u32, GuestKind)> = Some((6, GuestKind::VirtualMachine));
+const ON_DOCKER_HOST: Option<(u32, GuestKind)> = Some((19, GuestKind::Container));
 
 #[expect(
     clippy::too_many_lines,
@@ -305,6 +329,7 @@ fn devices() -> Vec<Device> {
         // Virtual machines on the Linux Server; BC:24:11 is the Proxmox MAC prefix.
         Spec {
             manufacturer: Some("Proxmox"),
+            guest: ON_LINUX_SERVER,
             hostname: Some("homeassistant"),
             services: &[(8123, "Home Assistant")],
             ..spec(
@@ -317,6 +342,7 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
+            guest: ON_LINUX_SERVER,
             hostname: Some("pihole"),
             services: &[(53, "DNS"), (80, "HTTP")],
             notes: "Blocks adverts for the whole network.",
@@ -330,8 +356,9 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
+            guest: ON_LINUX_SERVER,
             hostname: Some("docker"),
-            services: &[(22, "SSH"), (9443, "Portainer")],
+            services: &[(22, "SSH")],
             ..spec(
                 19,
                 "Docker Host",
@@ -340,22 +367,41 @@ fn devices() -> Vec<Device> {
                 [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x03],
             )
         },
-        // The Docker Host's second virtual network card, on the lab network.
+        // Containers on the Docker Host's bridge network; 02:42 is Docker's MAC prefix.
         Spec {
-            manufacturer: Some("Proxmox"),
-            hostname: Some("docker"),
-            subnet: LAB,
-            parent: Some(19),
+            manufacturer: Some("Docker"),
+            hostname: Some("portainer"),
+            subnet: DOCKER,
+            prefix: 16,
+            guest: ON_DOCKER_HOST,
+            services: &[(9443, "Portainer")],
             ..spec(
                 24,
-                "Docker Host",
+                "Portainer",
                 K::Server,
-                23,
-                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13],
+                2,
+                [0x02, 0x42, 0xAC, 0x11, 0x00, 0x02],
+            )
+        },
+        Spec {
+            manufacturer: Some("Docker"),
+            hostname: Some("proxy"),
+            subnet: DOCKER,
+            prefix: 16,
+            guest: ON_DOCKER_HOST,
+            services: &[(80, "HTTP"), (81, "Admin"), (443, "HTTPS")],
+            notes: "Reverse proxy for the home lab's web pages.",
+            ..spec(
+                25,
+                "Nginx Proxy Manager",
+                K::Server,
+                3,
+                [0x02, 0x42, 0xAC, 0x11, 0x00, 0x03],
             )
         },
         Spec {
             manufacturer: Some("Proxmox"),
+            guest: ON_LINUX_SERVER,
             hostname: Some("win11-vm"),
             services: &[(3389, "RDP")],
             status: Status::Offline,
@@ -371,6 +417,7 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
+            guest: ON_LINUX_SERVER,
             hostname: Some("ubuntu-dev"),
             services: &[(22, "SSH")],
             ..spec(
@@ -381,7 +428,7 @@ fn devices() -> Vec<Device> {
                 [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x05],
             )
         },
-        // The lab network: seen only through the Docker Host's second interface.
+        // The lab network: seen only through the Docker Host's second network card.
         Spec {
             manufacturer: Some("MikroTik"),
             model: Some("hAP ax²"),
@@ -417,7 +464,26 @@ fn devices() -> Vec<Device> {
     .collect()
 }
 
-fn connections() -> Vec<Connection> {
+/// The Docker Host's second virtual network card, on the lab network.
+const DOCKER_LAB_CARD: u32 = 100;
+
+fn devices_with_further_cards() -> Vec<Device> {
+    let mut devices = devices();
+    let lab_card = card(
+        DOCKER_LAB_CARD,
+        LAB,
+        23,
+        24,
+        [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13],
+    );
+    if let Some(docker) = devices.iter_mut().find(|d| d.id == DeviceId(19)) {
+        docker.cards.extend(lab_card);
+    }
+    devices
+}
+
+/// Each card's link, as (upstream device, card, kind).
+fn links() -> Vec<CardLink> {
     use ConnectionKind::{Inferred, Known};
     [
         (1, 4, Known),
@@ -435,28 +501,23 @@ fn connections() -> Vec<Connection> {
         (3, 10, Inferred),
         (3, 15, Inferred),
         (3, 13, Inferred),
-        (6, 17, Known),
-        (6, 18, Known),
-        (6, 19, Known),
-        (6, 20, Known),
-        (6, 21, Known),
         (22, 23, Known),
-        (22, 24, Known),
+        (22, DOCKER_LAB_CARD, Known),
     ]
     .into_iter()
-    .map(|(up, down, kind)| Connection {
+    .map(|(up, card, kind)| CardLink {
         upstream: DeviceId(up),
-        downstream: DeviceId(down),
+        card: CardId(card),
         kind,
     })
     .collect()
 }
 
 pub(crate) fn network() -> Network {
-    let mut network = Network::new(devices(), connections());
+    let mut network = Network::new(devices_with_further_cards(), links());
     // Custom roles as if the user had added them: no standard role has the TV or console icon,
-    // and a virtual machine is told apart from the host it runs on.
-    let custom: [(&[u32], _, _); 3] = [
+    // and virtual machines and containers are told apart from the hosts they run on.
+    let custom: [(&[u32], _, _); 4] = [
         (&[10], "TV", DeviceKind::Tv.icon()),
         (&[11], "Games console", DeviceKind::Console.icon()),
         (
@@ -464,6 +525,7 @@ pub(crate) fn network() -> Network {
             VIRTUAL_MACHINE,
             Icon::new(VIRTUAL_MACHINE_ICON),
         ),
+        (&[24, 25], CONTAINER, Icon::new(CONTAINER_ICON)),
     ];
     for (ids, name, icon) in custom {
         let Some(role) = network.add_custom_role(name, icon) else {
@@ -486,6 +548,7 @@ fn add_groups(network: &mut Network) {
     let tv = Role::Custom("TV".into());
     let console = Role::Custom("Games console".into());
     let virtual_machine = Role::Custom(VIRTUAL_MACHINE.into());
+    let container = Role::Custom(CONTAINER.into());
     let groups = [
         (
             "Network core",
@@ -504,6 +567,7 @@ fn add_groups(network: &mut Network) {
                 Role::Nas,
                 Role::Printer,
                 virtual_machine,
+                container,
             ],
         ),
         (
@@ -556,52 +620,47 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn ids_ips_and_macs_are_unique() {
-        let network = network();
-        let devices = network.devices();
-        let unique =
-            |values: Vec<String>| values.iter().collect::<HashSet<_>>().len() == devices.len();
-        assert!(unique(
-            devices.iter().map(|d| format!("{:?}", d.id)).collect()
-        ));
-        assert!(unique(devices.iter().map(|d| d.ip.to_string()).collect()));
-        let macs: Option<Vec<_>> = devices.iter().map(|d| d.mac).collect();
-        let macs = macs.expect("every sample device has a MAC");
-        assert!(unique(macs.iter().map(ToString::to_string).collect()));
+    fn all_unique<T: std::hash::Hash + Eq>(values: &[T]) -> bool {
+        values.iter().collect::<HashSet<_>>().len() == values.len()
     }
 
     #[test]
-    fn an_interface_joins_its_device_to_another_subnet() {
+    fn ids_ips_and_macs_are_unique_and_every_device_has_a_card() {
         let network = network();
         let devices = network.devices();
-        let subnet = |ip: Ipv4Addr| ip.octets()[..3].to_vec();
-        let interfaces = devices
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| d.parent.is_some());
-        let mut found = 0;
-        for (at, interface) in interfaces {
-            let device = network.device(interface.parent.unwrap()).unwrap();
-            let upstream = network.device(network.uplink(interface.id).unwrap().upstream);
-            assert_ne!(subnet(interface.ip), subnet(device.ip), "{interface:?}");
-            assert_eq!(subnet(interface.ip), subnet(upstream.unwrap().ip));
-            let before = devices.get(at - 1).unwrap();
-            assert!(
-                before.id == device.id || before.parent == Some(device.id),
-                "follows it"
-            );
-            found += 1;
-        }
-        assert!(found > 0);
+        assert!(devices.iter().all(|d| !d.cards.is_empty()));
+        let ids: Vec<_> = devices.iter().map(|d| d.id).collect();
+        assert!(all_unique(&ids));
+        let cards: Vec<_> = devices.iter().flat_map(|d| &d.cards).collect();
+        let card_ids: Vec<_> = cards.iter().map(|c| c.id).collect();
+        assert!(all_unique(&card_ids));
+        let ips: Vec<_> = cards.iter().map(|c| c.address.addr()).collect();
+        assert!(all_unique(&ips));
+        let macs: Option<Vec<_>> = cards.iter().map(|c| c.mac).collect();
+        let macs = macs.expect("every sample card has a MAC");
+        assert!(all_unique(&macs));
+    }
+
+    #[test]
+    fn a_further_card_joins_its_device_to_another_subnet() {
+        let network = network();
+        let mut cross = network.cross_links();
+        assert_eq!(cross.len(), 1);
+        let link = cross.pop().unwrap();
+        let docker = network.device(link.downstream).unwrap();
+        let upstream = network.device(link.upstream).unwrap();
+        let [home, lab] = [0, 1].map(|at| docker.cards[at].address);
+        assert_ne!(home.network(), lab.network());
+        let lab_router = upstream.primary_card().unwrap().address;
+        assert!(lab_router.contains(&lab.addr()), "{lab} on {lab_router}");
     }
 
     #[test]
     fn connections_reference_existing_devices_and_form_trees() {
         let network = network();
-        for c in network.connections() {
-            assert!(network.device(c.upstream).is_some(), "{c:?}");
-            assert!(network.device(c.downstream).is_some(), "{c:?}");
+        for link in network.card_links() {
+            assert!(network.device(link.upstream).is_some(), "{link:?}");
+            assert!(network.card_owner(link.card).is_some(), "{link:?}");
         }
         let downstream: HashSet<_> = network.connections().iter().map(|c| c.downstream).collect();
         assert_eq!(
@@ -627,26 +686,34 @@ mod tests {
     }
 
     #[test]
-    fn virtual_machines_share_a_role_and_hang_off_their_host() {
+    fn guests_share_a_role_and_run_on_their_host() {
         let network = network();
-        let role = Role::Custom(VIRTUAL_MACHINE.into());
-        let icon = network
-            .role_icon(&role)
-            .map(|i| format!("icons/{}.svg", i.0));
         let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        assert!(
-            icon.is_some_and(|file| folder.join(file).is_file()),
-            "their icon ships with the app"
-        );
-        let vms: Vec<_> = network
-            .devices()
-            .iter()
-            .filter(|d| d.role == role)
-            .collect();
-        assert_eq!(vms.len(), 5);
-        for vm in vms {
-            let uplink = network.connections().iter().find(|c| c.downstream == vm.id);
-            assert_eq!(uplink.map(|c| c.upstream), Some(DeviceId(6)), "{}", vm.name);
+        for (name, kind, host, count) in [
+            (VIRTUAL_MACHINE, GuestKind::VirtualMachine, 6, 5),
+            (CONTAINER, GuestKind::Container, 19, 2),
+        ] {
+            let role = Role::Custom(name.into());
+            let icon = network
+                .role_icon(&role)
+                .map(|i| format!("icons/{}.svg", i.0));
+            assert!(
+                icon.is_some_and(|file| folder.join(file).is_file()),
+                "{name}: the icon ships with the app"
+            );
+            let guests: Vec<_> = network
+                .devices()
+                .iter()
+                .filter(|d| d.role == role)
+                .collect();
+            assert_eq!(guests.len(), count, "{name}");
+            for guest in guests {
+                let on = Some(Guest {
+                    host: DeviceId(host),
+                    kind,
+                });
+                assert_eq!(guest.guest, on, "{}", guest.name);
+            }
         }
     }
 

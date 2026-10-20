@@ -5,8 +5,8 @@ import { DeviceIcon } from "device-icon.slint";
 import { StatusDot } from "status-dot.slint";
 
 // One entry in the device list. Its background stops short of the list's scroll bar, which
-// floats over the right-hand edge of the rows. A ghost follows its device as a child: its icon
-// sits under the device's name, faded, with the interface's address and no role.
+// floats over the right-hand edge of the rows. A guest follows its host as a child: its icon
+// sits under the host's name.
 export component DeviceRow inherits Rectangle {
     in property <DeviceView> device;
     in property <bool> selected;
@@ -15,7 +15,7 @@ export component DeviceRow inherits Rectangle {
 
     height: Theme.row-height;
     accessible-role: list-item;
-    accessible-label: device.ghost ? Labels.ghost-name(device.name) : Labels.device-name(device.name);
+    accessible-label: Labels.device-name(device.name);
     accessible-item-selected: selected;
 
     Rectangle {
@@ -34,14 +34,13 @@ export component DeviceRow inherits Rectangle {
     HorizontalLayout {
         width: parent.width - Theme.scrollbar-width;
         x: 0;
-        padding-left: Theme.space-s + (device.ghost ? icon-width + Theme.space-m : 0);
+        padding-left: Theme.space-s + device.depth * (icon-width + Theme.space-m);
         padding-right: Theme.space-m;
         spacing: Theme.space-m;
 
         DeviceIcon {
             icon: device.icon;
             width: icon-width;
-            opacity: device.ghost && !selected ? Theme.ghost-opacity : 1;
             colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
         }
 
@@ -49,7 +48,7 @@ export component DeviceRow inherits Rectangle {
             alignment: center;
             spacing: 2px;
             Text {
-                text: device.ghost ? Labels.ghost-name(device.name) : Labels.device-name(device.name);
+                text: Labels.device-name(device.name);
                 font-size: Theme.font-body;
                 font-weight: 600;
                 color: Theme.text;
@@ -63,7 +62,7 @@ export component DeviceRow inherits Rectangle {
         }
 
         Text {
-            text: device.ghost ? "" : device.role;
+            text: device.role;
             font-size: Theme.font-small;
             color: Theme.text-muted;
             vertical-alignment: center;

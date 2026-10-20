@@ -1,5 +1,5 @@
 import { Button, ScrollView } from "std-widgets.slint";
-import { Bridge } from "bridge.slint";
+import { Bridge, GuestKind } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
@@ -89,16 +89,17 @@ export component DetailsPanel inherits Rectangle {
             }
 
             DetailField { label: @tr("details.role"); value: Bridge.details.role; }
-            DetailField { label: @tr("details.ip"); value: Bridge.details.ip; }
-            for address in Bridge.other-addresses: DetailField {
-                label: @tr("details.other-address");
-                value: Labels.other-address(address.ip, address.via-name);
+            if Bridge.details.guest != GuestKind.none: DetailField {
+                label: @tr("details.runs-on");
+                value: Labels.runs-on(Bridge.details.host-name, Bridge.details.guest);
             }
-            if Bridge.details.interface: DetailField {
-                label: @tr("details.interface-of");
-                value: Labels.device-name(Bridge.details.interface-of);
+            for card in Bridge.cards: VerticalLayout {
+                DetailField {
+                    label: @tr("details.card");
+                    value: Labels.card(card.address, card.via-name, card.inferred);
+                }
+                if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
             }
-            if Bridge.details.mac != "": DetailField { label: @tr("details.mac"); value: Bridge.details.mac; }
             DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
             if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
             if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }

@@ -11,7 +11,7 @@ use crate::ui;
 /// in map units.
 const BEND_LENGTH: f32 = 5.0;
 const BEND_DEPTH: f32 = 2.5;
-/// How far a jump line stays clear of the icon centres at its ends, just outside the circle
+/// How far a cross line stays clear of the icon centres at its ends, just outside the circle
 /// drawn round a selected icon, in map units.
 const ICON_CLEARANCE: f32 = 28.0;
 /// The short line each style is previewed on in the style dropdown; its box in the UI is
@@ -22,17 +22,20 @@ const SAMPLE: [Point; 2] = [Point { x: 0.0, y: 6.0 }, Point { x: 48.0, y: 6.0 }]
 /// inferred, highlighted or not.
 type Look = (Option<GroupColour>, LineStyle, ConnectionKind, bool);
 
-/// SVG path commands for the `links`, each drawn along its route, and the `trunks`, one set per
-/// look, highlighted sets last.
+/// SVG path commands for the `links`, each drawn along its route, the `cross` links of further
+/// network cards, and the `trunks`, one set per look, highlighted sets last.
 pub(super) fn lines(
     network: &Network,
     links: &[(Connection, [Point; 3])],
+    cross: &[(Connection, [Point; 2])],
     trunks: &[(DeviceId, [Point; 2])],
     selected: Option<DeviceId>,
 ) -> Vec<ui::LineSet> {
     let is_selected = |id| selected == Some(id);
+    let routes = links.iter().map(|(link, route)| (link, route.as_slice()));
+    let routes = routes.chain(cross.iter().map(|(link, line)| (link, line.as_slice())));
     // Every line hangs from a device: a link from its upstream device, a trunk from its own.
-    let link_lines = links.iter().map(|&(link, route)| {
+    let link_lines = routes.map(|(link, route)| {
         let highlighted = is_selected(link.upstream) || is_selected(link.downstream);
         (link.upstream, link.kind, highlighted, route.to_vec())
     });
@@ -68,20 +71,13 @@ pub(super) fn lines(
     sets.collect()
 }
 
-/// SVG path commands for the dashed jump from each device at `shown` to its further interfaces,
-/// for those where the device or the interface is `selected`. Empty when there are none.
-pub(super) fn jumps(network: &Network, shown: &Positions, selected: Option<DeviceId>) -> String {
-    let pairs = network
-        .devices()
-        .iter()
-        .filter_map(|d| Some((d.parent?, d.id)));
-    let lit = pairs
-        .filter(|&(device, interface)| selected.is_some_and(|id| id == device || id == interface));
-    let lines = lit.filter_map(|(device, interface)| {
-        let line = clear_of_icons(*shown.get(&device)?, *shown.get(&interface)?)?;
-        Some(path(LineStyle::Dashed, &line))
-    });
-    lines.collect::<Vec<_>>().join(" ")
+/// The link of each further network card, straight from where it is plugged in to its device
+/// as `shown`: it often crosses to another part of the map, away from the tree's lines.
+pub(super) fn cross_lines(network: &Network, shown: &Positions) -> Vec<(Connection, [Point; 2])> {
+    let links = network.cross_links().into_iter();
+    let line =
+        |c: &Connection| clear_of_icons(*shown.get(&c.upstream)?, *shown.get(&c.downstream)?);
+    links.filter_map(|c| Some((c, line(&c)?))).collect()
 }
 
 /// The straight line from `a` to `b`, less its ends under the icons there; `None` when the icons
@@ -267,7 +263,7 @@ mod tests {
         let arrangement = crate::model::Arrangement::default();
         let positions = crate::model::tree_layout(network, &arrangement);
         let inner = arrangement.inner_neighbours(network, None);
-        let links = network.connections().iter().map(|&c| {
+        let links = network.connections().into_iter().map(|c| {
             let route = crate::model::link_route(&positions, &inner, c.upstream, c.downstream);
             (c, route.unwrap())
         });
@@ -279,11 +275,11 @@ mod tests {
     fn selection_highlights_its_links_and_draws_them_last() {
         let network = crate::mock_data::network();
         let (_, links) = routed(&network);
-        let plain = lines(&network, &links, &[], None);
+        let plain = lines(&network, &links, &[], &[], None);
         assert!(plain.iter().all(|s| !s.selected));
 
         let access_point = DeviceId(3);
-        let highlighted = lines(&network, &links, &[], Some(access_point));
+        let highlighted = lines(&network, &links, &[], &[], Some(access_point));
         let none = ui::GroupColour::None;
         assert!(has(&highlighted, none, false, true), "uplink to the router");
         assert!(has(&highlighted, none, true, true), "wireless clients");
@@ -292,31 +288,37 @@ mod tests {
         assert!(last_plain < first_highlighted);
 
         // A device with none behind it lights up only its own stretch of line.
-        let pc = lines(&network, &links, &[], Some(DeviceId(5)));
-        let lit = pc.iter().filter(|s| s.selected);
-        let paths: usize = lit.map(|s| s.commands.matches('M').count()).sum();
-        assert_eq!(paths, 1);
+        let pc = lines(&network, &links, &[], &[], Some(DeviceId(5)));
+        assert_eq!(lit_paths(&pc), 1);
     }
 
     #[test]
-    fn an_interface_is_joined_to_its_device_only_while_either_is_selected() {
+    fn a_further_card_is_drawn_straight_to_where_it_is_plugged_in() {
         let network = crate::mock_data::network();
-        let (positions, _) = routed(&network);
-        let (docker_host, docker_lab, lab_router) = (DeviceId(19), DeviceId(24), DeviceId(22));
-        assert_eq!(jumps(&network, &positions, None), "");
-        assert_eq!(
-            jumps(&network, &positions, Some(lab_router)),
-            "",
-            "upstream"
-        );
-        for end in [docker_host, docker_lab] {
-            let jump = jumps(&network, &positions, Some(end));
-            assert!(jump.matches('M').count() > 1, "dashed: {jump}");
+        let (positions, links) = routed(&network);
+        let (docker_host, lab_router) = (DeviceId(19), DeviceId(22));
+        let cross = cross_lines(&network, &positions);
+        let ends: Vec<_> = cross
+            .iter()
+            .map(|(c, _)| (c.upstream, c.downstream))
+            .collect();
+        assert_eq!(ends, [(lab_router, docker_host)]);
+
+        for end in [lab_router, docker_host] {
+            let with = lines(&network, &links, &cross, &[], Some(end));
+            let without = lines(&network, &links, &[], &[], Some(end));
+            assert_eq!(lit_paths(&with), lit_paths(&without) + 1, "{end:?}");
         }
     }
 
+    /// How many lines are highlighted.
+    fn lit_paths(sets: &[ui::LineSet]) -> usize {
+        let lit = sets.iter().filter(|s| s.selected);
+        lit.map(|s| s.commands.matches('M').count()).sum()
+    }
+
     #[test]
-    fn a_jump_stays_clear_of_the_icons_at_its_ends() {
+    fn a_cross_line_stays_clear_of_the_icons_at_its_ends() {
         let a = Point { x: 0.0, y: 0.0 };
         let [start, end] = clear_of_icons(a, Point { x: 100.0, y: 0.0 }).unwrap();
         assert_eq!((start.x, end.x), (ICON_CLEARANCE, 100.0 - ICON_CLEARANCE));
@@ -340,7 +342,7 @@ mod tests {
         let router = DeviceId(1);
         let trunks = [router, DeviceId(2)]
             .map(|id| (id, crate::model::trunk(&network, &positions, id).unwrap()));
-        let sets = lines(&network, &links, &trunks, None);
+        let sets = lines(&network, &links, &[], &trunks, None);
         let red: Vec<_> = sets
             .iter()
             .filter(|s| s.colour == ui::GroupColour::Red)
@@ -351,7 +353,7 @@ mod tests {
         let is_router = |id| network.device(id).is_some_and(|d| d.role == Role::Router);
         let router_links = network
             .connections()
-            .iter()
+            .into_iter()
             .filter(|c| is_router(c.upstream));
         let expected = router_links
             .filter(|c| c.kind == ConnectionKind::Known)

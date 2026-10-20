@@ -30,10 +30,14 @@ export enum RoleKind { router, switch, access-point, server, nas, desktop, lapto
 // A group's colour; `none` leaves its devices in the usual colours.
 export enum GroupColour { none, red, orange, yellow, green, blue, purple }
 
+// What a device runs as on its host; `none` for a physical device.
+export enum GuestKind { none, virtual-machine, container }
+
 /// One device as drawn on the map and in the list. `x`/`y` are map units (icon centre).
 export struct DeviceView {
     id: int,
     name: string,
+    // Of its first network card.
     ip: string,
     mac: string,
     // Empty when the device gave none.
@@ -51,9 +55,9 @@ export struct DeviceView {
     y: float,
     // Hidden by the current search or filter: faded on the map.
     dimmed: bool,
-    // A further interface of another device, shown as its ghost: faded, and in the lists
-    // indented under that device, which it comes straight after.
-    ghost: bool,
+    // How many hosts it runs within: a guest comes after its host in the lists, indented
+    // under it.
+    depth: int,
 }
 
 /// Where a device in Bridge.devices is drawn on the map right now, at the same index. Kept apart
@@ -66,11 +70,14 @@ export struct NodePlace {
     root-y: float,
 }
 
-/// A further interface of the selected device: its address, and the name of the device it
-/// connects through, empty when it stands alone.
-export struct OtherAddress {
-    ip: string,
+/// A network card of the selected device, in its order: its address with the subnet prefix,
+/// its MAC (empty if none was detected), and the name of the device it is plugged into, empty
+/// when it has no link of its own.
+export struct CardView {
+    address: string,
+    mac: string,
     via-name: string,
+    inferred: bool,
 }
 
 /// Read-only details of the selected device. Empty strings are not shown.
@@ -87,16 +94,15 @@ export struct DeviceDetails {
     // Already translated, like DeviceView.role.
     role: string,
     notes: string,
-    ip: string,
-    mac: string,
-    // A further interface of another device, and that device's name.
-    interface: bool,
-    interface-of: string,
+    // What it runs as, and the name of the device it runs on.
+    guest: GuestKind,
+    host-name: string,
     manufacturer: string,
     model: string,
     hostname: string,
     last-seen-minutes: int,
-    // Name of the device this one connects through; empty for the router.
+    // Name of the device this one connects through; empty for the router and for a guest,
+    // which connects through its host.
     uplink-name: string,
     uplink-inferred: bool,
     services: string,
@@ -167,15 +173,12 @@ export global Bridge {
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
     in property <Strand> strand;
-    // While a device or one of its further interfaces is selected: the lines from the device to
-    // its interfaces, as SVG path commands in map units. Empty otherwise.
-    in property <string> jump;
     in property <MapBounds> bounds;
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
-    in property <[OtherAddress]> other-addresses;
-    // The names of the devices a new interface of the selected device can be connected behind:
-    // every other device but its own interfaces, in device order.
+    in property <[CardView]> cards;
+    // What a new card of the selected device can be plugged into: first none, then the names of
+    // the devices outside its own branch, in device order.
     in property <[string]> upstream-choices;
     in property <[PortView]> ports;
     in property <[string]> roles;
@@ -222,10 +225,15 @@ export global Bridge {
     callback set-port-number(int, string);
     callback set-port-description(int, string);
     callback remove-port(int);
-    // A further interface of the selected device, at an address as typed, connected behind the
-    // device at an index in upstream-choices. Refused (false) when the address is not IPv4 or
-    // is already in use. Once added, it is a device of its own.
-    callback add-interface(string, int) -> bool;
+    // A network card for the selected device, at an address as typed (`a.b.c.d/nn`, or a bare
+    // address on a /24), plugged into the device at an index in upstream-choices. Refused
+    // (false) when the address is not IPv4 or is already in use.
+    callback add-card(string, int) -> bool;
+    // Removes the card at an index in cards, unless it is the last.
+    callback remove-card(int);
+    // A virtual machine or container on the selected device, with a name and its first card's
+    // address as typed. Refused (false) when the name is blank or the address is refused.
+    callback add-guest(GuestKind, string, string) -> bool;
     // The role list. Roles are identified by their index in role-list.
     callback add-role(string, string);
     callback rename-role(int, string);

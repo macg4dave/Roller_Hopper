@@ -136,19 +136,6 @@ export component TopologyCanvas inherits Rectangle {
             opacity: device.dimmed ? 0.3 : 1;
         }
 
-        // From a device to its further interfaces, while it or one of them is selected.
-        if Bridge.jump != "": Path {
-            width: parent.width;
-            height: parent.height;
-            viewbox-x: Bridge.bounds.x;
-            viewbox-y: Bridge.bounds.y;
-            viewbox-width: Bridge.bounds.width;
-            viewbox-height: Bridge.bounds.height;
-            commands: Bridge.jump;
-            stroke: Theme.accent;
-            stroke-width: Theme.line-width / zoom;
-        }
-
         if Bridge.strand.commands != "": Path {
             width: parent.width;
             height: parent.height;

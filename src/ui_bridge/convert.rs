@@ -3,12 +3,13 @@
 
 use std::net::Ipv4Addr;
 
+use ipnet::Ipv4Net;
 use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LineStyle, Network, Point,
-    Role, Snap, Status, StatusFilter,
+    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle, Network,
+    NetworkCard, Point, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -17,6 +18,8 @@ use crate::ui::{self, Labels};
 const PAD_SIDE: f32 = 80.0;
 const PAD_TOP: f32 = 40.0;
 const PAD_BOTTOM: f32 = 115.0;
+/// The subnet prefix of an address typed without one: that of most home networks.
+const TYPED_PREFIX: u8 = 24;
 
 pub(super) fn ui_id(id: DeviceId) -> i32 {
     // Ids come from our own data and stay far below i32::MAX; -1 means "no device" to the UI.
@@ -145,12 +148,16 @@ pub(super) fn device_view(
     role: SharedString,
     at: Point,
 ) -> ui::DeviceView {
+    let primary = device.primary_card();
     ui::DeviceView {
         id: ui_id(device.id),
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
-        ip: device.ip.to_string().into(),
-        mac: mac(device),
+        ip: primary
+            .map(|card| card.address.addr().to_string())
+            .unwrap_or_default()
+            .into(),
+        mac: primary.map(mac).unwrap_or_default(),
         hostname: device.hostname.unwrap_or_default().into(),
         role,
         icon: icons.image(&network.icon(device)),
@@ -159,32 +166,47 @@ pub(super) fn device_view(
         x: at.x,
         y: at.y,
         dimmed: false,
-        ghost: device.parent.is_some(),
+        depth: i32::try_from(network.depth(device.id)).unwrap_or(i32::MAX),
     }
 }
 
-/// The MAC address as shown; empty for an interface the user added.
-fn mac(device: &Device) -> SharedString {
-    device
-        .mac
+/// The MAC address as shown; empty for a card the user added.
+fn mac(card: &NetworkCard) -> SharedString {
+    card.mac
         .map(|mac| mac.to_string())
         .unwrap_or_default()
         .into()
 }
 
-/// The further addresses of `device`, each with the name of the device it connects through;
-/// empty when it stands alone.
-pub(super) fn other_addresses(network: &Network, device: &Device) -> Vec<ui::OtherAddress> {
-    let addresses = network.interfaces_of(device.id).map(|i| ui::OtherAddress {
-        ip: i.ip.to_string().into(),
-        via_name: network
-            .uplink(i.id)
-            .and_then(|link| network.device(link.upstream))
-            .map(|d| d.name.trim())
-            .unwrap_or_default()
-            .into(),
+/// The network cards of `device`, each with the name of the device it is plugged into.
+pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView> {
+    let views = device.cards.iter().map(|card| {
+        let link = network.card_links().iter().find(|l| l.card == card.id);
+        let via = link.and_then(|l| network.device(l.upstream));
+        ui::CardView {
+            address: card.address.to_string().into(),
+            mac: mac(card),
+            via_name: via.map(|d| d.name.trim()).unwrap_or_default().into(),
+            inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
+        }
     });
-    addresses.collect()
+    views.collect()
+}
+
+pub(super) fn guest_kind_from_ui(kind: ui::GuestKind) -> Option<GuestKind> {
+    match kind {
+        ui::GuestKind::None => None,
+        ui::GuestKind::VirtualMachine => Some(GuestKind::VirtualMachine),
+        ui::GuestKind::Container => Some(GuestKind::Container),
+    }
+}
+
+fn guest_kind(kind: Option<GuestKind>) -> ui::GuestKind {
+    match kind {
+        None => ui::GuestKind::None,
+        Some(GuestKind::VirtualMachine) => ui::GuestKind::VirtualMachine,
+        Some(GuestKind::Container) => ui::GuestKind::Container,
+    }
 }
 
 /// A role for the role list, with `label` as shown in the role dropdown.
@@ -216,10 +238,16 @@ pub(super) fn details(
     role: SharedString,
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
-    let uplink = network.uplink(device.id).and_then(|link| {
-        let upstream = network.device(link.upstream)?;
-        Some((upstream.name.trim(), link.kind == ConnectionKind::Inferred))
+    let name_of = |id| network.device(id).map(|d| d.name.trim());
+    // A guest connects through its host, which is shown as where it runs instead.
+    let uplink = network.uplink(device.id).filter(|_| device.guest.is_none());
+    let uplink = uplink.and_then(|link| {
+        Some((
+            name_of(link.upstream)?,
+            link.kind == ConnectionKind::Inferred,
+        ))
     });
+    let host = device.guest.and_then(|guest| name_of(guest.host));
     ui::DeviceDetails {
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
@@ -229,15 +257,8 @@ pub(super) fn details(
         name: device.name.trim().into(),
         role,
         notes: device.notes.as_str().into(),
-        ip: device.ip.to_string().into(),
-        mac: mac(device),
-        interface: device.parent.is_some(),
-        interface_of: device
-            .parent
-            .and_then(|parent| network.device(parent))
-            .map(|d| d.name.trim())
-            .unwrap_or_default()
-            .into(),
+        guest: guest_kind(device.guest.map(|guest| guest.kind)),
+        host_name: text(host),
         manufacturer: text(device.manufacturer),
         model: text(device.model),
         hostname: text(device.hostname),
@@ -262,9 +283,14 @@ pub(super) fn port(text: &str) -> Option<u16> {
     text.trim().parse().ok().filter(|&port| port != 0)
 }
 
-/// An IPv4 address as typed, such as `192.168.1.20`.
-pub(super) fn ip(text: &str) -> Option<Ipv4Addr> {
-    text.trim().parse().ok()
+/// An IPv4 address and subnet prefix as typed, such as `10.0.0.5/24`; without a prefix, the
+/// usual home one.
+pub(super) fn address(text: &str) -> Option<Ipv4Net> {
+    let text = text.trim();
+    match text.parse::<Ipv4Addr>() {
+        Ok(ip) => Ipv4Net::new(ip, TYPED_PREFIX).ok(),
+        Err(_) => text.parse().ok(),
+    }
 }
 
 /// The group list's rows, in order.
@@ -284,7 +310,7 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
         .collect()
 }
 
-/// The map area holding every node (device or ghost) at `points`, and its labels.
+/// The map area holding every node at `points`, and its labels.
 pub(super) fn bounds(points: impl IntoIterator<Item = Point>) -> ui::MapBounds {
     let mut points = points.into_iter();
     let Some(first) = points.next() else {
@@ -353,10 +379,12 @@ mod tests {
     }
 
     #[test]
-    fn only_ipv4_addresses_are_accepted() {
-        assert_eq!(ip(" 10.0.0.5 "), Some(Ipv4Addr::new(10, 0, 0, 5)));
-        for refused in ["10.0.0", "10.0.0.256", "fe80::1", ""] {
-            assert_eq!(ip(refused), None, "{refused:?}");
+    fn only_ipv4_addresses_are_accepted_with_the_home_prefix_by_default() {
+        let typed = |text: &str| address(text).map(|net| net.to_string());
+        assert_eq!(typed(" 10.0.0.5 "), Some("10.0.0.5/24".into()));
+        assert_eq!(typed("172.17.0.9/16"), Some("172.17.0.9/16".into()));
+        for refused in ["10.0.0", "10.0.0.256", "10.0.0.5/33", "fe80::1", ""] {
+            assert_eq!(address(refused), None, "{refused:?}");
         }
     }
 

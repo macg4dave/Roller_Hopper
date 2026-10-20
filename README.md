@@ -30,7 +30,8 @@ All UI text is translatable. To add or change a language, see
 ```text
 src/main.rs        wiring only: build state, create window, connect callbacks, run
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
-src/model/         pure data and logic (devices, connections, roles, groups, map layout) — no Slint imports
+src/model/         pure data and logic (devices with their network cards, virtual machines and
+                   containers; connections, roles, groups, map layout) — no Slint imports
 src/mock_data.rs   the sample network
 src/ui_bridge/     model ↔ Slint conversion, callback handlers, map motion, reading the icon folder
 ui/                .slint files: app window, panels, canvas, components/, theme
