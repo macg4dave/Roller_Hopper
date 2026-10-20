@@ -31,10 +31,10 @@ msgid "header.settings"
 msgstr "Settings"
 
 msgid "settings.title"
-msgstr "Map display"
+msgstr "Settings"
 
-msgid "settings.show-addresses"
-msgstr "Show IP addresses"
+msgid "settings.map-display-moved"
+msgstr "What the map shows for each device is set with the View button on the map."
 
 # Device list. filter.button: {0} is the filter name, {1} the number of devices.
 msgid "filter.all"
@@ -68,6 +68,31 @@ msgstr "Fit to view"
 
 msgid "map.reset-layout"
 msgstr "Reset layout"
+
+# The View button at the top right of the map, and the switches it opens.
+msgid "view.button"
+msgstr "View"
+
+msgid "view.title"
+msgstr "Show on the map"
+
+msgid "view.names"
+msgstr "Names"
+
+msgid "view.roles"
+msgstr "Roles"
+
+msgid "view.addresses"
+msgstr "IP addresses"
+
+msgid "view.macs"
+msgstr "MAC addresses"
+
+msgid "view.hostnames"
+msgstr "Hostnames"
+
+msgid "view.status"
+msgstr "Status dots"
 
 msgid "legend.known"
 msgstr "Known link"

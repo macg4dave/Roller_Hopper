@@ -1,0 +1,73 @@
+import { Button, Switch } from "std-widgets.slint";
+import { MapSettings } from "bridge.slint";
+import { Theme } from "theme.slint";
+
+// The map's View button: switches for what each device on the map is labelled with.
+export component ViewOptions inherits Rectangle {
+    width: button.preferred-width + 2 * Theme.space-xs;
+    height: button.preferred-height + 2 * Theme.space-xs;
+    background: Theme.surface;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius;
+
+    button := Button {
+        x: Theme.space-xs;
+        y: Theme.space-xs;
+        text: @tr("view.button");
+        icon: @image-url("icons/eye.svg");
+        colorize-icon: true;
+        clicked => { popup.show(); }
+    }
+
+    popup := PopupWindow {
+        x: root.width - self.width;
+        y: root.height + Theme.space-xs;
+        width: 220px;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: Theme.radius;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #0000001f;
+
+            VerticalLayout {
+                padding: Theme.space-l;
+                spacing: Theme.space-m;
+                Text {
+                    text: @tr("view.title");
+                    font-size: Theme.font-heading;
+                    font-weight: 600;
+                    color: Theme.text;
+                }
+                Switch {
+                    text: @tr("view.names");
+                    checked <=> MapSettings.show-names;
+                }
+                Switch {
+                    text: @tr("view.roles");
+                    checked <=> MapSettings.show-roles;
+                }
+                Switch {
+                    text: @tr("view.addresses");
+                    checked <=> MapSettings.show-addresses;
+                }
+                Switch {
+                    text: @tr("view.macs");
+                    checked <=> MapSettings.show-macs;
+                }
+                Switch {
+                    text: @tr("view.hostnames");
+                    checked <=> MapSettings.show-hostnames;
+                }
+                Switch {
+                    text: @tr("view.status");
+                    checked <=> MapSettings.show-status;
+                }
+            }
+        }
+    }
+}

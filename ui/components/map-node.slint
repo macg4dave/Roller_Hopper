@@ -1,8 +1,33 @@
-import { DeviceStatus, DeviceView } from "../bridge.slint";
+import { DeviceStatus, DeviceView, MapSettings } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { StatusDot } from "status-dot.slint";
+
+// One line of a device's label, centred under it. Its backing hides the line running down from
+// the device, which passes behind the label when several lines are shown.
+component NodeLabel inherits HorizontalLayout {
+    in property <string> text;
+    in property <bool> strong;
+
+    alignment: center;
+    Rectangle {
+        background: Theme.background;
+        border-radius: 3px;
+        HorizontalLayout {
+            padding-left: 3px;
+            padding-right: 3px;
+            Text {
+                text: root.text;
+                font-size: strong ? 12px : 11px;
+                font-weight: strong ? 600 : 400;
+                color: strong ? Theme.text : Theme.text-muted;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}
 
 // A device on the topology map, laid out at 100% and scaled with the rest of the map by the
 // canvas; the icon centre is the anchor point.
@@ -11,7 +36,6 @@ export component MapNode inherits Rectangle {
     // The map zoom, used only to keep the icon crisp under the canvas's scale transform.
     in property <float> zoom: 1;
     in property <bool> selected;
-    in property <bool> show-address: true;
     out property <length> icon-size: Theme.map-icon;
     callback clicked;
     // Pointer movement since the press, while dragging.
@@ -64,7 +88,7 @@ export component MapNode inherits Rectangle {
                     colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
                 }
 
-                StatusDot {
+                if MapSettings.show-status: StatusDot {
                     status: device.status;
                     x: parent.width - self.width - 3px;
                     y: 3px;
@@ -72,20 +96,14 @@ export component MapNode inherits Rectangle {
             }
         }
 
-        Text {
+        // What the View menu turns on, in the order of the details panel.
+        if MapSettings.show-names: NodeLabel {
             text: Labels.device-name(device.name);
-            font-size: 12px;
-            font-weight: 600;
-            color: Theme.text;
-            horizontal-alignment: center;
-            overflow: elide;
+            strong: true;
         }
-
-        if show-address: Text {
-            text: device.ip;
-            font-size: 11px;
-            color: Theme.text-muted;
-            horizontal-alignment: center;
-        }
+        if MapSettings.show-roles: NodeLabel { text: device.role; }
+        if MapSettings.show-addresses: NodeLabel { text: device.ip; }
+        if MapSettings.show-macs: NodeLabel { text: device.mac; }
+        if MapSettings.show-hostnames && device.hostname != "": NodeLabel { text: device.hostname; }
     }
 }

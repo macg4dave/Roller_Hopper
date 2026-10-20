@@ -35,6 +35,9 @@ export struct DeviceView {
     id: int,
     name: string,
     ip: string,
+    mac: string,
+    // Empty when the device gave none.
+    hostname: string,
     // Already translated: standard role names come from Labels.role().
     role: string,
     // Follows the role; the detected kind's when the role has no icon of its own.
@@ -216,7 +219,12 @@ export global Bridge {
     callback scan();
 }
 
-/// Purely visual map preferences from the Settings menu.
+/// Purely visual map preferences from the map's View menu: what each device is labelled with.
 export global MapSettings {
+    in-out property <bool> show-names: true;
+    in-out property <bool> show-roles;
     in-out property <bool> show-addresses: true;
+    in-out property <bool> show-macs;
+    in-out property <bool> show-hostnames;
+    in-out property <bool> show-status: true;
 }

@@ -1,5 +1,5 @@
-import { Button, LineEdit, Switch } from "std-widgets.slint";
-import { Bridge, MapSettings } from "bridge.slint";
+import { Button, LineEdit } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 
 // Title, search, Scan, the edit page toggle and Settings.
@@ -90,9 +90,11 @@ export component Header inherits Rectangle {
                     font-weight: 600;
                     color: Theme.text;
                 }
-                Switch {
-                    text: @tr("settings.show-addresses");
-                    checked <=> MapSettings.show-addresses;
+                Text {
+                    text: @tr("settings.map-display-moved");
+                    font-size: Theme.font-body;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
                 }
             }
         }

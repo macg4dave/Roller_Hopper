@@ -10,10 +10,11 @@ use crate::model::{
 };
 use crate::ui::{self, Labels};
 
-/// Room around the outermost icons for their labels and root circles, in map units.
+/// Room around the outermost icons for their labels and root circles, in map units; below them
+/// there is room for every label line the View menu can turn on.
 const PAD_SIDE: f32 = 80.0;
 const PAD_TOP: f32 = 40.0;
-const PAD_BOTTOM: f32 = 90.0;
+const PAD_BOTTOM: f32 = 115.0;
 
 pub(super) fn ui_id(id: DeviceId) -> i32 {
     // Ids come from our own data and stay far below i32::MAX; -1 means "no device" to the UI.
@@ -147,6 +148,8 @@ pub(super) fn device_view(
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
         ip: device.ip.to_string().into(),
+        mac: device.mac.to_string().into(),
+        hostname: device.hostname.unwrap_or_default().into(),
         role,
         icon: icons.image(&network.icon(device)),
         colour: colour(network.colour(device)),
