@@ -132,6 +132,7 @@ export component TopologyCanvas inherits Rectangle {
                 Bridge.move-device(device.id, device.x + dx / 1px, device.y + dy / 1px);
                 auto-fit = false;
             }
+            released => { Bridge.drop-device(); }
         }
     }
 

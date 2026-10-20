@@ -34,7 +34,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     }
     push_roles(&bridge, &labels, state);
 
-    let lines = convert::lines(network, &state.positions, state.selected);
+    let highlighted = state.dragging.or(state.selected);
+    let lines = convert::lines(network, &state.links(), &state.positions, highlighted);
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }

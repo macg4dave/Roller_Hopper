@@ -17,7 +17,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, VecModel, Weak
 
 use crate::mock_data;
 use crate::model::{
-    Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role, StatusFilter, tree_layout,
+    Connection, Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role, Snap,
+    StatusFilter, snap_target, tree_layout,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -30,6 +31,8 @@ const SCAN_DURATION: Duration = Duration::from_millis(1500);
 pub(crate) struct AppState {
     network: Network,
     positions: Positions,
+    /// The device being dragged on the map, until it is dropped.
+    dragging: Option<DeviceId>,
     selected: Option<DeviceId>,
     filter: StatusFilter,
     query: String,
@@ -45,6 +48,7 @@ impl AppState {
         Self {
             network,
             positions,
+            dragging: None,
             selected: None,
             filter: StatusFilter::All,
             query: String::new(),
@@ -140,6 +144,36 @@ impl AppState {
         }
     }
 
+    /// Where the dragged device `id` would go if dropped now: on the line it is near, between
+    /// the devices it is between; `None` to stand alone.
+    fn snap(&self, id: DeviceId) -> Option<Snap> {
+        let at = self.positions.get(&id).copied()?;
+        snap_target(&self.network, &self.positions, id, at)
+    }
+
+    /// The connections to draw: while a device is dragged, those it would leave if dropped now.
+    fn links(&self) -> Vec<Connection> {
+        let Some(id) = self.dragging else {
+            return self.network.connections().to_vec();
+        };
+        // A what-if copy, so the preview is exactly what dropping would do.
+        let mut preview = self.network.clone();
+        let snap = self.snap(id);
+        preview.connect(id, snap.map(|s| s.upstream), snap.and_then(|s| s.before));
+        preview.connections().to_vec()
+    }
+
+    /// Ends a drag: the device joins the line it was dropped on, or stands alone, and the map
+    /// is laid out again around the change, making room where it went in.
+    fn drop_dragged(&mut self) {
+        if let Some(id) = self.dragging.take() {
+            let snap = self.snap(id);
+            let (upstream, before) = (snap.map(|s| s.upstream), snap.and_then(|s| s.before));
+            self.network.connect(id, upstream, before);
+            self.positions = tree_layout(&self.network);
+        }
+    }
+
     fn finish_scan(&mut self) {
         mock_data::simulate_scan(&mut self.network);
         self.scanning = false;
@@ -166,14 +200,20 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_refresh_icons(move || refresh_icons(&icons_ui, &icons_state));
 
-    let reset = handler(ui, state, |st, ()| st.positions = tree_layout(&st.network));
+    let reset = handler(ui, state, |st, ()| {
+        st.network.restore_connections();
+        st.positions = tree_layout(&st.network);
+    });
     bridge.on_reset_layout(move || reset(()));
     let move_device = handler(ui, state, |st, (id, x, y)| {
         if let Some(id) = convert::device_id(id) {
             st.positions.insert(id, Point { x, y });
+            st.dragging = Some(id);
         }
     });
     bridge.on_move_device(move |id, x, y| move_device((id, x, y)));
+    let drop_device = handler(ui, state, |st, ()| st.drop_dragged());
+    bridge.on_drop_device(move || drop_device(()));
 
     let start_scan = handler(ui, state, |st, ()| st.scanning = true);
     let finish_scan = Rc::new(handler(ui, state, |st, ()| st.finish_scan()));
@@ -521,6 +561,55 @@ mod tests {
         assert_eq!(state.selected, None);
         assert!(state.network.device(DeviceId(10)).is_none());
         assert!(!state.positions.contains_key(&DeviceId(10)));
+    }
+
+    #[test]
+    fn a_dropped_device_joins_the_line_it_was_previewing_on() {
+        let mut state = AppState::new(mock_data::network());
+        let (router, switch, access_point, pc) =
+            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(5));
+        state.drop_dragged();
+        assert_eq!(
+            state.positions,
+            tree_layout(&state.network),
+            "no drag, no change"
+        );
+
+        // Dropped between the main switch and the access point.
+        let x = |shown: &AppState, id| shown.positions[&id].x;
+        let (switch_x, access_point_x) = (x(&state, switch), x(&state, access_point));
+        let between = Point {
+            x: f32::midpoint(switch_x, access_point_x),
+            y: state.positions[&switch].y,
+        };
+        state.positions.insert(pc, between);
+        state.dragging = Some(pc);
+        let preview = state.links().into_iter().filter(|c| c.downstream == pc);
+        assert_eq!(preview.map(|c| c.upstream).collect::<Vec<_>>(), [router]);
+
+        state.drop_dragged();
+        assert_eq!(state.dragging, None);
+        assert_eq!(state.network.uplink(pc).map(|c| c.upstream), Some(router));
+        assert_eq!(state.positions, tree_layout(&state.network), "tidied again");
+        assert!(x(&state, switch) < x(&state, pc) && x(&state, pc) < x(&state, access_point));
+        assert!(x(&state, access_point) > access_point_x, "pushed apart");
+    }
+
+    #[test]
+    fn a_device_dropped_far_from_every_line_stands_alone() {
+        let mut state = AppState::new(mock_data::network());
+        let pc = DeviceId(5);
+        state.positions.insert(
+            pc,
+            Point {
+                x: -1000.0,
+                y: -1000.0,
+            },
+        );
+        state.dragging = Some(pc);
+        assert!(state.links().iter().all(|c| c.downstream != pc));
+        state.drop_dragged();
+        assert!(state.network.uplink(pc).is_none());
     }
 
     #[test]

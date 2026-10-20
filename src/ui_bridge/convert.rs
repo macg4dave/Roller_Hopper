@@ -5,8 +5,8 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Network, Point, Positions,
-    Role, Status, StatusFilter, route,
+    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Network, Point,
+    Positions, Role, Status, StatusFilter, route,
 };
 use crate::ui::{self, Labels};
 
@@ -238,15 +238,16 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
 /// How a line is drawn: its parent's group colour, dashed or not, highlighted or not.
 type LineStyle = (Option<GroupColour>, ConnectionKind, bool);
 
-/// SVG path commands for every connection, one set per line style, highlighted sets last.
+/// SVG path commands for the `links`, one set per line style, highlighted sets last.
 pub(super) fn lines(
     network: &Network,
+    links: &[Connection],
     positions: &Positions,
     selected: Option<DeviceId>,
 ) -> Vec<ui::LineSet> {
     let at = |id| positions.get(&id).copied().unwrap_or_default();
     let mut sets: Vec<(LineStyle, Vec<String>)> = Vec::new();
-    for link in network.connections() {
+    for link in links {
         let points = route(at(link.upstream), at(link.downstream));
         let highlighted = selected.is_some_and(|id| id == link.upstream || id == link.downstream);
         // A line takes the group colour of the device it hangs from, unless it is highlighted.
@@ -382,11 +383,16 @@ mod tests {
     fn selection_highlights_its_links_and_draws_them_last() {
         let network = crate::mock_data::network();
         let positions = crate::model::tree_layout(&network);
-        let plain = lines(&network, &positions, None);
+        let plain = lines(&network, network.connections(), &positions, None);
         assert!(plain.iter().all(|s| !s.selected));
 
         let access_point = DeviceId(3);
-        let highlighted = lines(&network, &positions, Some(access_point));
+        let highlighted = lines(
+            &network,
+            network.connections(),
+            &positions,
+            Some(access_point),
+        );
         let none = ui::GroupColour::None;
         assert!(has(&highlighted, none, false, true), "uplink to the router");
         assert!(has(&highlighted, none, true, true), "wireless clients");
@@ -404,7 +410,7 @@ mod tests {
         network.set_group_colour(group, Some(GroupColour::Red));
         network.set_role_group(&Role::Router, Some(group));
 
-        let sets = lines(&network, &positions, None);
+        let sets = lines(&network, network.connections(), &positions, None);
         let red = sets
             .iter()
             .find(|s| s.colour == ui::GroupColour::Red && !s.inferred);

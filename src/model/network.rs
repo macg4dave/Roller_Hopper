@@ -42,6 +42,8 @@ impl StatusFilter {
 pub(crate) struct Network {
     devices: Vec<Device>,
     connections: Vec<Connection>,
+    /// The connections as first found, which [`Self::restore_connections`] brings back.
+    detected: Vec<Connection>,
     roles: Roles,
     groups: Groups,
 }
@@ -50,6 +52,7 @@ impl Network {
     pub(crate) fn new(devices: Vec<Device>, connections: Vec<Connection>) -> Self {
         Self {
             devices,
+            detected: connections.clone(),
             connections,
             roles: Roles::default(),
             groups: Groups::default(),
@@ -79,13 +82,71 @@ impl Network {
     /// Forgets a device and its links. Devices behind it stay, as separate branches of the map.
     pub(crate) fn remove_device(&mut self, id: DeviceId) {
         self.devices.retain(|d| d.id != id);
-        self.connections
-            .retain(|c| c.upstream != id && c.downstream != id);
+        for links in [&mut self.connections, &mut self.detected] {
+            links.retain(|c| c.upstream != id && c.downstream != id);
+        }
     }
 
     /// The connection leading from `id` towards the router, if any.
     pub(crate) fn uplink(&self, id: DeviceId) -> Option<&Connection> {
         self.connections.iter().find(|c| c.downstream == id)
+    }
+
+    /// Whether `id` is `branch` itself or a device connected behind it.
+    pub(crate) fn is_within(&self, id: DeviceId, branch: DeviceId) -> bool {
+        let mut current = id;
+        // Guards against cycles in the connection data: no real chain is longer than the network.
+        for _ in 0..=self.devices.len() {
+            if current == branch {
+                return true;
+            }
+            match self.uplink(current) {
+                Some(link) => current = link.upstream,
+                None => return false,
+            }
+        }
+        false
+    }
+
+    /// Connects `id` behind `upstream`, as a link the user made, or leaves it standing alone on
+    /// `None`; the devices behind it go with it. Among the devices behind `upstream` it goes just
+    /// before `before`, or last. Refused when it would form a loop. A device that stays behind
+    /// the same upstream keeps its kind of link, and only moves along.
+    pub(crate) fn connect(
+        &mut self,
+        id: DeviceId,
+        upstream: Option<DeviceId>,
+        before: Option<DeviceId>,
+    ) {
+        let refused =
+            upstream.is_some_and(|up| self.device(up).is_none() || self.is_within(up, id));
+        if refused || self.device(id).is_none() {
+            return;
+        }
+        let kind = self
+            .uplink(id)
+            .filter(|link| Some(link.upstream) == upstream)
+            .map_or(ConnectionKind::Known, |link| link.kind);
+        self.connections.retain(|c| c.downstream != id);
+        let Some(upstream) = upstream else { return };
+        // The layout lays out the devices behind one upstream in the order of their links.
+        let at = before
+            .and_then(|b| {
+                let mut links = self.connections.iter();
+                links.position(|c| c.upstream == upstream && c.downstream == b)
+            })
+            .unwrap_or(self.connections.len());
+        let link = Connection {
+            upstream,
+            downstream: id,
+            kind,
+        };
+        self.connections.insert(at, link);
+    }
+
+    /// Undoes [`Self::connect`]: back to the connections as found, less any forgotten devices.
+    pub(crate) fn restore_connections(&mut self) {
+        self.connections.clone_from(&self.detected);
     }
 
     pub(crate) fn filtered<'a>(
@@ -354,6 +415,89 @@ mod tests {
                 .iter()
                 .all(|c| c.upstream != switch && c.downstream != switch)
         );
+    }
+
+    #[test]
+    fn a_device_moves_to_another_line_with_its_branch() {
+        let mut network = mock_data::network();
+        let (router, switch, access_point, pc) =
+            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(5));
+        network.connect(pc, Some(router), None);
+        let link = network.uplink(pc).copied();
+        assert_eq!(
+            link.map(|l| (l.upstream, l.kind)),
+            Some((router, ConnectionKind::Known))
+        );
+        assert_eq!(
+            network
+                .connections()
+                .iter()
+                .filter(|c| c.downstream == pc)
+                .count(),
+            1
+        );
+
+        network.connect(switch, Some(access_point), None);
+        assert!(network.is_within(pc, router));
+        assert!(!network.is_within(pc, switch), "the PC left the switch");
+        assert!(
+            network.is_within(DeviceId(6), access_point),
+            "the switch kept its devices"
+        );
+    }
+
+    fn behind(network: &Network, upstream: DeviceId) -> Vec<DeviceId> {
+        let links = network.connections().iter();
+        links
+            .filter(|c| c.upstream == upstream)
+            .map(|c| c.downstream)
+            .collect()
+    }
+
+    #[test]
+    fn a_device_goes_in_among_the_others_where_it_was_put() {
+        let mut network = mock_data::network();
+        let (router, switch, access_point, pc) =
+            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(5));
+        assert_eq!(
+            behind(&network, router),
+            [DeviceId(4), switch, access_point]
+        );
+        network.connect(pc, Some(router), Some(access_point));
+        assert_eq!(
+            behind(&network, router),
+            [DeviceId(4), switch, pc, access_point]
+        );
+
+        // Moving along the same line keeps the kind of link that was found.
+        let (wireless, phone) = (DeviceId(8), DeviceId(10));
+        network.connect(phone, Some(access_point), Some(wireless));
+        assert_eq!(behind(&network, access_point).first(), Some(&phone));
+        let kind = network.uplink(phone).map(|l| l.kind);
+        assert_eq!(kind, Some(ConnectionKind::Inferred));
+    }
+
+    #[test]
+    fn a_device_cannot_join_its_own_branch() {
+        let mut network = mock_data::network();
+        let (switch, pc) = (DeviceId(2), DeviceId(5));
+        let before = network.connections().to_vec();
+        network.connect(switch, Some(pc), None);
+        network.connect(switch, Some(switch), None);
+        network.connect(switch, Some(DeviceId(999)), None);
+        assert_eq!(network.connections(), before.as_slice());
+    }
+
+    #[test]
+    fn a_device_left_alone_heads_its_own_branch_until_restored() {
+        let mut network = mock_data::network();
+        let before = network.connections().to_vec();
+        let switch = DeviceId(2);
+        network.connect(switch, None, None);
+        assert!(network.uplink(switch).is_none());
+        assert!(network.is_within(DeviceId(5), switch));
+        network.restore_connections();
+        assert_eq!(network.connections(), before.as_slice());
     }
 
     #[test]

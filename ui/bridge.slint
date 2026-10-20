@@ -184,7 +184,11 @@ export global Bridge {
     callback set-group-colour(int, GroupColour);
     // The group's roles are left in no group.
     callback delete-group(int);
+    // Dragging a device previews the line it would join; dropping it joins that line, or leaves
+    // it standing alone away from every line. Ignored when nothing was dragged.
     callback move-device(int, float, float);
+    callback drop-device();
+    // Brings back the connections as found, and the tidy layout.
     callback reset-layout();
     callback scan();
 }
