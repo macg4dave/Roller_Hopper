@@ -1,4 +1,4 @@
-import { Bridge, FoundDecision, FoundView } from "../bridge.slint";
+import { Bridge, FoundDecision, FoundFinding, FoundView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { Chip, FlagChip } from "chip.slint";
@@ -19,7 +19,9 @@ export global FoundColumns {
 // One row of the discovery results. As in the device list, a host heads a group, with each of
 // its network cards after it on a guide line down from its icon, and a guest follows its host,
 // indented under it. A card the run did not see, off the subnet scanned, is greyed. Clicking a
-// row shows the host or the card in the details. An ignored host is faded with its cards.
+// row shows the host or the card in the details. An ignored host is faded with its cards. A
+// card of a host not on the map can be dragged onto any row of another host's group to become
+// a child of that host, or of its device on the map.
 export component FoundRow inherits Rectangle {
     in property <FoundView> found;
 
@@ -32,8 +34,12 @@ export component FoundRow inherits Rectangle {
 
     height: card ? Theme.found-card-row-height : Theme.found-row-height;
     border-radius: Theme.radius;
-    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
-    opacity: found.decision == FoundDecision.ignored ? 0.55 : 1;
+    property <bool> drop-here: drop.has-drag && drop.current-action != DragAction.none;
+
+    background: selected || drop-here ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    border-width: drop-here ? 1px : 0;
+    border-color: Theme.accent;
+    opacity: drag.dragging ? 0.4 : found.decision == FoundDecision.ignored ? 0.55 : 1;
     accessible-role: list-item;
     accessible-label: card ? @tr("card.of", Labels.found-name(found.name), Labels.card-name(found.card-name, found.card-index)) : Labels.found-name(found.name);
     accessible-item-selected: selected;
@@ -53,12 +59,32 @@ export component FoundRow inherits Rectangle {
         last: found.last;
     }
 
-    touch := TouchArea {
-        clicked => {
-            if card {
-                Bridge.select-found-card(found.index, found.card-index);
-            } else {
-                Bridge.select-found(found.index);
+    drop := DropArea {
+        can-drop(event) => {
+            return Bridge.can-move-found-card(event.data, found.index) ? DragAction.move : DragAction.none;
+        }
+        dropped(event) => {
+            Bridge.move-found-card(event.data, found.index);
+            return event.proposed-action;
+        }
+    }
+
+    // Only a card of a host not yet on the map moves from here; one on the map moves in its
+    // card editor.
+    drag := DragArea {
+        enabled: card && found.finding != FoundFinding.known && found.decision != FoundDecision.added;
+        allow-move: true;
+        data: Bridge.found-card-transfer(found.index, found.card-index);
+        drag-image: found.card-icon.image;
+
+        touch := TouchArea {
+            mouse-cursor: drag.enabled ? MouseCursor.grab : MouseCursor.default;
+            clicked => {
+                if card {
+                    Bridge.select-found-card(found.index, found.card-index);
+                } else {
+                    Bridge.select-found(found.index);
+                }
             }
         }
     }

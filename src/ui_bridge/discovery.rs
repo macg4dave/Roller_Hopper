@@ -51,7 +51,7 @@ impl AppState {
 
     /// Shows a found host in the details, or the card at `card` among its cards. One on the map
     /// is selected there too, or that card of it, so the details edit it on the map.
-    fn select_found(&mut self, index: Option<usize>, card: Option<usize>) {
+    pub(super) fn select_found(&mut self, index: Option<usize>, card: Option<usize>) {
         self.discovery.selected = index;
         self.discovery.selected_card = card;
         let found = index.and_then(|i| self.discovery.found().get(i));

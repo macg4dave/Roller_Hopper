@@ -163,6 +163,27 @@ msgstr "Gateway"
 msgid "details.plugged-into"
 msgstr "Plugged into"
 
+# The device (or, on the discovery page, the found host) a network card belongs to; picking
+# another moves the card there.
+msgid "details.child-of"
+msgstr "Child of"
+
+# Asked before a network card moves to another parent that would leave the device it is on
+# with no network card.
+msgid "move.title"
+msgstr "Move network card?"
+
+# {0} is the network card, {1} the device it leaves, {2} the device it moves to.
+msgid "move.question"
+msgstr "{0} is the only network card of {1}. Moving it to {2} removes {1} from the map and the list, and anything running on {1} then runs on {2}. The card keeps its address and settings."
+
+# As move.question, on the discovery page: {1} is a found host, {2} a found host or a device.
+msgid "move.question-found"
+msgstr "{0} is the only network card of {1}. Moving it to {2} removes {1} from the results. The card keeps its address and settings."
+
+msgid "move.confirm"
+msgstr "Move"
+
 # While a network card is selected: shows its device's details instead.
 msgid "details.show-device"
 msgstr "Show device details"

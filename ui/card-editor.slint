@@ -40,8 +40,8 @@ component CardSetting inherits VerticalLayout {
 }
 
 // Edit page, right side, while a network card is selected: its name (edited in its heading) and
-// IPv4 settings, what it is plugged into, its open ports, and removing it. A card is a child of its device, which it
-// leads back to.
+// IPv4 settings, the device it is a child of, what it is plugged into, its open ports, and
+// removing it. A card is a child of its device, which it leads back to.
 export component CardEditor inherits VerticalLayout {
     alignment: start;
     spacing: Theme.space-xs;
@@ -126,6 +126,23 @@ export component CardEditor inherits VerticalLayout {
             value: Bridge.card.mac;
             hint: @tr("edit.card-mac-hint");
             label: @tr("details.mac");
+        }
+    }
+    DetailField {
+        label: @tr("details.child-of");
+        ComboBox {
+            // Picking replaces the binding, so keep it following Rust's state: the move may be
+            // refused, or wait to be confirmed.
+            property <int> parent-index: Bridge.card-parent-index;
+            changed parent-index => { self.current-index = self.parent-index; }
+            horizontal-stretch: 1;
+            model: Bridge.parent-choices;
+            current-index: Bridge.card-parent-index;
+            accessible-label: @tr("details.child-of");
+            selected => {
+                Bridge.set-card-parent(self.current-index);
+                self.current-index = self.parent-index;
+            }
         }
     }
     DetailField {

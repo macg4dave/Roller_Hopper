@@ -14,7 +14,24 @@ Your task is to review the entire project, investigate the best approaches for i
 
 The goal is to develop a clear, well-researched technical plan before connecting the GUI to a real backend.
 
+## Selected Scanner and Cross-Platform Direction
+
+- Use [netscli-core](https://github.com/fstubner/netscli/tree/main/crates/netscli-core) as the selected scanner library through normal upstream Cargo releases. This replaces the earlier nrev direction; do not maintain a fork, copy its engine into this project, or build a replacement scanner.
+- Support **Windows, Linux and macOS** from the outset. Keep application logic, data models and scanner integration shared across operating systems wherever practical. Prefer established cross-platform APIs whose upstream maintainers handle platform differences.
+- Retain the library's useful scanning options even when the initial GUI exposes only a subset. Distinguish supported capabilities from proposals and unverified platform behaviour.
+- Users should only need to run the app, without separately installing scanner software, drivers, services or servers. Identify any dependency or packaging conflict during planning rather than assuming it is acceptable.
+- If a genuine requirement cannot be met through the shared approach, **inform me and obtain my explicit approval before implementing a platform-specific exception**. Explain the need, why portable alternatives are insufficient, the affected operating systems, and the maintenance, permission and packaging implications. This includes any necessary OS-command invocation or compatibility workaround.
+- Research and document such exceptions within this documentation-only task. Do not treat the choice of library as approval for code changes, toolchain changes or unresolved platform requirements.
+
 ## Your Responsibilities
+
+### Confirmed Product Decisions
+
+- Preserve the existing parent-and-children model: a device is the parent, and its multiple network interfaces are stored as child cards with their own addresses and services. Scan results must fit this structure rather than create a separate device for every interface. Interface ownership and physical network links are distinct relationships.
+- **Manual scans and refresh only.** Do not plan scheduled scans, automatic refresh or background network probing.
+- Identification may go **as deep as the user selects and the adopted tools support**. Expose the scope and limitations honestly; raise any necessary platform-specific exception for approval under the cross-platform direction above.
+- **There is no Forget or Reset feature in the intended product.** Do not invent forget, reset, rediscovery-suppression or history-purge workflows.
+- **Save everything:** preserve all application/project data and restorable state, including the complete device/interface hierarchy, relationships, edits, scan settings/results, retained history/logs, AI settings/suggestions and view/layout settings. Do not silently choose a reduced save subset. Raise any special handling needed for credentials or external assets explicitly during planning.
 
 ### 1. Review the Entire Project
 

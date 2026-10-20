@@ -100,13 +100,21 @@ impl Network {
         let (id, card) = (device.id, device.primary_card().map(|c| c.id));
         self.devices
             .insert(after_guests.unwrap_or(self.devices.len()), device);
-        if let (Some(card), Some((upstream, kind))) = (card, uplink)
+        if let Some(card) = card {
+            self.plug_found(card, uplink);
+        }
+        id
+    }
+
+    /// Plugs a card just added into `uplink`'s card, as a link of that kind kept when the
+    /// layout is reset; where that is not allowed, it is plugged in nowhere.
+    pub(super) fn plug_found(&mut self, card: CardId, uplink: Option<(CardId, ConnectionKind)>) {
+        if let Some((upstream, kind)) = uplink
             && self.plug(card, Some(upstream), true)
         {
             let links = self.links.iter_mut().chain(&mut self.detected);
             links.filter(|l| l.card == card).for_each(|l| l.kind = kind);
         }
-        id
     }
 
     /// Forgets a device with everything that runs on it, the links of their cards and the links

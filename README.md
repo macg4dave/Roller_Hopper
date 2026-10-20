@@ -35,7 +35,7 @@ src/model/         pure data and logic (devices with their network cards, virtua
                    layout; the simulated discovery run) — no Slint imports
 src/mock_data.rs   the sample network, and in mock_data/ the hosts a discovery run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
-src/ui_bridge/     edit/ (device, card, port, role and group edits), map/ (layout, dragging,
+src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,
                    lines, motion), discovery (the timed scan run), view/ (sending state to
                    the UI), model ↔ Slint conversion, reading the icon folder, choosing the
                    language

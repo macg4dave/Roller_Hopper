@@ -9,10 +9,13 @@ import { StatusDot } from "status-dot.slint";
 // and a line under its name says how many it holds. Each card follows inside the group, on an
 // inset band with a guide line down from the device's icon. A guest follows its host, indented
 // under it. Clicking selects the device or card; dragging either onto the map moves it there as
-// a drag on the map does, and plugs it in where it is dropped. The background stops short of the list's scroll bar, which floats over the
+// a drag on the map does, and plugs it in where it is dropped. Where the list accepts cards (the
+// edit page), a card's row dropped on any row of another device's group makes it a child of
+// that device. The background stops short of the list's scroll bar, which floats over the
 // right-hand edge of the rows.
 export component DeviceRow inherits Rectangle {
     in property <DeviceView> device;
+    in property <bool> accepts-cards;
     callback double-clicked;
 
     property <bool> card: device.card-id >= 0;
@@ -35,8 +38,21 @@ export component DeviceRow inherits Rectangle {
     Rectangle {
         x: 0;
         width: width-inside;
-        background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : card ? Theme.background : Theme.group-tint(device.colour);
+        background: selected || drop-here ? Theme.accent-soft : touch.has-hover ? Theme.hover : card ? Theme.background : Theme.group-tint(device.colour);
+        border-width: drop-here ? 1px : 0;
+        border-color: Theme.accent;
     }
+
+    drop := DropArea {
+        can-drop(event) => {
+            return root.accepts-cards && Bridge.can-move-card(event.data, device.id) ? DragAction.move : DragAction.none;
+        }
+        dropped(event) => {
+            Bridge.move-card-to(event.data, device.id);
+            return event.proposed-action;
+        }
+    }
+    property <bool> drop-here: drop.has-drag && drop.current-action != DragAction.none;
 
     // A thin rule above each group, and a closing one under its last card.
     if !card: Rectangle {
@@ -59,7 +75,7 @@ export component DeviceRow inherits Rectangle {
     // A device drags its first card, so it moves on the map as its first card does.
     drag := DragArea {
         allow-move: true;
-        data: Bridge.card-transfer(device.drag-card);
+        data: Bridge.card-transfer(device.drag-card, card);
         drag-image: card ? device.card-icon.image : device.icon;
 
         touch := TouchArea {

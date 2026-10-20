@@ -52,6 +52,8 @@ pub(crate) struct AppState {
     /// The card being dragged on the map, until it is dropped.
     dragging: Option<CardId>,
     selected: Option<Selection>,
+    /// A card move that would remove the parent it leaves, until the user confirms it.
+    pending_move: Option<edit::CardMove>,
     /// Devices whose group is folded up in the lists, hiding their cards.
     collapsed: HashSet<DeviceId>,
     filter: StatusFilter,
@@ -74,6 +76,7 @@ impl AppState {
             arrangement,
             dragging: None,
             selected: None,
+            pending_move: None,
             collapsed: HashSet::new(),
             filter: StatusFilter::All,
             query: String::new(),

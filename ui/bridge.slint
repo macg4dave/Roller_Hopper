@@ -285,6 +285,18 @@ export struct FoundView {
     decision: FoundDecision,
 }
 
+/// A network card about to become a child of another parent, which would leave the device or
+/// found host it is on with no card: the move removes that one, so it is asked first. The names
+/// are as shown in the lists.
+export struct MoveQuestion {
+    shown: bool,
+    card: string,
+    from: string,
+    to: string,
+    // The parent left is a found host, which leaves the results rather than the map.
+    found: bool,
+}
+
 /// A line of the discovery log. Which fields are filled depends on the event: `text` is a
 /// subnet or a device's name, `ip` and `mac` a host's, `count` a number of addresses or hosts.
 export struct LogView {
@@ -322,6 +334,15 @@ export global Bridge {
     // away from its own, in device order; and where it is plugged in now.
     in property <[string]> upstream-choices;
     in property <int> card-plug-index;
+    // The devices the selected card can be a child of, in device order, and the one it is a
+    // child of now.
+    in property <[string]> parent-choices;
+    in property <int> card-parent-index;
+    // Likewise for the selected card of a found host not on the map: the found hosts not on
+    // the map, its own among them, then the devices on the map.
+    in property <[string]> found-parent-choices;
+    in property <int> found-card-parent-index;
+    in property <MoveQuestion> move-question;
     in property <[PortView]> ports;
     in property <[string]> roles;
     in property <[RoleView]> role-list;
@@ -372,8 +393,10 @@ export global Bridge {
     callback set-card-icon(int, string);
     // Folds a device's group up in the lists, or opens it again.
     callback toggle-group(int);
-    // A card's id as a drag payload, and back again: -1 when the payload is not a card.
-    pure callback card-transfer(int) -> data-transfer;
+    // A card's id as a drag payload, and back again: -1 when the payload is not a card. The
+    // flag marks the card's own row, rather than its device's, which can also be dropped on
+    // another device's group on the edit page.
+    pure callback card-transfer(int, bool) -> data-transfer;
     pure callback transfer-card(data-transfer) -> int;
     callback search(string);
     callback set-filter(StatusFilter);
@@ -405,6 +428,14 @@ export global Bridge {
     callback edit-card(CardField, string) -> bool;
     // Plugs the selected card into the card at an index in upstream-choices; 0 for none.
     callback plug-card(int);
+    // Makes the selected card a child of the device at an index in parent-choices.
+    callback set-card-parent(int);
+    // A card's own row dropped on the group of the device with this id makes it a child there.
+    pure callback can-move-card(data-transfer, int) -> bool;
+    callback move-card-to(data-transfer, int);
+    // A move that would remove the parent the card leaves waits in move-question for these.
+    callback confirm-move();
+    callback cancel-move();
     // Adds a blank device with one blank card, and selects it: a guest of this kind on the
     // selected device, or with `none` a device of its own.
     callback add-device(GuestKind);
@@ -463,6 +494,13 @@ export global Bridge {
     callback edit-found-notes(int, string);
     callback add-found(int);
     callback ignore-found(int);
+    // A card of a found host not on the map, by the host's index and the card's card-index: as
+    // a drag payload, dropped on a found host's group (by its index) to become a child there,
+    // or given the parent at an index in found-parent-choices.
+    pure callback found-card-transfer(int, int) -> data-transfer;
+    pure callback can-move-found-card(data-transfer, int) -> bool;
+    callback move-found-card(data-transfer, int);
+    callback set-found-card-parent(int, int, int);
 }
 
 /// Purely visual map preferences from the map's View menu: what each device is labelled with.

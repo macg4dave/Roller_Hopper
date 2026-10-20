@@ -1,4 +1,4 @@
-import { Button } from "std-widgets.slint";
+import { Button, ComboBox } from "std-widgets.slint";
 import { Bridge, FoundView } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
@@ -8,7 +8,7 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 
 // The discovery details for a network card of a host not on the map: its name and icon, which
-// it is added with, over what the run found of it. Its settings are the scan's until the host
+// it is added with, and the parent it is a child of, over what the run found of it. Its settings are the scan's until the host
 // is on the map, where the card editor changes them. A card is a child of its host, which it
 // leads back to.
 export component FoundCardDetails inherits VerticalLayout {
@@ -83,6 +83,22 @@ export component FoundCardDetails inherits VerticalLayout {
         font-size: Theme.font-small;
         color: Theme.text-muted;
         wrap: word-wrap;
+    }
+    if editable: DetailField {
+        label: @tr("details.child-of");
+        ComboBox {
+            // As in the card editor: keep following Rust's state after a pick.
+            property <int> parent-index: Bridge.found-card-parent-index;
+            changed parent-index => { self.current-index = self.parent-index; }
+            horizontal-stretch: 1;
+            model: Bridge.found-parent-choices;
+            current-index: Bridge.found-card-parent-index;
+            accessible-label: @tr("details.child-of");
+            selected => {
+                Bridge.set-found-card-parent(host.index, card.card-index, self.current-index);
+                self.current-index = self.parent-index;
+            }
+        }
     }
     DetailField { label: @tr("details.ip"); value: card.ip == "" ? @tr("card.no-address") : card.ip; }
     if card.mask != "": DetailField { label: @tr("details.mask"); value: card.mask; }

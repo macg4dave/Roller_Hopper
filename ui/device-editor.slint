@@ -8,7 +8,8 @@ import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
 
 // Edit page, left side: every device with its network cards nested under it on the left, under
-// the Add button; the selected device's editable fields on the right, or the selected card's.
+// the Add button, where a card's row dropped on another device's group moves it there; the
+// selected device's editable fields on the right, or the selected card's.
 export component DeviceEditor inherits HorizontalLayout {
     in-out property <length> list-width;
 
@@ -21,7 +22,10 @@ export component DeviceEditor inherits HorizontalLayout {
         AddMenu { }
         ListView {
             vertical-stretch: 1;
-            for device in Bridge.rows: DeviceRow { device: device; }
+            for device in Bridge.rows: DeviceRow {
+                device: device;
+                accepts-cards: true;
+            }
         }
     }
 

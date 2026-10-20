@@ -72,7 +72,7 @@ alternatives remain candidates.
    manual Add, Ignore, review and manual editing available without AI.
 
 An inference result also carries its document generation, evidence revision and model version.
-Recheck the current field policy when applying it: a result started before Open, Forget, an
+Recheck the current field policy when applying it: a result started before Open, an
 evidence change or a policy change must not restore stale values or apply superseded consent.
 Discarding stale inference is safer than running it again automatically without an agreed policy.
 

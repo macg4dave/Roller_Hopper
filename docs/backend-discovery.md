@@ -8,10 +8,11 @@ All collection executes inside the app. External scanners, helper executables, l
 backends and separately installed services/drivers are excluded. Selected devices and normal
 network discovery/name services are data sources, not hosting for the application's backend.
 
-The selected engine approach is [upstream nrev through Cargo](backend-scanner-engine.md),
+The selected engine approach is [upstream netscli-core through Cargo](backend-scanner-engine.md),
 without a fork or copied scanner. Methods below describe desired evidence and coverage, not
 instructions to implement the probes ourselves. Stock-release Windows packaging and run
-control remain qualification gaps; no source integration is authorised in this documentation task.
+control remain qualification gaps. Any necessary platform-specific exception must be
+explained and approved; no source integration is authorised in this documentation task.
 
 ## Plan each run explicitly
 
@@ -21,6 +22,13 @@ targets rather than scanning every prefix on the map. A routed subnet can be sca
 through an existing route; the application does not create routes, join arbitrary VLANs or
 configure equipment. Keep stable user network contexts: a prefix or transient interface index
 alone cannot distinguish two networks using `192.168.1.0/24`.
+
+Preserve the confirmed parent-device/child-interface structure: each interface retains its
+own addresses, services and relationships under its owning device. Reconcile endpoint
+observations into that structure with identity evidence; several interfaces do not require
+several duplicate parent devices. Ownership is distinct from an interface's network uplink.
+This clarifies result storage, not automatic target selection or permission to probe every
+subnet represented by a stored card.
 
 Freeze the target set, transport/port range, methods, exclusions and limits at Start. Expand
 targets lazily, reject accidental huge/invalid ranges, handle IPv4 /31 and /32 deliberately,
@@ -33,7 +41,11 @@ service enrichment, and explicitly selected broad port coverage. Support the req
 scan without making all 65,535 ports on every host the default. TCP-connect probing can cover
 the full selected TCP range; UDP needs protocol-aware queries and different outcome semantics.
 The user selected TCP ranges plus named UDP discovery protocols (Q4a), rather than a blanket
-UDP sweep. Exact range/exclusion rules and workload bounds remain Q4/Q7.
+UDP sweep. Exact range/exclusion rules remain planning details; workload bounds remain Q7.
+Identification depth is user-selected up to what the adopted tools support (Q17), including
+active identification where available. Keep broader identification available in the backend
+even if the initial GUI exposes less. Unsupported methods and required platform exceptions
+must be explicit; tool availability is not permission to configure or exploit devices.
 
 ## Combine sources without overstating them
 
@@ -161,8 +173,10 @@ probes and starts/second separately, bound per-device enrichment and total run w
 a bounded UI log, and apply retention. Subnet size × port count, not host count alone, drives
 scan cost. Validate on all three OSes before claiming capability parity.
 
-The agreed background policy is manual broad scans with optional lightweight refresh (Q5).
-Refresh known endpoints within the chosen scope; do not turn it into periodic full port scans.
-Reconcile observed changes against protected manual values and use the proposed
+The agreed policy is **manual scans and refresh only** (Q5). Do not schedule checks or keep
+network discovery running after the user-started run. Open, navigation and network changes
+do not start traffic. Last-seen times and cached facts may age without active collection;
+show last-known status rather than inventing fresh online/offline observations.
+Reconcile each manual run against protected values using the proposed
 [field warning](backend-architecture.md#field-precedence-and-topology). Cached facts or an AI
-guess never count as a fresh successful probe. Cadence and stale/offline thresholds remain Q5a.
+guess never count as a fresh successful probe.

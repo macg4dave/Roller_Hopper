@@ -1,5 +1,6 @@
 //! Sends the state to the window's `Bridge` global after every change: the lists, the roles and
-//! groups, the selection and its network cards, and the discovery page. The map sends its own
+//! groups, the selection and its network cards, a card move waiting to be confirmed, and the
+//! discovery page. The map sends its own
 //! part (see [`super::map::push`]); the network cards' views are built in [`cards`], and the
 //! discovery page's in [`discovery`].
 
@@ -8,8 +9,9 @@ mod discovery;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
+use super::edit::CardMove;
 use super::{AppState, convert, map};
-use crate::model::{CardId, Device, Network, Role, StatusFilter};
+use crate::model::{CardId, Device, Network, Parent, Role, StatusFilter};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
@@ -44,6 +46,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
     push_selection(&bridge, &labels, state);
     push_card(&bridge, &labels, state);
+    push_move_question(&bridge, &labels, state);
 }
 
 /// Builds the rows of the lists and the nodes of the map.
@@ -202,7 +205,54 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_upstream_choices(model);
     }
     bridge.set_card_plug_index(i32::try_from(state.plug_choice()).unwrap_or_default());
+    push_card_parents(bridge, labels, state);
     bridge.set_selected_card(id);
+}
+
+/// The devices the selected card can be a child of, and the one it is a child of now.
+fn push_card_parents(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let network = &state.network;
+    let parents = state.parent_choices();
+    let owner = state.selected_card().and_then(|c| network.card_owner(c));
+    let at = parents.iter().position(|&p| Some(p) == owner.map(|d| d.id));
+    bridge.set_card_parent_index(at.map_or(-1, |at| i32::try_from(at).unwrap_or_default()));
+    let devices = parents.iter().filter_map(|&p| network.device(p));
+    let names = devices.map(|d| labels.invoke_device_name(d.name.trim().into()));
+    if let Some(model) = sync(&bridge.get_parent_choices(), names.collect()) {
+        bridge.set_parent_choices(model);
+    }
+}
+
+/// The move waiting for the user to confirm removing the parent its card leaves, if any.
+fn push_move_question(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let network = &state.network;
+    let card_name = |name: &str, at: usize| {
+        labels.invoke_card_name(name.trim().into(), i32::try_from(at).unwrap_or_default())
+    };
+    let question = state.pending_move.and_then(|request| match request {
+        CardMove::Map { card, to } => {
+            let owner = network.card_owner(card)?;
+            let at = owner.cards.iter().position(|c| c.id == card)?;
+            Some(ui::MoveQuestion {
+                shown: true,
+                card: card_name(&owner.cards.get(at)?.name, at),
+                from: labels.invoke_device_name(owner.name.trim().into()),
+                to: discovery::parent_name(labels, state, Parent::Device(to)),
+                found: false,
+            })
+        }
+        CardMove::Found { host, card, to } => {
+            let found = state.discovery.found().get(host)?;
+            Some(ui::MoveQuestion {
+                shown: true,
+                card: card_name(&found.device.cards.get(card)?.name, card),
+                from: labels.invoke_found_name(found.device.name.trim().into()),
+                to: discovery::parent_name(labels, state, to),
+                found: true,
+            })
+        }
+    });
+    bridge.set_move_question(question.unwrap_or_default());
 }
 
 fn count(network: &Network, filter: StatusFilter) -> i32 {

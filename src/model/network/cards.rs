@@ -1,17 +1,17 @@
 //! Editing a device's network cards: adding a blank one, filling in its IPv4 settings, plugging
-//! it into a card of another device, and removing it.
+//! it into a card of another device, making it a child of another device, and removing it.
 
 use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-use super::Network;
+use super::{ConnectionKind, Network, children};
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::DeviceId;
 
 impl Network {
     /// Whether a card other than `except` already has `address`.
-    pub(super) fn address_taken(&self, address: Ipv4Addr, except: Option<CardId>) -> bool {
+    pub(crate) fn address_taken(&self, address: Ipv4Addr, except: Option<CardId>) -> bool {
         let mut cards = self.devices.iter().flat_map(|d| &d.cards);
         cards.any(|card| {
             Some(card.id) != except && card.address.is_some_and(|a| a.addr() == address)
@@ -72,6 +72,80 @@ impl Network {
     /// layout is reset. Refused (false) into a card of its own device or one behind it.
     pub(crate) fn plug_card(&mut self, card: CardId, upstream: Option<CardId>) -> bool {
         self.plug(card, upstream, true)
+    }
+
+    /// The device `card` is the only card of, which moving the card to another device removes.
+    pub(crate) fn only_card_of(&self, card: CardId) -> Option<DeviceId> {
+        let owner = self.card_owner(card)?;
+        (owner.cards.len() == 1).then_some(owner.id)
+    }
+
+    /// Whether `card` may become a child of `to`: a device other than its own and, when it is
+    /// its device's only card, not one running on that device, which then runs on `to`.
+    pub(crate) fn can_move_card(&self, card: CardId, to: DeviceId) -> bool {
+        let Some(owner) = self.card_owner(card) else {
+            return false;
+        };
+        self.device(to).is_some()
+            && owner.id != to
+            && !(owner.cards.len() == 1 && self.runs_within(to, owner.id))
+    }
+
+    /// Makes `card` the last card of `to`, keeping its id, settings and links, apart from those
+    /// to `to`'s other cards, as a device's cards are never plugged into each other. A device
+    /// left with no card is removed, and what ran on it runs on `to`. Refused (false) where
+    /// [`Self::can_move_card`] does not allow it.
+    pub(crate) fn move_card(&mut self, card: CardId, to: DeviceId) -> bool {
+        if !self.can_move_card(card, to) {
+            return false;
+        }
+        let emptied = self.only_card_of(card);
+        let owner = self.devices.iter_mut().find_map(|d| {
+            let at = d.cards.iter().position(|c| c.id == card)?;
+            Some(d.cards.remove(at))
+        });
+        let (Some(moved), Some(target)) = (owner, self.devices.iter_mut().find(|d| d.id == to))
+        else {
+            return false;
+        };
+        let siblings: Vec<CardId> = target.cards.iter().map(|c| c.id).collect();
+        target.cards.push(moved);
+        let between = |l: &super::CardLink| {
+            (l.card == card && siblings.contains(&l.upstream))
+                || (l.upstream == card && siblings.contains(&l.card))
+        };
+        for links in [&mut self.links, &mut self.detected] {
+            links.retain(|l| !between(l));
+        }
+        if let Some(gone) = emptied {
+            let guests = self.devices.iter_mut().filter_map(|d| d.guest.as_mut());
+            guests.filter(|g| g.host == gone).for_each(|g| g.host = to);
+            self.devices.retain(|d| d.id != gone);
+            self.devices = children::hosts_first(std::mem::take(&mut self.devices));
+        }
+        true
+    }
+
+    /// Adds `card`, as a scan found it, to `to` as its last card under a fresh id, plugged into
+    /// `uplink`'s card as in [`Self::insert_device`], and returns it. Refused (`None`) when `to`
+    /// is missing or another card has its address.
+    pub(crate) fn adopt_card(
+        &mut self,
+        to: DeviceId,
+        mut card: NetworkCard,
+        uplink: Option<(CardId, ConnectionKind)>,
+    ) -> Option<CardId> {
+        if card
+            .address
+            .is_some_and(|a| self.address_taken(a.addr(), None))
+        {
+            return None;
+        }
+        card.id = self.next_card_id();
+        let id = card.id;
+        self.device_mut(to)?.cards.push(card);
+        self.plug_found(id, uplink);
+        Some(id)
     }
 
     /// Removes a network card, its link, and the links of the cards plugged into it, which are
@@ -161,6 +235,76 @@ mod tests {
         );
         assert!(network.plug_card(card, None));
         assert!(network.uplink(card).is_none());
+    }
+
+    #[test]
+    fn a_devices_only_card_moved_elsewhere_keeps_its_settings_and_removes_the_device() {
+        let mut network = mock_data::network();
+        let router = DeviceId(1);
+        let before = network.card(PC_CARD).cloned();
+        assert_eq!(network.only_card_of(PC_CARD), Some(PC));
+        assert!(network.move_card(PC_CARD, router));
+        assert!(network.device(PC).is_none(), "removed");
+        let cards = &network.device(router).unwrap().cards;
+        assert_eq!(cards.last(), before.as_ref(), "its next card, as it was");
+        assert_eq!(
+            network.uplink(PC_CARD).map(|c| c.upstream),
+            Some(SWITCH_CARD),
+            "still plugged in"
+        );
+    }
+
+    #[test]
+    fn a_moved_card_is_unplugged_from_its_new_siblings() {
+        let mut network = mock_data::network();
+        let docker = DeviceId(19);
+        assert_eq!(network.only_card_of(DOCKER_LAB), None);
+        assert!(network.move_card(DOCKER_LAB, DeviceId(22)));
+        assert_eq!(network.device(docker).unwrap().cards.len(), 1, "kept");
+        assert!(network.uplink(DOCKER_LAB).is_none(), "was the lab router's");
+        network.restore_connections();
+        assert!(network.uplink(DOCKER_LAB).is_none(), "for good");
+    }
+
+    #[test]
+    fn what_ran_on_a_removed_device_runs_where_its_card_went() {
+        let mut network = mock_data::network();
+        let (server, docker, router) = (DeviceId(6), DeviceId(19), DeviceId(1));
+        let server_card = CardId(6);
+        assert!(!network.move_card(server_card, docker), "runs on it");
+        assert!(!network.move_card(server_card, DeviceId(6)), "its own");
+        assert!(!network.move_card(server_card, DeviceId(999)));
+        assert!(!network.move_card(CardId(999), router));
+        assert!(network.move_card(server_card, router));
+        assert!(network.device(server).is_none());
+        assert_eq!(network.host(docker), Some(router));
+        let devices = network.devices();
+        for (at, device) in devices.iter().enumerate().skip(1) {
+            if let Some(host) = network.host(device.id) {
+                let before = &devices[at - 1];
+                assert!(network.runs_within(before.id, host), "{}", device.name);
+            }
+        }
+    }
+
+    #[test]
+    fn a_found_card_is_adopted_under_a_fresh_id_unless_its_address_is_taken() {
+        let mut network = mock_data::network();
+        let taken = network.card(PC_CARD).cloned().unwrap();
+        assert_eq!(network.adopt_card(DeviceId(1), taken, None), None);
+        let card = NetworkCard {
+            address: Some(net("192.168.1.240/24")),
+            ..NetworkCard::blank(CardId(0))
+        };
+        let uplink = Some((SWITCH_CARD, ConnectionKind::Inferred));
+        assert_eq!(
+            network.adopt_card(DeviceId(999), card.clone(), uplink),
+            None
+        );
+        let id = network.adopt_card(PC, card, uplink).unwrap();
+        assert_eq!(network.card_owner(id).map(|d| d.id), Some(PC));
+        let link = network.uplink(id).map(|c| (c.upstream, c.kind));
+        assert_eq!(link, Some((SWITCH_CARD, ConnectionKind::Inferred)));
     }
 
     #[test]

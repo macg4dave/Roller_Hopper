@@ -55,13 +55,17 @@ in-flight results while launching no new probes, and versioned JSON with explici
 The first-release target is home/small-office networks of roughly 250 devices, up to roughly
 700 MB of AI weights if useful on a normal CPU, and the existing inferred tree with managed
 topology deferred. These settle Q4a/Q6a/Q22b/Q7a/Q16c/Q14, not the remaining workload, lifecycle,
-runtime-resource or accuracy questions. The current answers also confirm manual broad scans
-with optional lightweight refresh (Q5) and manual precedence over AI (Q10a). For conflicting
+runtime-resource or accuracy questions. The latest answers confirm manual scans/refresh only
+(Q5), user-selected identification depth within tool support (Q17), and manual precedence
+over AI (Q10a). Multi-interface devices retain their parent-device/child-card hierarchy.
+For conflicting
 detected/manual values, the user requested an alert design rather than selecting a resolution
 policy; [the architecture](backend-architecture.md#field-precedence-and-topology) proposes a
 persistent comparison warning for review.
 Further answers confirm run lifetime across pages with cancellation on close (Q6b), separate
-crash recovery (Q13a), and deferral of custom-icon saving (Q22c).
+crash recovery (Q13a), complete restorable-state saving (Q22a), and no Forget or Reset
+features (Q15a). The selected engine is netscli-core, with shared cross-platform integration
+and explicit approval before an unavoidable platform-specific exception.
 
 Everything described as a recommendation is provisional. The current
 [product guide](agents/product.md) still authorises a frontend prototype only. These documents
@@ -132,8 +136,10 @@ Further static findings, recorded without source repairs:
   [children.rs](../src/model/network/children.rs). This is a static finding, not a reproduced bug.
 - [Layout](../src/model/layout.rs) starts from cards without an uplink. A rootless imported
   cycle would have no positions; its depth guards do not repair invalid topology.
-- Reset layout also restores the saved connections; Forget recursively removes guests and
-  promises their return on restart. Persistence changes the implications of both controls.
+- The older reviewed source contained Reset/Forget behaviour. The user has now confirmed
+  neither feature belongs in the intended product. Treat that baseline finding as a source
+  discrepancy, not a requirement to design persistence or deletion around those controls;
+  this documentation task makes no source changes.
 - The product guide's read-only details/separate edit description differs from current inline
   editing. Preserve actual functionality; resolve the documentation direction explicitly.
 

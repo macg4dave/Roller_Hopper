@@ -4,7 +4,9 @@
 use slint::{ModelRc, SharedString, VecModel};
 
 use super::sync;
-use crate::model::{Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Phase};
+use crate::model::{
+    Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase,
+};
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::discovery::STEP;
 use crate::ui_bridge::{AppState, convert};
@@ -77,8 +79,31 @@ fn push_found(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     }
     let card = selected.and_then(|(_, f)| selected_card(state, f));
     bridge.set_selected_found_card(card.map_or(-1, int));
+    let parents = state.found_parent_choices();
+    let own = selected.map(|(index, _)| Parent::Found(index));
+    let at = parents.iter().position(|&p| Some(p) == own);
+    bridge.set_found_card_parent_index(at.map_or(-1, int));
+    let names = parents.into_iter().map(|p| parent_name(labels, state, p));
+    if let Some(model) = sync(&bridge.get_found_parent_choices(), names.collect()) {
+        bridge.set_found_parent_choices(model);
+    }
     bridge.set_found_details(details.unwrap_or_default());
     bridge.set_selected_found(selected.map_or(-1, |(index, _)| int(index)));
+}
+
+/// A card's parent as the lists name it: a found host's name, or a device's.
+pub(super) fn parent_name(labels: &Labels<'_>, state: &AppState, parent: Parent) -> SharedString {
+    match parent {
+        Parent::Found(index) => {
+            let found = state.discovery.found().get(index);
+            let name = found.map(|f| f.device.name.trim()).unwrap_or_default();
+            labels.invoke_found_name(name.into())
+        }
+        Parent::Device(id) => {
+            let name = state.network.device(id).map(|d| d.name.trim());
+            labels.invoke_device_name(name.unwrap_or_default().into())
+        }
+    }
 }
 
 fn int(n: usize) -> i32 {
@@ -159,9 +184,11 @@ fn selected_card(state: &AppState, found: &Found) -> Option<usize> {
 }
 
 /// The row of each of `found`'s cards, made from `row`, the row of the host: all its cards, as
-/// in the device list, with whether the run saw each.
+/// in the device list, with whether the run saw each. A host on the map shows its device's
+/// cards there, which may have changed since, as cards moved to it.
 fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::FoundView> {
-    let cards = &found.device.cards;
+    let on_map = found.on_map().and_then(|id| state.network.device(id));
+    let cards = &on_map.unwrap_or(&found.device).cards;
     let rows = cards.iter().enumerate().map(|(at, card)| ui::FoundView {
         card_index: int(at),
         card_name: card.name.trim().into(),

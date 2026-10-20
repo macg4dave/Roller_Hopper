@@ -6,6 +6,7 @@ mod drag;
 mod lines;
 mod motion;
 
+pub(super) use drag::payload_child;
 pub(super) use motion::Motion;
 
 use std::cell::RefCell;
@@ -196,7 +197,7 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     // A card dragged out of the lists carries its id as text, as Slint's drag payload is
     // opaque to Slint code. The prefix keeps text dragged in from other apps from passing for
     // a card.
-    bridge.on_card_transfer(|id| SharedString::from(drag::card_payload(id)).into());
+    bridge.on_card_transfer(|id, child| SharedString::from(drag::card_payload(id, child)).into());
     bridge.on_transfer_card(|data| {
         let text = data.plain_text().unwrap_or_default();
         drag::payload_card(&text).unwrap_or(-1)

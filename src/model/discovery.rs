@@ -3,8 +3,10 @@
 //! picks. Which hosts answer is handed in (sample data); nothing here touches a real network.
 
 mod found;
+mod moves;
 
 pub(crate) use found::{Answer, Decision, Finding, Found, FoundFilter, Method};
+pub(crate) use moves::Parent;
 
 use std::net::Ipv4Addr;
 

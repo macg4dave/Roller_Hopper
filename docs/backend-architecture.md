@@ -8,15 +8,17 @@ file tree or a request for one trait per component.
 ## Retain the current application boundary
 
 Use one Rust desktop process. Keep Slint, the existing `Bridge`, reusable forms, card-based map,
-selection and pure network model. Integrate the upstream nrev library around those boundaries;
+selection and pure network model. Integrate the upstream netscli-core library around those boundaries;
 do not introduce a web service, plugin framework, generic repository layer or second inventory.
 The user's hard boundary also excludes bundled child executables, external scanner/model
 programs, localhost servers and separately installed helper services. Rust/native dependencies
 must execute in process and ship within the app. Normal OS APIs and communication with selected
 network targets remain the collection boundary, not an externally hosted application backend.
 Use normal Cargo dependency updates, with no maintained fork or copied scanner. See
-[the engine contract and Windows dependency obstacle](backend-scanner-engine.md). The app
-owns run lifetime and observation admission; nrev supplies implemented scanning and probes.
+[the engine contract and platform qualification](backend-scanner-engine.md). The app
+owns run lifetime and observation admission; netscli-core supplies implemented scanning and probes.
+Any unavoidable platform-specific exception must be explained to the user and approved
+before implementation; prefer shared logic and upstream-maintained APIs.
 
 ```mermaid
 flowchart LR
@@ -25,7 +27,7 @@ flowchart LR
     R --> D[One authoritative in-memory document]
     D -->|existing view projection| UI
     B -->|frozen run commands| W[Bounded background coordinator]
-    W --> P[Upstream nrev library and required supplementary collectors]
+    W --> P[Upstream netscli-core library and required supplementary collectors]
     P -->|owned observation batches| B
     W -->|terminal outcome| B
     D -->|immutable save snapshot| S[Background document file I/O]
@@ -86,7 +88,7 @@ device/card newtypes at the domain boundary; representation changes must preserv
 | Concept | Minimum information and invariant |
 | --- | --- |
 | Network scope | Durable user-recognised network/context; collector interface and optional VLAN/route context; identical private prefixes can exist in different scopes |
-| Device and card | Durable local keys independent of IP/MAC; device owns cards, guest ownership remains a distinct relationship |
+| Device and card | Durable local keys independent of IP/MAC; one parent device owns multiple child interface cards. Reconcile observed endpoints into that hierarchy with evidence; guest hosting and physical upstream links remain distinct relationships |
 | Address observation | IP, scope, card association if supported, observation time/source; optional prefix only when actually known; preserve an extension path for deferred IPv6 zones/multiple addresses |
 | Evidence | Field/value, source/method, target/context, observed time and expiry/staleness; last success separate from latest collection outcome |
 | User overlay | Explicit optional display name, role, icon, notes, manual card/service/topology assertions; clearing an override returns to observed fallback |
@@ -175,14 +177,18 @@ document as authority. It fits explicit Save/dirty-state semantics and reuses th
 in-memory model. A private auto-updating SQLite catalogue is not a substitute for user files.
 Do not add both JSON and a database as competing stores of the same inventory.
 
-The document should carry its schema version, ID allocator, network contexts, devices/cards,
-current address/service/evidence snapshots with timestamps, user labels/notes/icons, roles/groups,
-manual and inferred relationships, and map arrangement. Decide per-document AI policy in Q10b.
-Do not serialise Slint handles, pixel animation state, running tasks, credentials or bundled
-model weights. Treat previously online devices as last-known observations on reopening, not
-current reachability. Map pan/zoom and panel sizes are a separate preference decision.
+The user confirmed **save everything** (Q22a): persist all application/project data and
+restorable state. This includes the schema/ID state, network contexts, complete parent-device
+and child-interface hierarchy, address/service/evidence records with timestamps, labels,
+notes/icons, roles/groups, relationships, scan options/results, retained history/logs, AI
+settings/suggestions and view state such as pan/zoom, layout and panel sizes. The scope of
+saved state is settled; the representation and portability of sensitive data, custom assets
+and model references must be explicit rather than silently dropping those categories.
+Live Slint handles, sockets and running tasks are runtime resources; persist their meaningful
+state, not process objects, and never resume traffic on Open. Previously online devices
+reopen as last-known observations, not freshly verified reachability. AI policy still follows Q10b.
 
-Use a stable native extension after Q22a; the extension is not validation. Open reads into a
+Choose a stable native extension; the extension is not validation. Open reads into a
 candidate document, bounds file size/record counts/strings, validates schema and cross-record
 references, migrates supported older versions, then replaces the active document only after
 unsaved changes are handled. Unknown newer formats, corrupt data and failed migrations leave
@@ -203,11 +209,13 @@ unchanged. An Open/close action with dirty edits needs Save/Discard/Cancel; infe
 must not race a document switch. A new document generation invalidates old callbacks/results.
 
 Store safe relative icon identifiers and use built-in fallbacks when an icon is unavailable.
-The user deferred custom-icon saving (Q22c): embedding icons or copying companion folders is
-not an initial requirement. A map must still open with a fallback; do not make an absolute
-build-machine icon path a document dependency.
+Preserve custom-icon selections under the complete-save requirement; decide explicitly
+whether external artwork is embedded, accompanied or referenced. The earlier custom-icon
+deferral does not authorise silently dropping state. A map must still open with a fallback;
+do not make an absolute build-machine icon path a document dependency.
 Native file pickers must use in-process APIs/normal desktop integration, never launch another
-program. Extension, saved views/history and multi-writer conflict policy remain Q13/Q22a.
+program unless an unavoidable exception is explained and approved. Extension, asset/sensitive-data
+representation and multi-writer conflict policy remain open; saving view/history state is agreed.
 
 Serialise saves to the same destination: an older snapshot finishing after a newer one must
 not replace newer saved content. Each receipt identifies document generation, revision and
@@ -217,8 +225,10 @@ finish or account for that save explicitly. Recovery writes use their own destin
 
 User-selected document paths are distinct from per-user preferences and the requested crash
 recovery snapshot. Recovery must be labelled unsaved, respect the same validation, and never
-silently overwrite a user's saved document. Network credentials belong in OS credential storage,
-not portable documents. Opened files carry no authority to enable scanning, AI automation or
+silently overwrite a user's saved document. The proposed credential representation is a
+reference to secure storage; whether credentials must transfer with a complete save needs
+explicit agreement. Do not interpret save everything as permission to write plaintext secrets.
+Opened files carry no authority to enable scanning, AI automation or
 auto-add without the local user's policy.
 
 If later history/scale requirements justify SQLite, consider a single documented SQLite-native
@@ -245,12 +255,13 @@ reliably; if a collector overflows, report lost coverage and re-observe within a
 Throttle GUI projection (a proposed 5–10 batches/second) while retaining final state. These
 are starting points to measure, not demonstrated performance figures.
 
-The user selected manual broad scans and optional lightweight refresh (Q5). Prefer protocol
-TTLs, small directed refreshes of known endpoints, cached name results and network-change
-invalidation over repeated broad scans. Refresh is opt-in; exact cadence and traffic budget
-remain Q5a. Missing responses make evidence stale/unknown unless an agreed
-policy supports a stronger offline conclusion. Link loss invalidates that scope's current
-reachability without declaring every device globally offline.
+The user selected **manual scans and refresh only** (Q5). All network collection, including
+directed checks and service browsing, belongs to an explicit user-started run. Do not schedule
+refreshes, leave discovery subscriptions probing after the run, or scan on Open, navigation
+or network changes. Timestamps/TTLs may describe ageing evidence without sending traffic.
+Keep last-observed reachability and last-seen visible between runs; elapsed time alone does
+not prove Offline. Local link loss can invalidate current reachability for that scope without
+claiming a fresh remote-device observation.
 
 Cancellation needs an independent token/control path so a full result queue cannot prevent
 Stop. After signalling, supervise all owned tasks and acknowledge one terminal outcome;

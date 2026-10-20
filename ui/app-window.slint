@@ -9,6 +9,7 @@ import { DetailsPanel } from "details-panel.slint";
 import { EditPage } from "edit-page.slint";
 import { DiscoveryPage } from "discovery-page.slint";
 import { Splitter } from "components/splitter.slint";
+import { MoveDialog } from "move-dialog.slint";
 
 export { Bridge, Labels }
 
@@ -146,5 +147,10 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+
+    if Bridge.move-question.shown: MoveDialog {
+        width: root.width;
+        height: root.height;
     }
 }

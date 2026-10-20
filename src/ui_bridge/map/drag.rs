@@ -7,6 +7,8 @@ use crate::ui_bridge::AppState;
 
 /// What a network card dragged out of the lists carries, before its id.
 const CARD_PAYLOAD: &str = "network-mapper-card:";
+/// What a card's own row carries instead, so only it can be dropped on another device's group.
+const CHILD_PAYLOAD: &str = "network-mapper-child:";
 
 impl AppState {
     /// Drags card `id` so its icon is centred on `at`, on the map or from the lists. Ignored for
@@ -63,14 +65,24 @@ impl AppState {
     }
 }
 
-/// The drag payload of the card with UI id `id`.
-pub(super) fn card_payload(id: i32) -> String {
-    format!("{CARD_PAYLOAD}{id}")
+/// The drag payload of the card with UI id `id`, dragged by its own row (`child`) or its
+/// device's.
+pub(super) fn card_payload(id: i32, child: bool) -> String {
+    let prefix = if child { CHILD_PAYLOAD } else { CARD_PAYLOAD };
+    format!("{prefix}{id}")
 }
 
-/// The UI id of the card a drag payload carries; `None` for anything else.
+/// The UI id of the card a drag payload carries, by either row; `None` for anything else.
 pub(super) fn payload_card(text: &str) -> Option<i32> {
-    text.strip_prefix(CARD_PAYLOAD)?.parse().ok()
+    let id = text.strip_prefix(CARD_PAYLOAD);
+    id.or_else(|| text.strip_prefix(CHILD_PAYLOAD))?
+        .parse()
+        .ok()
+}
+
+/// The UI id of the card a drag payload carries, only when dragged by its own row.
+pub(in crate::ui_bridge) fn payload_child(text: &str) -> Option<i32> {
+    text.strip_prefix(CHILD_PAYLOAD)?.parse().ok()
 }
 
 #[cfg(test)]
@@ -254,7 +266,18 @@ mod tests {
 
     #[test]
     fn a_drag_payload_carries_a_card_and_nothing_else() {
-        assert_eq!(payload_card(&card_payload(42)), Some(42));
+        assert_eq!(payload_card(&card_payload(42, false)), Some(42));
+        assert_eq!(
+            payload_card(&card_payload(42, true)),
+            Some(42),
+            "its own row"
+        );
+        assert_eq!(payload_child(&card_payload(42, true)), Some(42));
+        assert_eq!(
+            payload_child(&card_payload(42, false)),
+            None,
+            "its device's"
+        );
         assert_eq!(payload_card("42"), None, "text from another app");
         assert_eq!(payload_card(&format!("{CARD_PAYLOAD}x")), None);
     }

@@ -17,7 +17,8 @@ pub(crate) use device::{
     Device, DeviceId, DeviceKind, Guest, GuestKind, Icon, LastSeen, Role, Status,
 };
 pub(crate) use discovery::{
-    Answer, Decision, Discovery, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Phase,
+    Answer, Decision, Discovery, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent,
+    Phase,
 };
 pub(crate) use groups::{GroupColour, GroupId, LineStyle};
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};

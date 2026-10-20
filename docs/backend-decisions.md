@@ -16,20 +16,25 @@ The questions already asked in the conversation have been incorporated here.
 | Q11 | One or two existing small models, bundled, offline, CPU, using Rust tools; no custom AI system | Reuse pretrained weights and an inference runtime. No custom training pipeline, cloud dependency, GPU requirement or AI service |
 | Q21 | Everything inside the app; no outside servers or other programs | All backend/inference runs in process. Exclude child executables, scanner/model programs, localhost servers and separately installed helper services; native dependencies ship as app libraries. |
 | Q22 | Produce save files and open files | Native Open/Save/Save As and portable user-owned map documents belong in the first release; a private cache/database alone is insufficient. Format and save details remain below. |
-| Q4a | Selected TCP ranges plus named UDP discovery protocols | Broad coverage is user-selected TCP; no blanket UDP port sweep. Arbitrary routed-range syntax, exclusions and resource limits remain Q4/Q7. |
+| Q4a | Selected TCP ranges plus named UDP discovery protocols | Broad coverage is user-selected TCP; no blanket UDP port sweep. Parent/interface storage is confirmed in Q4b; range syntax/exclusions remain planning details and resource limits remain Q7. |
 | Q6a | Pause launches no new work; in-flight probes may finish and display results | Pause is a scheduling boundary. Navigation, close/restart and shutdown/save policy remain Q6. |
-| Q22b | Versioned JSON with explicit Open/Save/Save As | Native format direction is agreed; no initial SQLite inventory. Recovery and custom-icon scope are refined by Q13a/Q22c; extension, conflicts and saved-view/history remain Q13/Q22a. |
+| Q22b | Versioned JSON with explicit Open/Save/Save As | Native format direction is agreed; no initial SQLite inventory. Q22a below now confirms saving all application/project data and restorable state. Recovery timing, extension and writer conflicts remain open. |
 | Q7a | Home/small-office networks, up to roughly 250 devices | First-release acceptance targets this scale; card/service counts, port workload, latency, rates and memory limits still need Q7. This is not proof of throughput or a hard device cap. |
 | Q16c | Up to roughly 700 MB of bundled AI weights if useful on a normal CPU | Qwen's approximately 639 MB artifact fits the weight allowance; runtime/installer size, peak RAM, CPU latency and usefulness remain unverified. No model is selected by this answer. |
 | Q14 | Keep the inferred card-based tree; managed topology later | No first-release physical switch-port/loop requirement or graph rewrite. Authenticated topology collectors remain future scope. |
-| Q5 | Manual scans; optional lightweight refresh | Broad scans remain explicit. Lightweight refresh is opt-in; cadence, probe budget and stale-status thresholds remain Q5a. |
+| Q5 | Manual scans and refresh only | No scheduled scans, automatic refresh or background network probing. New network evidence is collected only in a user-started run; last-seen data must not imply continuous monitoring. |
 | Q10a | “Manual is king”; AI is most useful for first-time devices | Manual fields always win. Prioritise suggestions for new devices; no automatic replacement of manual fields. Auto-add and filling missing inferred fields remain separate policy decisions. |
 | Q6b | Continue scans across pages; cancel on app close | Run lifetime belongs to the app, not the discovery page. Retain partial findings, handle unsaved changes, and never resume traffic automatically after restart. |
 | Q13a | Keep a separate crash-recovery copy | Explicit Save still controls the user's file; recovery is labelled unsaved, separate and subject to validation. Cadence/retention remain open. |
-| Q22c | Do not worry about custom-icon saving | Defer embedded icons and companion-folder packaging. Save safe icon identifiers and use a built-in fallback when unavailable; missing artwork must not prevent Open. |
-| Q23 | Use upstream nrev in the normal Cargo dependency workflow; no maintained fork | Reuse the embedded library and ordinary dependency upgrades; no copied scanner, local patches, submodule or custom scanning engine. Keep supported backend options broader than the initial GUI. See [integration and qualification](backend-scanner-engine.md). |
-| Q23a | Users only run the app; no external software, services or servers | Preserve Q21, including no extra capture-driver setup. Published nrev 0.7.0 has a Windows Packet-link dependency obstacle; selection of the library does not establish standalone compatibility. |
+| Q22c | Custom-icon packaging was previously deferred; latest direction is save everything | Preserve icon selections and the restorable state. Any needed external-asset packaging decision must be explicit, not a silent omission justified by the earlier deferral. |
+| Q23 | Use upstream netscli-core through normal Cargo releases; no maintained fork | Replaces nrev. Reuse the library and ordinary dependency upgrades; no copied scanner, local patches, submodule or custom engine. Keep supported backend options broader than the initial GUI. See [integration and qualification](backend-scanner-engine.md). |
+| Q23a | Users only run the app; no external software, services or servers | Preserve Q21, including no extra capture-driver setup. Audit netscli-core's actual call paths and packaged behaviour; the selected library is not proof of compatibility. |
 | Q24 | This work is documents only; read code to understand direction, do not edit it | Record the chosen approach and compatibility gaps. Do not add dependencies, modify the discovery workflow or create implementation tasks in this session. |
+| Q25 | Keep Windows/Linux/macOS integration shared wherever practical; inform the user of a hard platform-specific need and obtain approval | Prefer upstream-maintained portable APIs. Explain the need, alternatives and maintenance/permission/packaging impact before any exception. No blanket permission for OS commands, compatibility patches or a protected toolchain change. |
+| Q4b | A parent device stores multiple interfaces as child cards | Retain the existing Device → NetworkCard ownership. Reconcile endpoint observations into the correct child and parent with supporting identity evidence; do not create one device per IP or conflate ownership with physical topology. Exact target-range syntax is still a planning detail. |
+| Q17 | Identification as deep as the user wants and the adopted tools support | User-selected depth may include active identification supported by the tools; do not cap the design at passive evidence. Keep method scope and capability limits explicit; platform exceptions still require Q25 approval. |
+| Q15a | There is no Forget or Reset feature | Do not design either workflow, rediscovery suppression, reset actions or history purge around those names. Both are removed from open product questions; this documentation task changes no existing code. |
+| Q22a | Save everything | Persist all application/project data and restorable state, including hierarchy, interfaces, relationships, manual data, scan settings/results, retained history/logs, AI state and view/layout settings. No reduced save subset; raise sensitive-data and external-asset representation explicitly. |
 
 For Q9, the user is unsure of conflict resolution and asked for a way to alert them. The
 proposed answer is an inline, persistent comparison warning with source/time and explicit
@@ -51,11 +56,8 @@ in groups; implementation should not start by guessing the answers.
 
 | ID | Question and impact | Recommended default |
 | --- | --- | --- |
-| Q4 | With transport scope agreed in Q4a, which routed-range forms and exclusions are required? Changes target validation and work bounds. | Explicit IPv4 CIDRs/addresses and exclusions; no internet-wide expansion. |
-| Q5a | For the optional lightweight refresh, what cadence/traffic is acceptable, and when should stale become Offline? Defines background load and status meaning. | Refresh known endpoints only while enabled; bound the budget; no broad scan on a newly joined network. Show last-seen/stale before asserting Offline. |
 | Q6 | With navigation/close agreed in Q6b, how long may close wait for cancellation or a save, and how should an unresponsive collector be presented? Defines shutdown acceptance. | Finite, visible shutdown; never report cancellation before owned work is accounted for. A timeout cannot prove a blocking native task stopped. |
 | Q7 | For the agreed roughly 250-device target, how many cards/services, which subnets/port ranges and what latency/CPU/RAM limits should be accepted? Probe work depends on more than device count. | Agree a representative small-office workload; bound every run and measure large work estimates before launch. No invented throughput promise. |
-| Q17 | Is OS identification limited to passive/selected service evidence, or should additional fingerprint probes be available? Changes traffic and error expectations. | Explainable inference from already permitted evidence; no active OS fingerprinting, vulnerability checks or extra probes merely because AI requests them. |
 | Q18 | May optional native discovery require elevation, and is any non-topology authenticated device enrichment essential? Physical managed topology is deferred by Q14. | Ordinary scans need no mandatory admin path. External capture drivers/helper programs are excluded by Q21. Any read-only enrichment needs named equipment and explicit credentials. |
 
 ### Data ownership, topology and storage
@@ -63,11 +65,9 @@ in groups; implementation should not start by guessing the answers.
 | ID | Question and impact | Recommended default |
 | --- | --- | --- |
 | Q9 | Does the proposed field warning make conflicting manual/detected values clear enough, and which differences merit a renewed alert? Determines acknowledgement and noise. | Preserve manual assertions and observations separately; show both with source/time. Keep my value acknowledges that difference; Use detected value is an explicit edit. Never configure equipment. |
-| Q15 | Does Forget remove from map, suppress rediscovery, or delete history? Should forgetting a host remove its guests? Should Reset layout also reset manual connectivity? Changes data-loss semantics. | Separate map removal, suppression and permanent deletion; no automatic history purge. Make cascading effects explicit. Keep current reset behaviour pending an explicit decision. |
 | Q12 | How long should address history, raw evidence and run logs survive? Must local data/backups be encrypted? Who may access them on shared machines? Sets storage/security requirements. | Per-user local data, no raw packets, bounded diagnostic evidence; choose retention before schema approval. Encryption is not provided merely by SQLite. |
 | Q13 | With separate recovery agreed in Q13a, how often should it write, how many copies survive and how should two writers/failed saves behave? Determines recovery and conflict handling. | Dirty indicator and Save/Discard/Cancel on replacement/close; one writer per file; bounded, labelled recovery that never silently overwrites the saved document. |
 | Q19 | Should one save file hold several named network contexts? Is merging independently edited files needed, or just opening/saving each? Affects identity scope and whether UUIDs are justified. | Each document can hold distinct network contexts; Open replaces the active document after handling unsaved edits. File merging is separate unapproved scope. |
-| Q22a | With versioned JSON agreed and custom-icon saving deferred, what extension and views/settings/history should survive? Determines document scope and validation. | Snapshot inventory, current evidence, user edits, roles/groups and map arrangement; safe icon identifiers with fallback. Keep credentials and model weights outside documents. |
 
 ### Embedded AI and acceptance
 
@@ -81,10 +81,13 @@ in groups; implementation should not start by guessing the answers.
 
 ## Research decisions still open
 
-- Stock upstream nrev must satisfy standalone packaging and the required scan lifecycle before
-  integration can be approved; the confirmed Windows Packet-link obstacle is recorded in
-  [the engine note](backend-scanner-engine.md#confirmed-windows-dependency-issue). No fork or
-  external-driver workaround is authorised.
+- Stock upstream netscli-core must satisfy the required scan lifecycle and packaging.
+  Qualify its release/toolchain requirements and platform call paths, then bring concrete
+  exceptions to the user under Q25. No fork or external-driver workaround is authorised.
+- Preserve the confirmed device/interface ownership while deciding explicit target-range
+  syntax and exclusions. A stored interface/subnet is not automatic permission to probe it.
+- With all state included in saves, choose the extension and explicit representation of
+  credentials, external assets and model references; do not silently discard any category.
 - A maintained safe neighbour-table/ICMP path must be qualified on each OS under the existing
   no-unsafe rule; current candidates are not a verified drop-in solution.
 - Embedded model and Rust runtime must be selected together. Off-the-shelf does not mean
