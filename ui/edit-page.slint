@@ -1,10 +1,10 @@
-import { Button, TabWidget } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { DeviceEditor } from "device-editor.slint";
 import { GroupEditor } from "group-editor.slint";
 import { RoleEditor } from "role-editor.slint";
 
-// The edit page that replaces the map view: a tab each for devices, roles and groups.
+// The edit page that replaces the map view: devices on the left, groups and roles on the right.
 export component EditPage inherits Rectangle {
     callback back();
 
@@ -30,29 +30,20 @@ export component EditPage inherits Rectangle {
             }
         }
 
-        TabWidget {
+        HorizontalLayout {
             vertical-stretch: 1;
+            spacing: Theme.space-l;
 
-            Tab {
-                title: @tr("edit.tab-devices");
-                VerticalLayout {
-                    padding-top: Theme.space-m;
-                    DeviceEditor { }
-                }
-            }
-            Tab {
-                title: @tr("edit.tab-roles");
-                VerticalLayout {
-                    padding-top: Theme.space-m;
-                    RoleEditor { }
-                }
-            }
-            Tab {
-                title: @tr("edit.tab-groups");
-                VerticalLayout {
-                    padding-top: Theme.space-m;
-                    GroupEditor { }
-                }
+            DeviceEditor { horizontal-stretch: 1; }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                // Room for a role row's columns, so they never squeeze together.
+                min-width: Theme.edit-roles-min-width;
+                spacing: Theme.space-l;
+
+                GroupEditor { vertical-stretch: 0; }
+                RoleEditor { vertical-stretch: 1; }
             }
         }
     }

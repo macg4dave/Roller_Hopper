@@ -1,10 +1,12 @@
 //! A single device on the network and the closed sets that describe it.
 //!
 //! User-visible wording for these types lives in the UI (`ui/labels.slint`) so it can be
-//! translated; only language-neutral formats (MAC address, port list) are produced here.
+//! translated; only language-neutral formats (such as the MAC address) are produced here.
 
 use std::fmt;
 use std::net::Ipv4Addr;
+
+use super::services::Services;
 
 /// Stable identifier of a device; not an index into any list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -122,19 +124,6 @@ impl fmt::Display for MacAddr {
     }
 }
 
-/// An open port and the service usually found on it. The name is a protocol name, not prose.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Service {
-    pub(crate) port: u16,
-    pub(crate) name: &'static str,
-}
-
-impl fmt::Display for Service {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.port, self.name)
-    }
-}
-
 /// How long before the latest (simulated) scan the device was last seen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) struct LastSeen {
@@ -156,7 +145,7 @@ pub(crate) struct Device {
     pub(crate) model: Option<&'static str>,
     pub(crate) hostname: Option<&'static str>,
     pub(crate) last_seen: LastSeen,
-    pub(crate) services: Vec<Service>,
+    pub(crate) services: Services,
     pub(crate) notes: String,
 }
 
@@ -189,7 +178,7 @@ mod tests {
             model: None,
             hostname: None,
             last_seen: LastSeen::default(),
-            services: Vec::new(),
+            services: Services::default(),
             notes: String::new(),
         }
     }

@@ -1,0 +1,86 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { NameEdit } from "components/name-edit.slint";
+
+// The selected device's open ports on the edit page: change a number or description in place,
+// remove a port, or add one.
+export component PortEditor inherits VerticalLayout {
+    property <bool> adding;
+    property <length> number-width: 88px;
+    // Half-typed ports belong to the device they were typed for.
+    property <int> selected-id: Bridge.selected-id;
+    changed selected-id => { adding = false; }
+
+    spacing: Theme.space-xs;
+    horizontal-stretch: 1;
+
+    // Ports are identified to Rust by their index in Bridge.ports.
+    for port[i] in Bridge.ports: HorizontalLayout {
+        spacing: Theme.space-xs;
+        NameEdit {
+            width: number-width;
+            name: "\{port.port}";
+            input-type: number;
+            accessible-label: @tr("edit.port-number");
+            commit(text) => { Bridge.set-port-number(i, text); }
+        }
+        NameEdit {
+            horizontal-stretch: 1;
+            name: port.description;
+            placeholder-text: @tr("edit.port-description");
+            accessible-label: @tr("edit.port-description");
+            commit(text) => { Bridge.set-port-description(i, text); }
+        }
+        Button {
+            icon: @image-url("icons/delete.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.port-remove");
+            clicked => { Bridge.remove-port(i); }
+        }
+    }
+    if !adding: HorizontalLayout {
+        alignment: start;
+        Button {
+            text: @tr("edit.port-add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            clicked => { adding = true; }
+        }
+    }
+    if adding: HorizontalLayout {
+        spacing: Theme.space-xs;
+
+        // A refused port number stays in the field to be corrected.
+        function add() {
+            if Bridge.add-port(number-field.text, description-field.text) {
+                root.adding = false;
+            }
+        }
+
+        number-field := LineEdit {
+            width: number-width;
+            input-type: number;
+            placeholder-text: @tr("edit.port-number");
+            init => { self.focus(); }
+            accepted => { add(); }
+        }
+        description-field := LineEdit {
+            horizontal-stretch: 1;
+            placeholder-text: @tr("edit.port-description");
+            accepted => { add(); }
+        }
+        Button {
+            text: @tr("edit.port-confirm-add");
+            primary: true;
+            enabled: number-field.text != "";
+            clicked => { add(); }
+        }
+        Button {
+            icon: @image-url("icons/close.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.cancel");
+            clicked => { root.adding = false; }
+        }
+    }
+}

@@ -7,6 +7,8 @@ export component NameEdit inherits LineEdit {
     callback commit(string);
 
     text: name;
+    // Committing assigns `text`, which ends the binding above, so follow later names by hand.
+    changed name => { self.text = name; }
 
     function apply() {
         if self.text != name {

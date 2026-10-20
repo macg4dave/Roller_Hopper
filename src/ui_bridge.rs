@@ -119,6 +119,17 @@ impl AppState {
         }
     }
 
+    /// Lists a port on the selected device. False if there is none, or the port number is
+    /// refused or already listed, so the UI can keep what was typed.
+    fn add_port(&mut self, port: &str, description: &str) -> bool {
+        let Some(port) = convert::port(port) else {
+            return false;
+        };
+        let mut added = false;
+        self.edit_selected(|d| added = d.services.add(port, description));
+        added
+    }
+
     /// Forgets the selected device until restart; the rest of the map stays where it is.
     fn forget_selected(&mut self) {
         if let Some(id) = self.selected.take() {
@@ -147,6 +158,7 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         st.filter = convert::filter_from_ui(f);
     }));
     connect_device_edits(ui, state);
+    connect_port_edits(ui, state);
     connect_role_edits(ui, state);
     connect_group_edits(ui, state);
 
@@ -200,10 +212,36 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_forget(move || forget(()));
 }
 
+/// Adding, renumbering, describing and removing the selected device's open ports.
+fn connect_port_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    let (add_ui, add_state) = (ui.as_weak(), Rc::clone(state));
+    bridge.on_add_port(move |port, description| {
+        let mut added = false;
+        update(&add_ui, &add_state, |st| {
+            added = st.add_port(&port, &description);
+        });
+        added
+    });
+    let renumber = handler(ui, state, |st, (index, port): (i32, SharedString)| {
+        if let Some(port) = convert::port(&port) {
+            st.edit_selected(|d| d.services.set_port(convert::index(index), port));
+        }
+    });
+    bridge.on_set_port_number(move |index, port| renumber((index, port)));
+    let describe = handler(ui, state, |st, (index, text): (i32, SharedString)| {
+        st.edit_selected(|d| d.services.set_description(convert::index(index), &text));
+    });
+    bridge.on_set_port_description(move |index, text| describe((index, text)));
+    bridge.on_remove_port(handler(ui, state, |st, index| {
+        st.edit_selected(|d| d.services.remove(convert::index(index)));
+    }));
+}
+
 /// A new role's name and icon, with the role names the dropdown shows.
 type NewRole = (SharedString, DeviceKind, Vec<SharedString>);
 
-/// The Roles tab: adding, renaming, re-iconing, deleting and restoring roles.
+/// The role list: adding, renaming, re-iconing, deleting and restoring roles.
 fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let add = handler(ui, state, |st, (name, icon, shown): NewRole| {
@@ -242,7 +280,7 @@ fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_restore_roles(move || restore(()));
 }
 
-/// The Groups tab, and choosing a role's group on the Roles tab.
+/// The group list, and choosing a role's group in the role list.
 fn connect_group_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let set_group = handler(ui, state, |st, (role, choice)| {
@@ -453,6 +491,21 @@ mod tests {
                 .iter()
                 .all(|(_, n)| n != "Infrastructure")
         );
+    }
+
+    #[test]
+    fn a_port_is_added_to_the_selection_only_with_a_valid_number() {
+        let mut state = AppState::new(mock_data::network());
+        assert!(!state.add_port("8080", "Web"), "nothing selected");
+        state.selected = Some(DeviceId(10));
+        assert!(!state.add_port("70000", "Web"));
+        assert!(state.add_port(" 8080 ", "Web"));
+        assert!(!state.add_port("8080", "Again"), "already listed");
+        let device = state
+            .network
+            .device(DeviceId(10))
+            .map(|d| d.services.to_string());
+        assert_eq!(device.as_deref(), Some("8001 (SmartView), 8080 (Web)"));
     }
 
     #[test]

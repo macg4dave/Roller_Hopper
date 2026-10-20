@@ -56,7 +56,13 @@ export struct DeviceDetails {
     services: string,
 }
 
-/// A role on the edit page's Roles tab, in the same order as Bridge.roles.
+/// An open port of the selected device, in port order, for the edit page.
+export struct PortView {
+    port: int,
+    description: string,
+}
+
+/// A role in the edit page's role list, in the same order as Bridge.roles.
 export struct RoleView {
     // As shown in the role dropdown: translated, unless the user named it.
     name: string,
@@ -69,7 +75,7 @@ export struct RoleView {
     group: int,
 }
 
-/// A group on the edit page's Groups tab, in the same order as Bridge.groups.
+/// A group in the edit page's group list, in the same order as Bridge.groups.
 export struct GroupView {
     name: string,
     colour: GroupColour,
@@ -98,11 +104,12 @@ export global Bridge {
     in property <MapBounds> bounds;
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
+    in property <[PortView]> ports;
     in property <[string]> roles;
     in property <[RoleView]> role-list;
     // A standard role was renamed, re-iconed or deleted.
     in property <bool> roles-restorable;
-    // The Groups tab's rows, and their names led by "no group" for the role group dropdown.
+    // The group list's rows, and their names led by "no group" for the role group dropdown.
     in property <[GroupView]> groups;
     in property <[string]> group-choices;
     in property <StatusFilter> filter;
@@ -131,7 +138,13 @@ export global Bridge {
     callback reset-icon();
     // Removes the selected device until the app restarts.
     callback forget();
-    // The Roles tab. Roles are identified by their index in role-list.
+    // The selected device's ports, identified by their index in ports. Port numbers come as
+    // typed; one that is not 1–65535, or is already listed, is refused (add-port returns false).
+    callback add-port(string, string) -> bool;
+    callback set-port-number(int, string);
+    callback set-port-description(int, string);
+    callback remove-port(int);
+    // The role list. Roles are identified by their index in role-list.
     callback add-role(string, DeviceKind);
     callback rename-role(int, string);
     callback set-role-icon(int, DeviceKind);
@@ -142,7 +155,7 @@ export global Bridge {
     callback restore-roles();
     // A role and its index in group-choices.
     callback set-role-group(int, int);
-    // The Groups tab. Groups are identified by their index in groups.
+    // The group list. Groups are identified by their index in groups.
     callback add-group(string);
     callback rename-group(int, string);
     callback set-group-colour(int, GroupColour);

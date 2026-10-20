@@ -4,7 +4,7 @@ use std::net::Ipv4Addr;
 
 use crate::model::{
     Connection, ConnectionKind, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Network, Role,
-    Service, Status,
+    Services, Status,
 };
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
@@ -31,6 +31,10 @@ struct Spec {
 
 impl Spec {
     fn build(self) -> Device {
+        let mut services = Services::default();
+        for &(port, description) in self.services {
+            services.add(port, description);
+        }
         Device {
             id: DeviceId(self.id),
             name: self.name.to_owned(),
@@ -46,11 +50,7 @@ impl Spec {
             last_seen: LastSeen {
                 minutes_ago: self.minutes_ago,
             },
-            services: self
-                .services
-                .iter()
-                .map(|&(port, name)| Service { port, name })
-                .collect(),
+            services,
             notes: self.notes.to_owned(),
         }
     }

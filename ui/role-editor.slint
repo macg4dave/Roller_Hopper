@@ -4,12 +4,19 @@ import { Theme } from "theme.slint";
 import { NewRole } from "components/new-role.slint";
 import { RoleColumns, RoleRow } from "components/role-row.slint";
 
-// Edit page, Roles tab: every role, editable, with ways to add one or restore the standard set.
+// Edit page, below the groups: every role, editable, with ways to add one or restore the
+// standard set.
 export component RoleEditor inherits VerticalLayout {
     property <bool> adding;
 
     spacing: Theme.space-m;
 
+    Text {
+        text: @tr("roles.title");
+        font-size: Theme.font-heading;
+        font-weight: 600;
+        color: Theme.text;
+    }
     Text {
         text: @tr("roles.intro");
         font-size: Theme.font-body;
@@ -19,6 +26,8 @@ export component RoleEditor inherits VerticalLayout {
     // Column headings, padded and spaced like RoleRow so they sit over their columns.
     VerticalLayout {
         spacing: Theme.space-xs;
+        // Otherwise the filler after the headings takes spare height from the list below.
+        vertical-stretch: 0;
         HorizontalLayout {
             padding-left: Theme.space-s;
             padding-right: Theme.space-s;

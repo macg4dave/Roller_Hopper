@@ -146,15 +146,6 @@ msgstr "Devices, roles and groups"
 msgid "edit.back"
 msgstr "Back to map"
 
-msgid "edit.tab-devices"
-msgstr "Devices"
-
-msgid "edit.tab-roles"
-msgstr "Roles"
-
-msgid "edit.tab-groups"
-msgstr "Groups"
-
 msgid "edit.choose-device"
 msgstr "Choose a device to edit it."
 
@@ -176,13 +167,32 @@ msgstr "Forget"
 msgid "edit.cancel"
 msgstr "Cancel"
 
+# The open ports of the device being edited.
+msgid "edit.port-number"
+msgstr "Port"
+
+msgid "edit.port-description"
+msgstr "Description"
+
+msgid "edit.port-remove"
+msgstr "Remove port"
+
+msgid "edit.port-add"
+msgstr "Add port"
+
+msgid "edit.port-confirm-add"
+msgstr "Add"
+
+msgid "roles.title"
+msgstr "Roles"
+
 msgid "roles.intro"
 msgstr "Rename any role or give it a different icon. Deleting a role sets its devices to Other."
 
 msgid "roles.name"
 msgstr "Role name"
 
-# Column headings on the Roles tab.
+# Column headings over the role list.
 msgid "roles.column-icon"
 msgstr "Icon"
 
@@ -216,8 +226,11 @@ msgstr "Add role"
 msgid "roles.restore"
 msgstr "Restore standard roles"
 
+msgid "groups.title"
+msgstr "Groups"
+
 msgid "groups.intro"
-msgstr "Groups sort your roles. Choose each role's group on the Roles tab. Deleting a group leaves its roles in no group."
+msgstr "Groups sort your roles. Choose each role's group in the list below. Deleting a group leaves its roles in no group."
 
 # First choice in a role's group dropdown.
 msgid "groups.none"

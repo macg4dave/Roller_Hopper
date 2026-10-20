@@ -7,8 +7,9 @@ import { DeviceIcon } from "components/device-icon.slint";
 import { DeviceRow } from "components/device-row.slint";
 import { IconPicker } from "components/icon-picker.slint";
 import { RolePicker } from "components/role-picker.slint";
+import { PortEditor } from "port-editor.slint";
 
-// Edit page, Devices tab: every device on the left, the selected one's editable fields on the right.
+// Edit page, left side: every device on the left, the selected one's editable fields on the right.
 export component DeviceEditor inherits HorizontalLayout {
     // Forgetting asks first; a new selection drops the question.
     property <bool> confirm-forget;
@@ -100,6 +101,10 @@ export component DeviceEditor inherits HorizontalLayout {
                         }
                     }
                 }
+            }
+            DetailField {
+                label: @tr("details.open-ports");
+                PortEditor { }
             }
             DetailField {
                 label: @tr("details.notes");

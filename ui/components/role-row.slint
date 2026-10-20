@@ -8,11 +8,11 @@ import { NameEdit } from "name-edit.slint";
 // Column sizes shared by the rows and the heading above them, so the columns line up.
 export global RoleColumns {
     out property <length> icon: 32px;
-    out property <length> name: 220px;
-    out property <length> group: 200px;
+    out property <length> name: 180px;
+    out property <length> group: 160px;
 }
 
-// One role on the edit page's Roles tab: rename it, change its icon or group, or delete it.
+// One role in the edit page's role list: rename it, change its icon or group, or delete it.
 export component RoleRow inherits Rectangle {
     in property <RoleView> role;
     // Where the role sits in Bridge.role-list, which identifies it to Rust.

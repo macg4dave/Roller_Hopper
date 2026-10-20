@@ -164,7 +164,7 @@ pub(super) fn device_view(
     }
 }
 
-/// A role for the Roles tab, with `label` as shown in the role dropdown.
+/// A role for the role list, with `label` as shown in the role dropdown.
 pub(super) fn role_view(network: &Network, role: &Role, label: SharedString) -> ui::RoleView {
     let icon = network.role_icon(role);
     // Choice 0 in the group dropdown is "no group"; the groups follow in order.
@@ -187,7 +187,6 @@ pub(super) fn details(network: &Network, device: &Device, role: SharedString) ->
         let upstream = network.device(link.upstream)?;
         Some((upstream.name.trim(), link.kind == ConnectionKind::Inferred))
     });
-    let services: Vec<String> = device.services.iter().map(ToString::to_string).collect();
     ui::DeviceDetails {
         kind: kind(device.kind),
         icon: kind(network.icon(device)),
@@ -204,11 +203,25 @@ pub(super) fn details(network: &Network, device: &Device, role: SharedString) ->
         last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
         uplink_name: uplink.map(|(name, _)| name).unwrap_or_default().into(),
         uplink_inferred: uplink.is_some_and(|(_, inferred)| inferred),
-        services: services.join(", ").into(),
+        services: device.services.to_string().into(),
     }
 }
 
-/// The Groups tab's rows, in order.
+/// The device's open ports, as rows to edit.
+pub(super) fn port_views(device: &Device) -> Vec<ui::PortView> {
+    let views = device.services.iter().map(|s| ui::PortView {
+        port: i32::from(s.port),
+        description: s.description.as_str().into(),
+    });
+    views.collect()
+}
+
+/// A port number as typed; anything but a whole number from 1 to 65535 is refused.
+pub(super) fn port(text: &str) -> Option<u16> {
+    text.trim().parse().ok().filter(|&port| port != 0)
+}
+
+/// The group list's rows, in order.
 pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
     let groups = network.groups();
     groups
@@ -312,6 +325,15 @@ fn dashed(points: &[Point]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_real_port_numbers_are_accepted() {
+        assert_eq!(port(" 8080 "), Some(8080));
+        assert_eq!(port("65535"), Some(65535));
+        for refused in ["0", "65536", "-1", "80a", ""] {
+            assert_eq!(port(refused), None, "{refused:?}");
+        }
+    }
 
     #[test]
     fn dashed_line_breaks_into_dashes_that_stay_on_the_line() {

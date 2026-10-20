@@ -30,14 +30,12 @@
       "Edit(rust-toolchain.toml)",
       "Edit(src/ui.rs)",
       "Edit(docs/agents/**)",
-      "Write(docs/agents/**)",
+      "Write(docs/agents/**)"
     ],
     "ask": [
-
       "Edit(AGENTS.md)",
       "Edit(CLAUDE.md)",
       "Edit(.claude/settings.json)"
-
     ]
   }
 }

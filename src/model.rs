@@ -5,8 +5,10 @@ mod groups;
 mod layout;
 mod network;
 mod roles;
+mod services;
 
-pub(crate) use device::{Device, DeviceId, DeviceKind, LastSeen, MacAddr, Role, Service, Status};
+pub(crate) use device::{Device, DeviceId, DeviceKind, LastSeen, MacAddr, Role, Status};
 pub(crate) use groups::{GroupColour, GroupId};
 pub(crate) use layout::{Point, Positions, route, tree_layout};
 pub(crate) use network::{Connection, ConnectionKind, Network, StatusFilter};
+pub(crate) use services::Services;

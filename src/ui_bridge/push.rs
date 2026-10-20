@@ -43,7 +43,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_selection(&bridge, &labels, state);
 }
 
-/// The role dropdown's names, the Roles tab's rows and the groups they can be in.
+/// The role dropdown's names, the role list's rows and the groups they can be in.
 fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, network: &Network) {
     let roles = network.roles();
     let names: Vec<SharedString> = roles
@@ -92,6 +92,10 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
             .position(|r: &Role| *r == device.role)
             .unwrap_or_default();
         bridge.set_role_index(i32::try_from(index).unwrap_or_default());
+    }
+    let ports = selected.map(convert::port_views).unwrap_or_default();
+    if let Some(model) = sync(&bridge.get_ports(), ports) {
+        bridge.set_ports(model);
     }
     bridge.set_selected_id(id);
 }
