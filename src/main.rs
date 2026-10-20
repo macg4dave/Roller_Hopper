@@ -1,5 +1,7 @@
 //! Network Mapper: a UI prototype of a local network mapper using mock data only.
 
+mod ai;
+mod ai_settings;
 mod mock_data;
 mod model;
 mod ui;
@@ -15,5 +17,6 @@ fn main() -> Result<(), slint::PlatformError> {
     ui_bridge::select_language(&ui);
     let state = Rc::new(RefCell::new(ui_bridge::AppState::new(mock_data::network())));
     ui_bridge::connect(&ui, &state);
+    ai_settings::connect(&ui)?;
     ui.run()
 }

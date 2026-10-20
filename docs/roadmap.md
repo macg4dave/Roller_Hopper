@@ -6,7 +6,7 @@ are in the workflow guide (`docs/agents/workflow.md`, "Planning"). Requirements 
 product brief (`docs/agents/product.md`); this file says how and in what order to meet them.
 
 Goal: a usable, locally runnable backend on Windows, Linux and macOS with complete project
-files, real IPv4 scanning, reliable inventory updates and one bundled offline CPU AI model.
+files, real IPv4 scanning, reliable inventory updates and an offline AI model the user installs.
 Installers, signing and public release are outside this plan.
 
 Live scans, protected-file changes and publication still need the user's explicit approval.
@@ -88,7 +88,9 @@ controls, changed only where the brief or an agreed decision says. It already de
 Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
-  data only". Settings holds only a pointer to the View menu.
+  data only". Settings holds a pointer to the View menu and opens the AI settings window,
+  where Install AI downloads and checks Qwen3-4B but nothing runs a model yet: the model
+  list has no effect, and CUDA and both automation switches stay disabled, saying why.
 - The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
   depth and pace presets; method labels include SNMP, ONVIF and LLDP, which are not offered;
   Confidence is a made-up percentage.
@@ -243,8 +245,8 @@ Gaps the UI shows against the plan:
 | mDNS/DNS-SD | mdns-sd 0.21.6 | MIT/Apache, MSRV 1.71, in process. Not zeroconf (needs Bonjour/Avahi). |
 | DNS | hickory-resolver 0.26.3 | MSRV 1.88. System resolver policy; no default public DNS/DoH. Check split DNS over VPN. |
 | JSON | serde 1.0.229, serde_json 1.0.150 | Needs separate bounds and domain validation. |
-| Safe save | atomic-write-file 0.3.1 **or** tempfile 3.27.0 | Pick one. atomic-write-file doesn't keep non-Unix ACLs/ownership and replaces a symlink rather than its target; tempfile's `persist` doesn't sync. Don't promise power-loss safety. |
-| File dialogs | rfd 0.17.2 | Native on Windows/macOS. The default Linux portal/Zenity route runs another program: try in-process GTK3 with defaults off. |
+| Safe save | **Chosen: atomic-write-file 0.3.1** (BSD-3-Clause, MSRV 1.85; deps MIT/Apache) | Temp file in the same folder, `sync_all`, then rename; on Unix also `fsync`s the folder and keeps mode and owner (best effort). Dropping an uncommitted file deletes the temp and leaves the old file. It replaces a symlink rather than its target, so canonicalise the path first. Windows: no folder sync and permissions come from the folder; rename fails if another program holds the file open. Its 21 tests pass on Windows. Not tempfile: `persist` doesn't sync or keep the mode. Don't promise power-loss safety. |
+| File dialogs | **Chosen: rfd 0.17.2** with `default-features = false`; `gtk3` on Linux (all 60 packages MIT/Apache) | Without `gtk3`, Linux uses the portal with a `zenity` fallback, which runs another program; with it, the zenity module isn't compiled, but the system GTK3 library is required. Use `AsyncFileDialog` on `slint::spawn_local`, parented through Slint's default `raw-window-handle-06`. Builds on Windows; no dialog has been shown yet. |
 | Preferences path | directories 6.0.0 | Moved to Codeberg; maintenance not confirmed. |
 | ICMP | surge-ping 0.9.1 | Permissions differ by OS; no unprivileged Windows support established. Native Windows ICMP is an alternative. |
 | SSDP, OUI | ssdp-client 2.1.0; mac_oui 0.4.11 / oui-data 0.2.1 | Data licence and freshness unchecked. |
@@ -252,12 +254,26 @@ Gaps the UI shows against the plan:
 
 ### AI model
 
-- **First candidate: Qwen3-0.6B Q8_0 GGUF (Apache-2.0, about 639 MB) on Candle 0.11.0's
-  `quantized_qwen3`**. Use non-thinking mode with short, bounded context and output, and
-  bundle `tokenizer.json` and the chat template. Not shown yet: that this exact artifact,
-  tokenizer, template and runtime work together, Rust 1.99.1 compatibility (Candle declares
-  no MSRV), CPU latency and RAM, or usefulness for identifying devices.
-- Alternatives (a replacement, never a second model):
+- **First candidate, measured and failing: Qwen3-0.6B Q8_0 GGUF on Candle 0.11.0's
+  `quantized_qwen3`.** Artifact: `Qwen/Qwen3-0.6B-GGUF` revision `23749fe`, 639,446,688
+  bytes, SHA-256 `9465e63a…b031`, Apache-2.0; tokenizer from `Qwen/Qwen3-0.6B` `c1899de`.
+  Candle's own `quantized-qwen3` example built on Rust 1.99.1 and ran offline from local
+  files on the user's Ryzen 5 7600X with 3 threads; the runtime graph's licences are all
+  permissive, and tokenizers' `onig` feature compiles a C library in.
+  - Speed: needs an AVX2 build (`target-cpu=x86-64-v3`, inside the agreed baseline). Without
+    it a 188-token prompt took 19 s; with it 4.9 s including a 1.2 s load (about 190 prompt
+    and 67 generated tokens a second). Not measured on a baseline machine.
+  - RAM: about 1.65 GB peak working set and 2.3 GB private bytes for the model process
+    alone, against 2 GB for the whole app.
+  - Usefulness, zero-shot JSON prompt, four cases: "Router" with High confidence for a
+    Windows RDP PC, a Linux xrdp host and an unmistakable Brother printer; three of four
+    replies were not valid JSON. With a worked example it copied the example's camera and
+    invented evidence. Only "Unknown"/"Linux" OS values were right.
+- **The user's choice, to qualify next: Qwen3-4B Q4_K_M GGUF**, installed by Install AI
+  rather than bundled. Artifact: `Qwen/Qwen3-4B-GGUF` revision `bc64014`, 2,497,280,256
+  bytes, SHA-256 `7485fe6f…fdf5`, Apache-2.0; tokenizer from `Qwen/Qwen3-4B` `1cfa9a7`
+  (pinned in `src/ai.rs`). Not measured yet; it needs more RAM than the former 2 GB limit.
+- Earlier alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
     (MSRV 1.92; official ONNX Runtime builds can send telemetry by default) or tract 0.23.9
@@ -295,7 +311,8 @@ supports, and anything unsupported is shown as unavailable, never faked.
   four), 30 VMs/containers, about 2,000 services (≈8 per device), 100 saved runs and about
   50,000 log lines.
 - On that workload: input responds within 200 ms, also during a scan; pan, zoom and animation
-  frames take at most 50 ms; RAM stays within 1 GB without the model and 2 GB with it loaded;
+  frames take at most 50 ms; RAM stays within 1 GB without the model, and within the limit
+  agreed after BE-0011 with it loaded;
   Stop is acknowledged within 1 s and settled within 10 s; closing during a run finishes
   within 5 s with nothing left running; Save and Open each finish within 5 s.
 - Viewports: 1366×768 at 100% (minimum), 1920×1080 at 125% and 2560×1440 at 150%.
@@ -338,7 +355,8 @@ supports, and anything unsupported is shown as unavailable, never faked.
 
 - Baseline machine: 4-core x86-64 with AVX2 (2018 or newer) or Apple M1, 8 GB RAM. Cold load
   within 15 s; one device's suggestion within 10 s; at most half the cores, in the
-  background; the app within 2 GB with the model loaded.
+  background; the app's RAM with the model loaded within a limit agreed with the user from
+  BE-0011's measurements (the 4B model needs more than the former 2 GB).
 - Fields: type (the app's device kinds or Unknown), OS family (Windows, macOS, Linux, iOS,
   Android, network/embedded or Unknown) and a description of at most 120 characters citing
   evidence IDs. Below the confidence cut-off a field stays Unknown.
@@ -378,7 +396,7 @@ These extend the product brief's wording, which needs updating first (BLK-010).
 - Result confidence is Strong, Some or Weak, worked out from the evidence (a MAC on the same
   link plus a name is Strong; an IP alone is Weak), with the evidence shown on hover. No
   percentage until one is measured.
-- Restrained choices, not asked: the AI automation controls live on the Settings page, per
+- Restrained choices, not asked: the AI automation controls live in the AI settings window, per
   network context; Arrange and the Automatic/Free toggle replace Reset layout beside Fit.
 
 ## IDs and maintenance
@@ -386,7 +404,7 @@ These extend the product brief's wording, which needs updating first (BLK-010).
 | Item | Format | Next unused ID |
 | --- | --- | --- |
 | Milestone | `M-001` | `M-021` |
-| Task or backlog need | `BE-0001` | `BE-0108` |
+| Task or backlog need | `BE-0001` | `BE-0110` |
 | Blocker (in the backlog) | `BLK-001` | `BLK-011` |
 
 Take the next ID from this table and advance it in the same edit. Never reuse an ID, even after
@@ -442,8 +460,8 @@ Live checks need user-approved targets.
 | BE-0007 | Confirm netscli-core 0.3.4 (`default-features = false`, `mdns`) builds and links on Linux and macOS with Rust 1.99.1, with no native capture library. | — |
 | BE-0008 | Turn the static trace (Findings) into a per-OS method matrix confirmed on each OS. Qualify only necessary supplementary crates: unprivileged ICMP on Linux/macOS, the macOS neighbour table and per-destination routes/source interface. Bring the macOS MAC gap to the user as a decision if no safe in-process route exists. | BE-0007 |
 | BE-0009 | Exercise incremental results, pause (the app withholds new host and ≤4,096-port calls; upstream has none), stop/close by dropping futures with task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
-| BE-0010 | Qualify native dialogs and one safe save/replace route on all three OSes, including Linux in-process dialogs, ACL/link/metadata behaviour and failed replacement. No helper executable or separately installed runtime. | — |
-| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3/Candle is the first candidate, not a foregone choice. | — |
+| BE-0010 | Confirm the chosen rfd (`gtk3` on Linux) and atomic-write-file on each OS: a dialog parented to the Slint window opens and cancels without blocking the UI (approved GUI check), GTK3 runs in process alongside Slint's Linux backend, and the Unix mode/owner and macOS metadata survive a replace. Failed and locked replacements are tested in BE-0041. | — |
+| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify the user's choice, Qwen3-4B Q4_K_M (Findings), on the same cases on the CPU and with CUDA, and bring the measured RAM and latency to the user to agree the limits. | — |
 | BE-0012 | Consolidate the qualified versions, features, assets and approvals; confirm each M-002 blocker in the backlog is resolved or still honestly open. | BE-0007, BE-0008, BE-0009, BE-0010, BE-0011 |
 
 Exit: every selected dependency has a compliant route. A successful build alone does not
@@ -633,11 +651,13 @@ Goal: one qualified model useful inside the existing discovery and details workf
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0082 | Bundle and load the model, tokenizer/template and runtime locally with pinned identity, hashes and notices; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
+| BE-0082 | Load the model and tokenizer installed by Install AI, with the runtime and template compiled in, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
+| BE-0108 | Enable the CUDA switch: an optional CUDA build of the runtime, an NVIDIA GPU detected at run time, the CPU used when it is off or missing, and the switch disabled with its reason where CUDA is unavailable. | BE-0082 |
+| BE-0109 | Harden Install AI: check free space before starting, resume a broken download, fail a stalled read, remove an installed model; test against a local server, not the internet. | BE-0082 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
 | BE-0084 | Show type/OS-family/description suggestions with evidence, reasons and labelled confidence; explicit accept/edit/reject; suggestions never become observations. | BE-0083 |
 | BE-0085 | Evaluate held-out cases against the evidence baseline; measure per-field false positives/abstention, peak RAM, CPU, cold load and latency on agreed machines. | BE-0084 |
-| BE-0086 | Discard stale generation/evidence/model/policy results; protect edits made during inference; missing or corrupt assets leave manual workflows working, with no download or substitute. | BE-0085 |
+| BE-0086 | Discard stale generation/evidence/model/policy results; protect edits made during inference; missing or corrupt assets leave manual workflows working, with no automatic download or substitute. | BE-0085 |
 
 ## M-017: Explicit AI automation controls
 
@@ -645,7 +665,7 @@ Goal: the agreed opt-ins without giving AI authority over user data.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0087 | Separate "Fill missing inferred fields" and "Automatically add new devices" controls on the Settings page, per network context, both off by default, with explanations. | BE-0086 |
+| BE-0087 | Enable the AI settings window's "Fill missing inferred fields" and "Automatically add new devices" switches, per network context, both off by default. | BE-0086 |
 | BE-0088 | Apply missing-field suggestions only after revision/policy/manual checks, keeping source/model identity and a way to reverse them. | BE-0087 |
 | BE-0089 | Auto-add only with valid scoped evidence, resolved identity and the agreed thresholds; ambiguous or possible-duplicate findings stay in review. | BE-0088 |
 | BE-0090 | Save policy, suggestions, accepted provenance and model identity; Open runs nothing and does not trust imported consent. | BE-0089, BE-0079 |
@@ -669,10 +689,10 @@ Goal: runnable local app bundles with no extra installs. Not installers or a pub
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0097 | Windows, Linux and macOS bundles with native libraries, runtime icons, translations and the model assets; document supported OS/CPU baselines. | BE-0096, BE-0012 |
+| BE-0097 | Windows, Linux and macOS bundles with native libraries, runtime icons and translations (the model is installed by Install AI, not bundled); document supported OS/CPU/GPU baselines. | BE-0096, BE-0012 |
 | BE-0098 | Audit bundled dependencies, load paths, model/data licences and notices; nothing relies on repository paths or an external scanner, driver or service. | BE-0097 |
 | BE-0099 | Launch each bundle normally on a clean machine; check dialogs, writable locations and network permission deny/grant (macOS privacy, Linux UI/render dependencies). | BE-0098 |
-| BE-0100 | Offline inference from bundled assets with the internet off: no downloads, no telemetry. | BE-0099 |
+| BE-0100 | Install AI on a clean machine, then inference with the internet off: no downloads but the requested install, no telemetry. | BE-0099 |
 | BE-0101 | Reopen a complete project on all three OSes, including icons, ownership, placement/view, history and AI state; disclose platform limits. | BE-0100 |
 
 ## M-020: First working backend acceptance

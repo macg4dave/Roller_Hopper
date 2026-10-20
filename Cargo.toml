@@ -8,9 +8,12 @@ license = "MIT"
 publish = false
 
 [dependencies]
+dirs = "7.0.0"
 ipnet = { version = "2.12.2", default-features = false, features = ["std"] }
+sha2 = { version = "0.11.1", default-features = false }
 # Skia draws the scaled map (text, lines, icons) more cleanly than the default FemtoVG renderer.
 slint = { version = "1.18.1", features = ["renderer-skia"] }
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 
 [build-dependencies]
 slint-build = "1.18.1"

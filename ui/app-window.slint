@@ -10,8 +10,9 @@ import { EditPage } from "edit-page.slint";
 import { DiscoveryPage } from "discovery-page.slint";
 import { Splitter } from "components/splitter.slint";
 import { MoveDialog } from "move-dialog.slint";
+import { AiSettingsWindow, InstallOutcome } from "ai-settings-window.slint";
 
-export { Bridge, Labels }
+export { Bridge, Labels, AiSettingsWindow, InstallOutcome }
 
 // What the window shows under the header: the map view, or a page over it.
 enum Page { map, edit, discovery }
@@ -38,8 +39,12 @@ export component AppWindow inherits Window {
     property <length> edit-list-width: Theme.list-width;
     property <length> edit-roles-width: Theme.edit-roles-width;
 
+    // The AI settings window is wanted; Rust opens it, since a .slint file cannot.
+    callback open-ai-settings();
+
     VerticalLayout {
         Header {
+            ai-settings => { root.open-ai-settings(); }
             // The selection may have moved on the map meanwhile: back on the found host's device.
             scan => {
                 page = Page.discovery;

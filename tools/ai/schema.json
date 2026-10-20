@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "evidence_review": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "indicates": { "type": "string", "maxLength": 120 }
+        },
+        "required": ["id", "indicates"],
+        "additionalProperties": false
+      }
+    },
+    "type": {
+      "enum": ["Router", "Switch", "AccessPoint", "Nas", "Desktop", "Laptop", "Server", "Printer",
+               "Phone", "Tv", "Console", "Camera", "Smart", "Unknown"]
+    },
+    "type_confidence": { "enum": ["high", "medium", "low"] },
+    "os_family": {
+      "enum": ["Windows", "macOS", "Linux", "iOS", "Android", "Embedded", "Unknown"]
+    },
+    "os_confidence": { "enum": ["high", "medium", "low"] },
+    "description": { "type": "string", "maxLength": 120 }
+  },
+  "required": ["evidence_review", "type", "type_confidence", "os_family", "os_confidence",
+               "description"],
+  "additionalProperties": false
+}

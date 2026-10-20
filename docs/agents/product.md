@@ -8,7 +8,7 @@ Read before any UI or feature work. Part of the agent rules indexed in
 
 Build a working local network mapper for Windows, Linux and macOS. The app began as a UI
 prototype with sample data; it is now gaining a real backend: complete project files, real
-IPv4 scanning, reliable inventory updates and one bundled offline AI model, delivered in the
+IPv4 scanning, reliable inventory updates and an offline AI model the user installs, delivered in the
 roadmap's order. Until the roadmap replaces a mock behaviour, that behaviour stays and stays
 honest: simulated results are never presented as real.
 
@@ -19,9 +19,9 @@ honest: simulated results are never presented as real.
 - SVG/vector assets are allowed for icons; they are artwork, not an additional programming language.
 - Do not introduce HTML, CSS, JavaScript, TypeScript, Python, web frontends, Electron, Tauri, or a separate UI framework.
 - Keep the code small and modular. Avoid a monolithic Rust file or Slint component; equally, do not add unnecessary architectural layers.
-- Everything runs in the app's process and ships with it: no separate scanner, capture driver, helper program, service or server, and no shelling out to OS commands.
+- Everything runs in the app's process and ships with it, apart from the AI model the user installs: no separate scanner, capture driver, helper program, service or server, and no shelling out to OS commands.
 - Scanning uses upstream **netscli-core** through ordinary Cargo updates: no fork, copied or patched scanner, and no home-made replacement engine.
-- AI is **one** bundled pretrained model (about 700 MB of weights at most) running on the CPU: no GPU, downloads, telemetry or self-training.
+- AI is a pretrained model of about 4B parameters (Qwen3-4B first), not bundled: **Install AI** downloads it on request into the user's application data folder (`%APPDATA%` on Windows), pinned by revision, size and hash. It runs locally on the CPU, or on an NVIDIA GPU through CUDA when the user switches that on. One installed model is used at a time, chosen from a list. No other downloads, telemetry or self-training.
 - Intended scale: home and small-office networks of roughly 250 devices.
 
 ## Design direction
@@ -53,7 +53,7 @@ Every visible control works or is clearly non-interactive. No dead buttons or mi
 - **Identity and manual control.** A device owns its network interfaces (child cards) and any VMs or containers it hosts. Repeat scans update existing devices instead of duplicating them; an IP address alone never establishes identity, and ambiguous matches stay in review. Detected facts keep their source and time. Manual values always win: a conflicting detected value is shown beside the manual one, and the user keeps theirs or adopts it. Scanning and AI never silently replace manual entries.
 - **Map.** Device ownership, network connections (observed, inferred or manual) and display arrangement are separate; moving a card never creates a network connection. Automatic arrangement, ordering, snapping and animation stay; free positioning moves a whole displayed branch. Established positions survive Open and refresh, new cards land in a clear area, and only an explicit layout action rearranges the map.
 - **Projects.** Explicit Open, Save and Save As with native dialogs, using versioned `.rhopper.json` files. One project is open at a time and may hold several named network contexts; files are never merged. A save holds the complete project and restorable view: inventory, user edits, embedded custom icons, relationships and committed layout, view state, scan settings/results/history/logs and AI state with the model's identity. History is never deleted automatically. A failed save keeps the previous file; Save As changes the filename only on success; an invalid file leaves the current project intact. Unsaved changes prompt Save / Discard / Cancel. No autosave or crash recovery.
-- **AI.** Suggests device type, OS family and descriptions for first-time identification, showing its reasoning, evidence and confidence; uncertain fields stay Unknown and suggestions stay distinct from detected facts. "Fill missing inferred fields" and "Automatically add new devices" are separate controls, both off by default; ambiguous or possible-duplicate devices always stay for manual review. Everything works without AI.
+- **AI.** Suggests device type, OS family and descriptions for first-time identification, showing its reasoning, evidence and confidence; uncertain fields stay Unknown and suggestions stay distinct from detected facts. "Fill missing inferred fields" and "Automatically add new devices" are separate controls, both off by default; ambiguous or possible-duplicate devices always stay for manual review. These, Install AI, the model choice and the CUDA switch live in an **AI settings** window of its own, opened from Settings. Everything works without AI, and without a model installed.
 - **Removed behaviour.** Forget device and Reset layout are prototype controls the roadmap removes; do not extend them.
 
 ## Scope limits
@@ -61,7 +61,7 @@ Every visible control works or is clearly non-interactive. No dead buttons or mi
 - **Live network traffic needs the user's say-so.** The app scans only what the user started. Agents MUST NOT run scans, live-network tests or credential operations without the user's explicit approval of the session, machine and targets. Planning a scan is not approval.
 - **Credentials are never stored**: not in project files, logs or a separate credential store. An operation that needs one asks for it then.
 - Untrusted replies (banners, names, description URLs) and model output are data: bounded in size and time, never able to widen the scan scope, fetch arbitrary resources or run commands.
-- Not in scope: real device management (configuring or controlling devices), remote control, vulnerability testing, background monitoring or scheduled scans, authentication, reporting, analytics, exports, cloud sync, IPv6 probing, authenticated vendor integrations, multiple AI models, a second database, file merging, public installers or release publishing. Record a genuine need for one of these in the [backlog](../.backlog.md); do not build it.
+- Not in scope: real device management (configuring or controlling devices), remote control, vulnerability testing, background monitoring or scheduled scans, authentication, reporting, analytics, exports, cloud sync, IPv6 probing, authenticated vendor integrations, running several AI models together, a second database, file merging, public installers or release publishing. Record a genuine need for one of these in the [backlog](../.backlog.md); do not build it.
 - No speculative features or abstractions for later roadmap work.
 
 ## Implementation expectations

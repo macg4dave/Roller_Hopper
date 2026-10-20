@@ -1,5 +1,7 @@
 //! Development commands, isolated from the application and its dependencies.
 
+#[path = "../ai/cli.rs"]
+mod ai;
 #[path = "../checks/cli.rs"]
 mod checks;
 #[path = "../icons/cli.rs"]
@@ -36,6 +38,11 @@ enum Area {
         #[command(subcommand)]
         command: icons::Command,
     },
+    /// Evaluate the device-identification model against held-out cases.
+    Ai {
+        #[command(subcommand)]
+        command: ai::Command,
+    },
 }
 
 fn main() -> io::Result<()> {
@@ -46,5 +53,6 @@ fn main() -> io::Result<()> {
         Area::Checks { command } => checks::run(command, root),
         Area::Text { command } => text::run(command, root),
         Area::Icons { command } => icons::run(command, root),
+        Area::Ai { command } => ai::run(command, root),
     }
 }

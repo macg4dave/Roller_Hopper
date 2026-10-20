@@ -30,6 +30,76 @@ msgstr "Settings"
 msgid "settings.map-display-moved"
 msgstr "What the map shows for each device is set with the View button on the map."
 
+msgid "settings.ai"
+msgstr "AI settings…"
+
+# The AI settings window.
+msgid "ai-settings.title"
+msgstr "AI settings"
+
+msgid "ai-settings.not-running"
+msgstr "AI suggestions do not work yet: the app cannot run a model until its AI runtime is built. You can already install the model, and the switches below become available then."
+
+msgid "ai-settings.model"
+msgstr "Model"
+
+# The model list when nothing is installed.
+msgid "ai-settings.no-model"
+msgstr "No model installed"
+
+msgid "ai-settings.install"
+msgstr "Install AI"
+
+# {0} is the model's name, {1} its download size in GB, {2} the folder it goes into.
+msgid "ai-settings.install-note"
+msgstr "Downloads {0} ({1} GB) from Hugging Face into {2}. Nothing else is sent or downloaded."
+
+# {0} is the model's name, {1} the GB downloaded so far, {2} the GB in all.
+msgid "ai-settings.downloading"
+msgstr "Downloading {0}: {1} of {2} GB"
+
+msgid "ai-settings.cancel"
+msgstr "Cancel"
+
+msgid "ai-settings.outcome-done"
+msgstr "The model is installed and checked."
+
+msgid "ai-settings.outcome-cancelled"
+msgstr "The install was cancelled. Anything partly downloaded has been removed."
+
+msgid "ai-settings.outcome-no-folder"
+msgstr "This system has no application data folder to install the model into."
+
+msgid "ai-settings.outcome-network"
+msgstr "The download failed. Check the internet connection and try again."
+
+msgid "ai-settings.outcome-disk"
+msgstr "The model could not be saved. Check there is enough free disk space and try again."
+
+msgid "ai-settings.outcome-corrupt"
+msgstr "What was downloaded is not the expected model, so it was removed. Try again."
+
+msgid "ai-settings.behaviour"
+msgstr "Behaviour"
+
+msgid "ai-settings.cuda"
+msgstr "Use the graphics card (CUDA)"
+
+msgid "ai-settings.cuda-explained"
+msgstr "Runs the model faster on an NVIDIA graphics card. Without it, the model runs on the processor."
+
+msgid "ai-settings.fill-missing"
+msgstr "Fill missing inferred fields"
+
+msgid "ai-settings.fill-missing-explained"
+msgstr "Fills in a device's empty type, OS family and description when the AI is confident. Your own entries are never changed, and each filled field can be undone."
+
+msgid "ai-settings.auto-add"
+msgstr "Automatically add new devices"
+
+msgid "ai-settings.auto-add-explained"
+msgstr "Adds new hosts the AI identifies with confidence to the map. Unclear hosts and possible duplicates always wait for you to review."
+
 # Device list. filter.button: {0} is the filter name, {1} the number of devices.
 msgid "list.search-placeholder"
 msgstr "Search by name, IP or MAC address"

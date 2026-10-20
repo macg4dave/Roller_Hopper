@@ -1,7 +1,9 @@
 # Network Mapper
 
 A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-memory mock data
-only — there is no real network discovery or scanning.
+only — there is no real network discovery or scanning. Settings → AI settings can download
+an AI model (Qwen3-4B, 2.5 GB) into the user's application data folder, but the app cannot
+run it yet.
 
 ## Run
 
@@ -33,6 +35,9 @@ src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices with their network cards, virtual machines and
                    containers; the map's tree of network cards, roles, groups,
                    layout; the simulated discovery run) — no Slint imports
+src/ai.rs          the AI models offered, pinned by revision and hash, and where they are
+                   installed; ai/ downloads and checks them — no Slint imports
+src/ai_settings.rs the AI settings window: Install AI in the background, installed models
 src/mock_data.rs   the sample network, and in mock_data/ the hosts a discovery run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
 src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,
@@ -40,7 +45,7 @@ src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), 
                    the UI), model ↔ Slint conversion, reading the icon folder, choosing the
                    language
 ui/                .slint files: app window, panels, canvas, edit and discovery pages,
-                   components/, theme
+                   AI settings window, components/, theme
 ui/icons/          icons that are part of the UI (buttons, logo), compiled in
 icons/             device icons for the picker, read at run time (see above)
 translations/      all UI text: one gettext .po file per language (English in en/)

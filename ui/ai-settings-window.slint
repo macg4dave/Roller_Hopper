@@ -1,0 +1,175 @@
+import { Button, ComboBox, Palette, ProgressIndicator, Switch } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// How the last install ended, if one ran since the window opened.
+export enum InstallOutcome { none, done, cancelled, no-folder, network, disk, corrupt }
+
+// A switch that nothing can act on until the AI runtime is built, so it stays off and
+// disabled, with what it will do.
+component AiControl inherits VerticalLayout {
+    in property <string> text;
+    in property <string> explanation;
+
+    spacing: Theme.space-xs;
+
+    Switch {
+        text: root.text;
+        checked: false;
+        enabled: false;
+    }
+    Text {
+        text: root.explanation;
+        font-size: Theme.font-small;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+}
+
+component SectionTitle inherits Text {
+    font-size: Theme.font-heading;
+    font-weight: 600;
+    color: Theme.text;
+}
+
+// Its own window, opened from Settings: installing a model, choosing the one the app uses,
+// and every AI setting the user controls.
+export component AiSettingsWindow inherits Window {
+    // The recommended model, which Install AI downloads.
+    in property <string> offered-name;
+    in property <float> offered-gb;
+    in property <bool> offered-installed;
+    // Where models are installed.
+    in property <string> folder;
+    // The installed models, by name.
+    in property <[string]> installed;
+    in property <bool> installing;
+    // Of the install, from 0 to 1.
+    in property <float> progress;
+    in property <InstallOutcome> outcome;
+
+    callback install();
+    callback cancel-install();
+
+    title: @tr("ai-settings.title");
+    preferred-width: 460px;
+    min-width: 380px;
+    background: Theme.surface;
+    default-font-size: Theme.font-body;
+
+    // Each window has its own globals, so this one also stays light like the main window.
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    pure function outcome-text(outcome: InstallOutcome) -> string {
+        if outcome == InstallOutcome.done { return @tr("ai-settings.outcome-done"); }
+        if outcome == InstallOutcome.cancelled { return @tr("ai-settings.outcome-cancelled"); }
+        if outcome == InstallOutcome.no-folder { return @tr("ai-settings.outcome-no-folder"); }
+        if outcome == InstallOutcome.network { return @tr("ai-settings.outcome-network"); }
+        if outcome == InstallOutcome.disk { return @tr("ai-settings.outcome-disk"); }
+        if outcome == InstallOutcome.corrupt { return @tr("ai-settings.outcome-corrupt"); }
+        return "";
+    }
+
+    // Sizes to one decimal place.
+    pure function gb(value: float) -> string {
+        return Math.round(value * 10) / 10;
+    }
+
+    VerticalLayout {
+        padding: Theme.space-l;
+        spacing: Theme.space-l;
+
+        Text {
+            text: @tr("ai-settings.title");
+            font-size: Theme.font-title;
+            font-weight: 600;
+            color: Theme.text;
+        }
+
+        Rectangle {
+            background: Theme.warning-soft;
+            border-radius: Theme.radius;
+
+            VerticalLayout {
+                padding: Theme.space-m;
+                Text {
+                    text: @tr("ai-settings.not-running");
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-s;
+
+            SectionTitle { text: @tr("ai-settings.model"); }
+            ComboBox {
+                model: installed.length > 0 ? installed : [@tr("ai-settings.no-model")];
+                enabled: installed.length > 1;
+            }
+
+            if !installing && !offered-installed: VerticalLayout {
+                spacing: Theme.space-s;
+                Text {
+                    text: @tr("ai-settings.install-note", offered-name, gb(offered-gb), folder);
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: @tr("ai-settings.install");
+                        primary: true;
+                        enabled: folder != "";
+                        clicked => { root.install(); }
+                    }
+                }
+            }
+
+            if installing: VerticalLayout {
+                spacing: Theme.space-s;
+                ProgressIndicator { progress: root.progress; }
+                HorizontalLayout {
+                    spacing: Theme.space-s;
+                    Text {
+                        text: @tr("ai-settings.downloading", offered-name, gb(offered-gb * progress), gb(offered-gb));
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        text: @tr("ai-settings.cancel");
+                        clicked => { root.cancel-install(); }
+                    }
+                }
+            }
+
+            if outcome != InstallOutcome.none && !installing: Text {
+                text: outcome-text(outcome);
+                color: outcome == InstallOutcome.done ? Theme.text : Theme.warning;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-m;
+
+            SectionTitle { text: @tr("ai-settings.behaviour"); }
+            AiControl {
+                text: @tr("ai-settings.cuda");
+                explanation: @tr("ai-settings.cuda-explained");
+            }
+            AiControl {
+                text: @tr("ai-settings.fill-missing");
+                explanation: @tr("ai-settings.fill-missing-explained");
+            }
+            AiControl {
+                text: @tr("ai-settings.auto-add");
+                explanation: @tr("ai-settings.auto-add-explained");
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}
