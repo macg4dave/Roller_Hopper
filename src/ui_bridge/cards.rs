@@ -47,6 +47,7 @@ pub(super) fn card_row(
         card_id: convert::ui_card_id(card.id),
         card_index: index_of(device, card.id),
         card_name: card.name.trim().into(),
+        drag_card: convert::ui_card_id(card.id),
         card_icon: icons.choice(&card.icon),
         ip: ip(card),
         mac: mac(card),

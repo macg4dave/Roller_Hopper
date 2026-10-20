@@ -6,9 +6,9 @@ import { StatusDot } from "status-dot.slint";
 
 // One entry in a device list. A device heads a group: a chevron folds its network cards away,
 // and a line under its name says how many it holds. Each card follows inside the group, on an
-// inset band with a guide line down from the device's icon, and can be dragged onto the map to
-// plug it in there. A guest follows its host, indented under it. Clicking selects the device
-// or card. The background stops short of the list's scroll bar, which floats over the
+// inset band with a guide line down from the device's icon. A guest follows its host, indented
+// under it. Clicking selects the device or card; dragging either onto the map moves it there as
+// a drag on the map does, and plugs it in where it is dropped. The background stops short of the list's scroll bar, which floats over the
 // right-hand edge of the rows.
 export component DeviceRow inherits Rectangle {
     in property <DeviceView> device;
@@ -62,14 +62,14 @@ export component DeviceRow inherits Rectangle {
         background: Theme.border-strong;
     }
 
+    // A device drags its first card, so it moves on the map as its first card does.
     drag := DragArea {
-        enabled: card;
         allow-move: true;
-        data: Bridge.card-transfer(device.card-id);
-        drag-image: device.card-icon.image;
+        data: Bridge.card-transfer(device.drag-card);
+        drag-image: card ? device.card-icon.image : device.icon;
 
         touch := TouchArea {
-            mouse-cursor: card ? MouseCursor.grab : MouseCursor.default;
+            mouse-cursor: MouseCursor.grab;
             clicked => {
                 if card {
                     Bridge.select-card(device.card-id);

@@ -239,20 +239,23 @@ impl AppState {
         }
     }
 
-    /// A card dragged from the lists and dropped on the map at `at`: it is plugged in where it
-    /// would be on dropping it there on the map, or unplugged away from every line.
-    fn drop_card(&mut self, card: CardId, at: Point) {
-        if self.network.card(card).is_some() {
-            self.drag_to(card, at);
-            self.drop_dragged();
-        }
-    }
-
-    /// Drags card `id` so its icon is centred on `at`.
+    /// Drags card `id` so its icon is centred on `at`, on the map or from the lists. Ignored for
+    /// a card that is gone.
     fn drag_to(&mut self, id: CardId, at: Point) {
+        if self.network.card(id).is_none() {
+            return;
+        }
         self.positions.insert(id, at);
         self.motion.place(id, at);
         self.dragging = Some(id);
+    }
+
+    /// Ends a drag without dropping, as when a card from the lists is taken off the map again:
+    /// it glides back to its spot, plugged in where it was.
+    fn cancel_drag(&mut self) {
+        if self.dragging.take().is_some() {
+            self.lay_out();
+        }
     }
 
     /// Where the dragged card `id` would go if dropped now, judged by the map as shown: on the
@@ -439,7 +442,8 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     refresh_icons(&ui.as_weak(), state);
 }
 
-/// Dragging, dropping and resetting on the map, each followed by the motion that settles it.
+/// Dragging (on the map or from the lists), dropping, cancelling and resetting, each followed
+/// by the motion that settles it.
 fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let timer = Rc::new(Timer::default());
@@ -454,24 +458,28 @@ fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         reset(());
         reset_settle();
     });
-    // Cards on the map are identified by their index in Bridge.nodes, which follows
-    // Network::nodes.
-    let move_node = handler(ui, state, |st, (index, x, y)| {
-        if let Some(&node) = st.network.nodes().get(convert::index(index)) {
-            st.drag_to(node, Point { x, y });
+    // A card is dragged the same way on the map and from the lists. While dragging, the strand
+    // swings after the pointer.
+    let move_card = handler(ui, state, |st, (id, x, y)| {
+        if let Some(card) = convert::card_id(id) {
+            st.drag_to(card, Point { x, y });
         }
     });
-    // While dragging, the strand swings after the pointer.
     let move_settle = Rc::clone(&settle);
-    bridge.on_move_node(move |index, x, y| {
-        move_node((index, x, y));
+    bridge.on_move_card(move |id, x, y| {
+        move_card((id, x, y));
         move_settle();
     });
-    let drop_node = handler(ui, state, |st, ()| st.drop_dragged());
+    let drop_card = handler(ui, state, |st, ()| st.drop_dragged());
     let drop_settle = Rc::clone(&settle);
-    bridge.on_drop_node(move || {
-        drop_node(());
+    bridge.on_drop_card(move || {
+        drop_card(());
         drop_settle();
+    });
+    let cancel = handler(ui, state, |st, ()| st.cancel_drag());
+    bridge.on_cancel_drag(move || {
+        cancel(());
+        settle();
     });
 
     // A card dragged out of the lists carries its id as text, as Slint's drag payload is
@@ -481,15 +489,6 @@ fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_transfer_card(|data| {
         let text = data.plain_text().unwrap_or_default();
         payload_card(&text).unwrap_or(-1)
-    });
-    let drop_card = handler(ui, state, |st, (id, x, y)| {
-        if let Some(card) = convert::card_id(id) {
-            st.drop_card(card, Point { x, y });
-        }
-    });
-    bridge.on_drop_card(move |id, x, y| {
-        drop_card((id, x, y));
-        settle();
     });
 }
 
@@ -1081,23 +1080,44 @@ mod tests {
     }
 
     #[test]
-    fn a_card_dropped_from_the_list_is_plugged_in_where_it_lands() {
+    fn a_guest_held_over_a_line_from_the_list_previews_it_and_goes_back_if_taken_off() {
         let mut state = AppState::new(mock_data::network());
-        let (lab_card, lab_pi) = (CardId(100), CardId(23));
+        // A container's first card has the container's id, like every sample device's.
+        let (container, lab_pi) = (CardId(24), CardId(23));
+        let host = state.network.uplink(container).map(|c| c.upstream);
+        let laid_out = state.positions.clone();
         let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
         let on_root = Point {
             y: root.y + 20.0,
             ..root
         };
-        state.drop_card(lab_card, on_root);
-        assert_eq!(state.dragging, None);
+        state.drag_to(container, on_root);
         assert_eq!(
-            state.network.uplink(lab_card).map(|c| c.upstream),
-            Some(lab_pi)
+            state.strand().map(|s| s.upstream),
+            Some(lab_pi),
+            "previewed"
         );
-        let before = state.network.clone();
-        state.drop_card(CardId(999), on_root);
-        assert_eq!(state.network, before, "no such card");
+
+        state.cancel_drag();
+        assert_eq!(state.dragging, None);
+        assert_eq!(state.network.uplink(container).map(|c| c.upstream), host);
+        assert_eq!(state.positions, laid_out, "back in its spot");
+        assert!((0..600).any(|_| state.step_motion()), "and glides there");
+
+        state.drag_to(container, on_root);
+        state.drop_dragged();
+        let plugged = state.network.uplink(container).map(|c| c.upstream);
+        assert_eq!(plugged, Some(lab_pi), "dropped where previewed");
+    }
+
+    #[test]
+    fn only_a_card_that_exists_can_be_dragged_and_cancelling_nothing_changes_nothing() {
+        let mut state = AppState::new(mock_data::network());
+        state.drag_to(CardId(999), Point::default());
+        assert_eq!(state.dragging, None);
+        let laid_out = state.positions.clone();
+        state.cancel_drag();
+        assert_eq!(state.positions, laid_out);
     }
 
     #[test]

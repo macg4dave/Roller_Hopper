@@ -43,6 +43,8 @@ export struct DeviceView {
     card-id: int,
     card-index: int,
     card-name: string,
+    // The card dragging its row onto the map moves: the card itself, or a device's first card.
+    drag-card: int,
     // The card's own icon (Ethernet, Wi-Fi…): in its row, and as a badge on the map.
     card-icon: IconChoice,
     name: string,
@@ -266,9 +268,6 @@ export global Bridge {
     // A card's id as a drag payload, and back again: -1 when the payload is not a card.
     pure callback card-transfer(int) -> data-transfer;
     pure callback transfer-card(data-transfer) -> int;
-    // A card dragged from the lists and dropped on the map with its icon at (x, y), in map
-    // units: it is plugged in as if dragged there on the map.
-    callback drop-card(int, float, float);
     callback search(string);
     callback set-filter(StatusFilter);
     callback rename(string);
@@ -323,10 +322,13 @@ export global Bridge {
     callback set-group-line-style(int, int);
     // The group's roles are left in no group.
     callback delete-group(int);
-    // Dragging a card (by its index in nodes) previews the line it would join; dropping it plugs
-    // it in there, or unplugs it away from every line. Ignored when nothing was dragged.
-    callback move-node(int, float, float);
-    callback drop-node();
+    // Dragging the card with this id, on the map or from the lists, so its icon is at (x, y) in
+    // map units: it moves there and previews the line it would join. Dropping it plugs it in
+    // there, or unplugs it away from every line; cancelling sends it back. Both are ignored
+    // when nothing is dragged.
+    callback move-card(int, float, float);
+    callback drop-card();
+    callback cancel-drag();
     // Brings back the connections as found, and the tidy layout.
     callback reset-layout();
     callback scan();

@@ -164,6 +164,7 @@ pub(super) fn device_view(
         card_id: -1,
         card_index: 0,
         card_name: SharedString::new(),
+        drag_card: primary.map_or(-1, |c| ui_card_id(c.id)),
         card_icon: ui::IconChoice::default(),
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),

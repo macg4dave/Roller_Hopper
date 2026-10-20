@@ -102,16 +102,31 @@ export component TopologyCanvas inherits Rectangle {
         }
     }
 
-    // Cards dragged out of the lists are plugged in where they are dropped, as if dragged there
-    // on the map. The pointer becomes the card's icon centre, in map units.
+    // Cards dragged out of the lists behave as if dragged on the map: while held over it, the
+    // card follows the pointer (its icon centre, in map units) and previews the line it would
+    // join; dropped, it is plugged in there. Taken off the map again, it goes back.
     drop := DropArea {
+        function move-to(card: int, x: length, y: length) {
+            Bridge.move-card(card, (x - pan-x) / zoom / 1px, (y - pan-y) / zoom / 1px);
+            auto-fit = false;
+        }
         can-drop(event) => {
-            return Bridge.transfer-card(event.data) >= 0 ? DragAction.move : DragAction.none;
+            let card = Bridge.transfer-card(event.data);
+            if card < 0 {
+                return DragAction.none;
+            }
+            self.move-to(card, event.position.x, event.position.y);
+            return DragAction.move;
         }
         dropped(event) => {
-            Bridge.drop-card(Bridge.transfer-card(event.data), (event.position.x - pan-x) / zoom / 1px, (event.position.y - pan-y) / zoom / 1px);
-            auto-fit = false;
+            self.move-to(Bridge.transfer-card(event.data), event.position.x, event.position.y);
+            Bridge.drop-card();
             return event.proposed-action;
+        }
+        changed has-drag => {
+            if !self.has-drag {
+                Bridge.cancel-drag();
+            }
         }
     }
 
@@ -182,14 +197,14 @@ export component TopologyCanvas inherits Rectangle {
             clicked => { Bridge.select-card(device.card-id); }
             // The pointer offset arrives already in map units, as the node sits inside the scale.
             dragged(dx, dy) => {
-                Bridge.move-node(i, Bridge.places[i].x + dx / 1px, Bridge.places[i].y + dy / 1px);
+                Bridge.move-card(device.card-id, Bridge.places[i].x + dx / 1px, Bridge.places[i].y + dy / 1px);
                 auto-fit = false;
             }
-            released => { Bridge.drop-node(); }
+            released => { Bridge.drop-card(); }
         }
     }
 
-    // While a card from the lists is held over the map.
+    // While a card or device from the lists is held over the map.
     if drop.has-drag: Rectangle {
         border-width: 2px;
         border-color: Theme.accent;
