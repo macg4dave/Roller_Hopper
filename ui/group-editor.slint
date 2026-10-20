@@ -1,8 +1,9 @@
-import { Button, ComboBox, LineEdit, ListView } from "std-widgets.slint";
+import { Button, LineEdit, ListView } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { NameEdit } from "components/name-edit.slint";
 import { ColourPicker } from "components/colour-picker.slint";
+import { LineStylePicker } from "components/line-style-picker.slint";
 
 // Edit page, above the roles: the groups roles can be sorted into, with a way to add one.
 export component GroupEditor inherits VerticalLayout {
@@ -31,10 +32,6 @@ export component GroupEditor inherits VerticalLayout {
             border-radius: Theme.radius;
             background: Math.mod(i, 2) == 1 ? Theme.stripe : transparent;
 
-            // Picking a style replaces the dropdown's binding, so keep it following Rust's state.
-            property <int> line-style: group.line-style;
-            changed line-style => { style-box.current-index = self.line-style; }
-
             HorizontalLayout {
                 padding-left: Theme.space-s;
                 padding-right: Theme.space-s;
@@ -59,22 +56,10 @@ export component GroupEditor inherits VerticalLayout {
                 }
                 VerticalLayout {
                     alignment: center;
-                    width: 140px;
-                    style-box := ComboBox {
-                        // In the order of LineStyle::ALL in Rust, which picks the style by index.
-                        model: [
-                            @tr("groups.line-style.solid"),
-                            @tr("groups.line-style.thick"),
-                            @tr("groups.line-style.dashed"),
-                            @tr("groups.line-style.long-dashes"),
-                            @tr("groups.line-style.dotted"),
-                            @tr("groups.line-style.dash-dot"),
-                            @tr("groups.line-style.zigzag"),
-                            @tr("groups.line-style.wavy"),
-                        ];
-                        current-index: group.line-style;
-                        accessible-label: @tr("groups.line-style");
-                        selected => { Bridge.set-group-line-style(i, self.current-index); }
+                    LineStylePicker {
+                        selected: group.line-style;
+                        colour: group.colour;
+                        picked(style) => { Bridge.set-group-line-style(i, style); }
                     }
                 }
                 VerticalLayout {

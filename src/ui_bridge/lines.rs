@@ -9,6 +9,9 @@ use crate::ui;
 /// in map units.
 const BEND_LENGTH: f32 = 5.0;
 const BEND_DEPTH: f32 = 2.5;
+/// The short line each style is previewed on in the style dropdown; its box in the UI is
+/// 48 × 12 map units.
+const SAMPLE: [Point; 2] = [Point { x: 0.0, y: 6.0 }, Point { x: 48.0, y: 6.0 }];
 
 /// How a set of lines is drawn alike: its parent's group colour and line style, known or
 /// inferred, highlighted or not.
@@ -58,6 +61,16 @@ pub(super) fn lines(
             thick: style == LineStyle::Thick,
         });
     sets.collect()
+}
+
+/// A preview of every line style, in the order the style dropdown lists them.
+pub(super) fn samples() -> Vec<ui::LineSet> {
+    let sample = |style| ui::LineSet {
+        commands: path(style, &SAMPLE).into(),
+        thick: style == LineStyle::Thick,
+        ..ui::LineSet::default()
+    };
+    LineStyle::ALL.into_iter().map(sample).collect()
 }
 
 /// A polyline through `points` in the given style.
@@ -189,6 +202,22 @@ mod tests {
         for style in LineStyle::ALL {
             assert!(path(style, &LINE).starts_with("M0.0 0.0"), "{style:?}");
         }
+    }
+
+    #[test]
+    fn every_style_has_its_own_preview_in_dropdown_order() {
+        let samples = samples();
+        assert_eq!(samples.len(), LineStyle::ALL.len());
+        let unique: std::collections::HashSet<_> = samples
+            .iter()
+            .map(|s| (s.commands.to_string(), s.thick))
+            .collect();
+        assert_eq!(unique.len(), samples.len(), "each looks different");
+        let thick = samples.iter().position(|s| s.thick);
+        assert_eq!(
+            thick.and_then(|i| LineStyle::ALL.get(i)),
+            Some(&LineStyle::Thick)
+        );
     }
 
     /// Whether some line set has the given look.

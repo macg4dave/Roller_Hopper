@@ -100,7 +100,7 @@ export struct RoleView {
 export struct GroupView {
     name: string,
     colour: GroupColour,
-    // Index in the group editor's line style dropdown.
+    // Index in Bridge.line-styles.
     line-style: int,
 }
 
@@ -151,6 +151,8 @@ export global Bridge {
     // The group list's rows, and their names led by "no group" for the role group dropdown.
     in property <[GroupView]> groups;
     in property <[string]> group-choices;
+    // A preview of each line style, in the order of the group line style dropdown.
+    in property <[LineSet]> line-styles;
     in property <StatusFilter> filter;
     in property <int> count-all;
     in property <int> count-online;

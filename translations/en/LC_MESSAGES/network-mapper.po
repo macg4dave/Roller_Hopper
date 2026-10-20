@@ -253,6 +253,7 @@ msgid "groups.colour.none"
 msgstr "No colour"
 
 # The dropdown beside each group's colours; its devices' lines are drawn in the style chosen.
+# It shows each style as a picture; these names are read out by screen readers.
 msgid "groups.line-style"
 msgstr "Line style"
 

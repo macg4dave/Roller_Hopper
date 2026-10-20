@@ -1,0 +1,115 @@
+import { Bridge, GroupColour, LineSet } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// A preview of one line style, in a group's colour.
+component LineSample inherits Path {
+    in property <LineSet> sample;
+    in property <GroupColour> colour;
+
+    width: 48px;
+    height: 12px;
+    viewbox-width: 48;
+    viewbox-height: 12;
+    commands: sample.commands;
+    stroke: Theme.group-colour(colour, Theme.icon);
+    stroke-width: sample.thick ? Theme.line-width-thick : Theme.line-width;
+}
+
+// A dropdown of line styles shown as previews rather than names. Reports the index of the
+// style picked in Bridge.line-styles through `picked` and leaves applying it to the owner.
+export component LineStylePicker inherits Rectangle {
+    in property <int> selected;
+    in property <GroupColour> colour;
+    callback picked(int);
+    // Names for assistive technology only, in the order of Bridge.line-styles.
+    property <[string]> names: [
+        @tr("groups.line-style.solid"),
+        @tr("groups.line-style.thick"),
+        @tr("groups.line-style.dashed"),
+        @tr("groups.line-style.long-dashes"),
+        @tr("groups.line-style.dotted"),
+        @tr("groups.line-style.dash-dot"),
+        @tr("groups.line-style.zigzag"),
+        @tr("groups.line-style.wavy"),
+    ];
+
+    width: 96px;
+    height: 32px;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.accent : Theme.border;
+    background: touch.has-hover ? Theme.hover : Theme.surface;
+    accessible-role: combobox;
+    accessible-label: @tr("groups.line-style");
+    accessible-value: names[selected];
+    accessible-action-default => { popup.show(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { popup.show(); }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-s;
+        padding-right: Theme.space-s;
+        spacing: Theme.space-xs;
+        alignment: space-between;
+        VerticalLayout {
+            alignment: center;
+            LineSample {
+                sample: Bridge.line-styles[selected];
+                colour: root.colour;
+            }
+        }
+        Image {
+            source: @image-url("../icons/chevron-right.svg");
+            width: 12px;
+            colorize: Theme.text-muted;
+            // Points down, as on any dropdown.
+            transform-rotation: 90deg;
+        }
+    }
+
+    popup := PopupWindow {
+        y: root.height + Theme.space-xs;
+        width: root.width;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: Theme.radius;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #0000001f;
+        }
+        VerticalLayout {
+            padding: Theme.space-xs;
+            for sample[i] in Bridge.line-styles: Rectangle {
+                height: 28px;
+                border-radius: Theme.radius;
+                background: i == root.selected ? Theme.accent-soft : option.has-hover ? Theme.hover : transparent;
+                accessible-role: button;
+                accessible-label: names[i];
+                accessible-checkable: true;
+                accessible-checked: i == root.selected;
+                accessible-action-default => {
+                    root.picked(i);
+                    popup.close();
+                }
+
+                option := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.picked(i);
+                        popup.close();
+                    }
+                }
+                LineSample {
+                    sample: sample;
+                    colour: root.colour;
+                }
+            }
+        }
+    }
+}

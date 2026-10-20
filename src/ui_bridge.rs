@@ -286,6 +286,8 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         Timer::single_shot(SCAN_DURATION, move || finish_scan(()));
     });
 
+    // The style previews never change, so they are sent once.
+    bridge.set_line_styles(ModelRc::new(VecModel::from(lines::samples())));
     // Shows the initial state, with the icons.
     refresh_icons(&ui.as_weak(), state);
 }
