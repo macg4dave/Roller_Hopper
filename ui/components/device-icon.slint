@@ -1,22 +1,9 @@
-import { DeviceKind } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 
-// Line-art icon for a device kind; tint with `colorize`.
+// A device icon from the icon folder, tinted with `colorize`. An icon whose file is gone is
+// shown as Unknown, which is built in so there is always something to show.
 export component DeviceIcon inherits Image {
-    in property <DeviceKind> kind;
+    in property <image> icon;
     colorize: Theme.icon;
-    source: kind == DeviceKind.router ? @image-url("../icons/router.svg")
-        : kind == DeviceKind.switch ? @image-url("../icons/switch.svg")
-        : kind == DeviceKind.access-point ? @image-url("../icons/access-point.svg")
-        : kind == DeviceKind.nas ? @image-url("../icons/nas.svg")
-        : kind == DeviceKind.desktop ? @image-url("../icons/desktop.svg")
-        : kind == DeviceKind.laptop ? @image-url("../icons/laptop.svg")
-        : kind == DeviceKind.server ? @image-url("../icons/server.svg")
-        : kind == DeviceKind.printer ? @image-url("../icons/printer.svg")
-        : kind == DeviceKind.phone ? @image-url("../icons/phone.svg")
-        : kind == DeviceKind.tv ? @image-url("../icons/tv.svg")
-        : kind == DeviceKind.console ? @image-url("../icons/console.svg")
-        : kind == DeviceKind.camera ? @image-url("../icons/camera.svg")
-        : kind == DeviceKind.smart ? @image-url("../icons/smart.svg")
-        : @image-url("../icons/unknown.svg");
+    source: icon.width > 0 ? icon : @image-url("../../icons/Other/Unknown.svg");
 }

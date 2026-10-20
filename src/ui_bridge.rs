@@ -4,6 +4,7 @@
 
 mod convert;
 mod i18n;
+mod icons;
 mod push;
 
 pub(crate) use i18n::select_language;
@@ -12,14 +13,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, SharedString, Timer, Weak};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, VecModel, Weak};
 
 use crate::mock_data;
 use crate::model::{
-    Device, DeviceId, DeviceKind, GroupId, Network, Point, Positions, Role, StatusFilter,
-    tree_layout,
+    Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role, StatusFilter, tree_layout,
 };
 use crate::ui::{AppWindow, Bridge};
+use icons::Icons;
 use push::push;
 
 /// How long the simulated scan pretends to take, so the refresh is visible.
@@ -34,6 +35,8 @@ pub(crate) struct AppState {
     query: String,
     scanning: bool,
     scans: u32,
+    /// Read from the icon folder by [`connect`], and again when the icon picker opens.
+    icons: Icons,
 }
 
 impl AppState {
@@ -47,6 +50,7 @@ impl AppState {
             query: String::new(),
             scanning: false,
             scans: 0,
+            icons: Icons::default(),
         }
     }
 
@@ -69,7 +73,7 @@ impl AppState {
     /// Adds the role named `name`, shown with `icon`, unless it matches one of the roles `shown`
     /// in the dropdown (which may be translated, so only the UI knows their names). Returns the
     /// index of the new or matching role; a matching role keeps its own icon.
-    fn add_role(&mut self, name: &str, icon: DeviceKind, shown: &[SharedString]) -> Option<usize> {
+    fn add_role(&mut self, name: &str, icon: Icon, shown: &[SharedString]) -> Option<usize> {
         let lower = name.trim().to_lowercase();
         if let Some(index) = shown.iter().position(|r| r.trim().to_lowercase() == lower) {
             return Some(index);
@@ -161,6 +165,8 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     connect_port_edits(ui, state);
     connect_role_edits(ui, state);
     connect_group_edits(ui, state);
+    let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
+    bridge.on_refresh_icons(move || refresh_icons(&icons_ui, &icons_state));
 
     let reset = handler(ui, state, |st, ()| st.positions = tree_layout(&st.network));
     bridge.on_reset_layout(move || reset(()));
@@ -179,7 +185,8 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         Timer::single_shot(SCAN_DURATION, move || finish_scan(()));
     });
 
-    push(ui, &state.borrow());
+    // Shows the initial state, with the icons.
+    refresh_icons(&ui.as_weak(), state);
 }
 
 /// Name, notes, role, icon and forgetting, for the selected device.
@@ -201,10 +208,10 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     });
     let ui_weak = ui.as_weak();
     bridge.on_choose_new_role(move |name, icon| {
-        choose_new((name, convert::kind_from_ui(icon), shown_roles(&ui_weak)));
+        choose_new((name, convert::icon_from_ui(&icon), shown_roles(&ui_weak)));
     });
-    bridge.on_set_icon(handler(ui, state, |st, icon| {
-        st.edit_selected(|d| d.icon = Some(convert::kind_from_ui(icon)));
+    bridge.on_set_icon(handler(ui, state, |st, icon: SharedString| {
+        st.edit_selected(|d| d.icon = Some(convert::icon_from_ui(&icon)));
     }));
     let reset_icon = handler(ui, state, |st, ()| st.edit_selected(|d| d.icon = None));
     bridge.on_reset_icon(move || reset_icon(()));
@@ -239,7 +246,7 @@ fn connect_port_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
 }
 
 /// A new role's name and icon, with the role names the dropdown shows.
-type NewRole = (SharedString, DeviceKind, Vec<SharedString>);
+type NewRole = (SharedString, Icon, Vec<SharedString>);
 
 /// The role list: adding, renaming, re-iconing, deleting and restoring roles.
 fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
@@ -250,7 +257,7 @@ fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     });
     let add_ui = ui.as_weak();
     bridge.on_add_role(move |name, icon| {
-        add((name, convert::kind_from_ui(icon), shown_roles(&add_ui)));
+        add((name, convert::icon_from_ui(&icon), shown_roles(&add_ui)));
     });
     let rename = handler(
         ui,
@@ -264,13 +271,13 @@ fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let set_icon = Rc::new(handler(
         ui,
         state,
-        |st, (index, icon): (i32, Option<DeviceKind>)| {
+        |st, (index, icon): (i32, Option<Icon>)| {
             st.edit_role(convert::index(index), |n, role| n.set_role_icon(role, icon));
         },
     ));
     let clear_icon = Rc::clone(&set_icon);
     bridge.on_set_role_icon(move |index, icon| {
-        set_icon((index, Some(convert::kind_from_ui(icon))));
+        set_icon((index, Some(convert::icon_from_ui(&icon))));
     });
     bridge.on_clear_role_icon(move |index| clear_icon((index, None)));
     bridge.on_delete_role(handler(ui, state, |st, index| {
@@ -306,6 +313,16 @@ fn connect_group_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_delete_group(handler(ui, state, |st, index| {
         st.edit_group(convert::index(index), Network::remove_group);
     }));
+}
+
+/// Reads the icon folder again and shows what is in it now. The picker's list is sent only
+/// here, not on every change, so it is not rebuilt while the user scrolls it.
+fn refresh_icons(ui: &Weak<AppWindow>, state: &RefCell<AppState>) {
+    update(ui, state, |st| st.icons = Icons::load(&icons::folder()));
+    if let Some(ui) = ui.upgrade() {
+        let groups = VecModel::from(state.borrow().icons.groups());
+        ui.global::<Bridge<'_>>().set_icons(ModelRc::new(groups));
+    }
 }
 
 /// The role names in the dropdown, as the UI shows them (standard ones translated).
@@ -400,7 +417,7 @@ mod tests {
         let mut state = state_with(10);
         let shown = shown_roles(&state);
         let before = state.network.roles().len();
-        let index = state.add_role(" serveur ", DeviceKind::Tv, &shown);
+        let index = state.add_role(" serveur ", Icon::new("Entertainment/Smart TV"), &shown);
         assert_eq!(index.and_then(|i| state.role(i)), Some(Role::Server));
         assert_eq!(state.network.roles().len(), before, "nothing added");
     }
@@ -410,9 +427,10 @@ mod tests {
         let mut state = state_with(10);
         let shown = shown_roles(&state);
         let media = Role::Custom("Media".into());
-        let index = state.add_role("Media", DeviceKind::Server, &shown);
+        let server = Icon::new("Computers/Server");
+        let index = state.add_role("Media", server.clone(), &shown);
         assert_eq!(index, Some(state.network.roles().len() - 1));
-        assert_eq!(state.network.role_icon(&media), Some(DeviceKind::Server));
+        assert_eq!(state.network.role_icon(&media), Some(&server));
         assert_eq!(
             selected_role(&state),
             Some(Role::Custom("TV".into())),
@@ -522,7 +540,7 @@ mod tests {
         let mut state = AppState::new(mock_data::network());
         let before = state.network.clone();
         state.edit_selected(|d| d.name = "Changed".into());
-        state.add_role("Media", DeviceKind::Tv, &[]);
+        state.add_role("Media", Icon::new("Entertainment/Smart TV"), &[]);
         state.forget_selected();
         assert_eq!(state.network.devices(), before.devices());
     }

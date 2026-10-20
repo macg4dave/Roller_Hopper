@@ -29,7 +29,7 @@ export component DeviceRow inherits Rectangle {
         spacing: Theme.space-m;
 
         DeviceIcon {
-            kind: device.icon;
+            icon: device.icon;
             width: 26px;
             colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
         }

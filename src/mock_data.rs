@@ -320,11 +320,11 @@ fn connections() -> Vec<Connection> {
 pub(crate) fn network() -> Network {
     let mut network = Network::new(devices(), connections());
     // Custom roles as if the user had added them: no standard role has the TV or console icon.
-    for (id, name, icon) in [
+    for (id, name, kind) in [
         (10, "TV", DeviceKind::Tv),
         (11, "Games console", DeviceKind::Console),
     ] {
-        let role = network.add_custom_role(name, icon);
+        let role = network.add_custom_role(name, kind.icon());
         if let (Some(role), Some(device)) = (role, network.device_mut(DeviceId(id))) {
             device.role = role;
         }

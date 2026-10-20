@@ -1,5 +1,5 @@
 import { Button, ListView } from "std-widgets.slint";
-import { Bridge, DeviceKind } from "bridge.slint";
+import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { NewRole } from "components/new-role.slint";
 import { RoleColumns, RoleRow } from "components/role-row.slint";
@@ -77,7 +77,6 @@ export component RoleEditor inherits VerticalLayout {
         alignment: start;
         NewRole {
             width: 360px;
-            icon: DeviceKind.unknown;
             add(name, icon) => {
                 Bridge.add-role(name, icon);
                 adding = false;

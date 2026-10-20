@@ -3,9 +3,8 @@ import { Bridge } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
-import { DeviceIcon } from "components/device-icon.slint";
 import { DeviceRow } from "components/device-row.slint";
-import { IconPicker } from "components/icon-picker.slint";
+import { IconChooser } from "components/icon-chooser.slint";
 import { RolePicker } from "components/role-picker.slint";
 import { Splitter } from "components/splitter.slint";
 import { PortEditor } from "port-editor.slint";
@@ -58,11 +57,16 @@ export component DeviceEditor inherits HorizontalLayout {
             HorizontalLayout {
                 spacing: Theme.space-m;
                 padding-bottom: Theme.space-m;
-                DeviceIcon {
-                    kind: Bridge.details.icon;
-                    width: 44px;
-                    height: 44px;
-                    colorize: Theme.accent;
+                IconChooser {
+                    width: 52px;
+                    height: 52px;
+                    icon: Bridge.details.icon;
+                    icon-size: 36px;
+                    tint: Theme.accent;
+                    reset-text: @tr("edit.icon-from-role");
+                    can-reset: Bridge.details.custom-icon;
+                    picked(icon) => { Bridge.set-icon(icon.id); }
+                    reset => { Bridge.reset-icon(); }
                 }
                 VerticalLayout {
                     alignment: center;
@@ -92,25 +96,6 @@ export component DeviceEditor inherits HorizontalLayout {
             DetailField {
                 label: @tr("details.role");
                 RolePicker { }
-            }
-            DetailField {
-                label: @tr("edit.icon");
-                VerticalLayout {
-                    spacing: Theme.space-xs;
-                    horizontal-stretch: 1;
-                    IconPicker {
-                        selected: Bridge.details.icon;
-                        picked(icon) => { Bridge.set-icon(icon); }
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        Button {
-                            text: @tr("edit.icon-from-role");
-                            enabled: Bridge.details.custom-icon;
-                            clicked => { Bridge.reset-icon(); }
-                        }
-                    }
-                }
             }
             DetailField {
                 label: @tr("details.open-ports");

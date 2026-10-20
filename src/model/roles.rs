@@ -4,7 +4,7 @@
 //! Standard role names are translated in the UI, so clashes with those are checked there; this
 //! list only keeps the names the user typed unique among themselves, ignoring case.
 
-use super::device::{DeviceKind, Role};
+use super::device::{Icon, Role};
 use super::groups::GroupId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,7 +14,7 @@ struct Entry {
     /// roles, whose name is part of the role itself.
     renamed: Option<String>,
     /// `None` keeps each device's detected icon.
-    icon: Option<DeviceKind>,
+    icon: Option<Icon>,
     group: Option<GroupId>,
 }
 
@@ -31,8 +31,8 @@ impl Entry {
 
     /// What restoring the standard roles resets: the group is the user's sorting, not part of
     /// the role.
-    fn definition(&self) -> (&Role, Option<&str>, Option<DeviceKind>) {
-        (&self.role, self.renamed.as_deref(), self.icon)
+    fn definition(&self) -> (&Role, Option<&str>, Option<&Icon>) {
+        (&self.role, self.renamed.as_deref(), self.icon.as_ref())
     }
 
     /// The name the user typed, if any; `None` means the UI shows the translated name.
@@ -72,8 +72,8 @@ impl Roles {
         self.entry(role).and_then(Entry::name)
     }
 
-    pub(crate) fn icon(&self, role: &Role) -> Option<DeviceKind> {
-        self.entry(role).and_then(|e| e.icon)
+    pub(crate) fn icon(&self, role: &Role) -> Option<&Icon> {
+        self.entry(role).and_then(|e| e.icon.as_ref())
     }
 
     fn named_ignoring_case(&self, name: &str) -> Option<&Entry> {
@@ -85,7 +85,7 @@ impl Roles {
 
     /// Adds a role shown with `icon`, and returns it. An existing role with the same name is
     /// returned, with its own icon, instead of a duplicate; a blank name is rejected.
-    pub(crate) fn add(&mut self, name: &str, icon: DeviceKind) -> Option<Role> {
+    pub(crate) fn add(&mut self, name: &str, icon: Icon) -> Option<Role> {
         let name = name.trim();
         if name.is_empty() {
             return None;
@@ -123,7 +123,7 @@ impl Roles {
         Some(entry.role.clone())
     }
 
-    pub(crate) fn set_icon(&mut self, role: &Role, icon: Option<DeviceKind>) {
+    pub(crate) fn set_icon(&mut self, role: &Role, icon: Option<Icon>) {
         if let Some(entry) = self.entry_mut(role) {
             entry.icon = icon;
         }
@@ -189,10 +189,14 @@ mod tests {
         Role::Custom("TV".into())
     }
 
+    fn icon(path: &str) -> Icon {
+        Icon::new(path)
+    }
+
     fn roles() -> Roles {
         let mut roles = Roles::default();
-        roles.add("TV", DeviceKind::Tv);
-        roles.add("Media", DeviceKind::Server);
+        roles.add("TV", icon("Entertainment/Smart TV"));
+        roles.add("Media", icon("Computers/Server"));
         roles
     }
 
@@ -200,11 +204,12 @@ mod tests {
     fn names_stay_unique_ignoring_case() {
         let mut roles = roles();
         let media = Role::Custom("Media".into());
-        assert_eq!(roles.add(" media ", DeviceKind::Phone), Some(media.clone()));
-        assert_eq!(roles.icon(&media), Some(DeviceKind::Server), "icon kept");
-        assert_eq!(roles.add("  ", DeviceKind::Phone), None);
+        assert_eq!(roles.add(" media ", icon("Phone")), Some(media.clone()));
+        let server = icon("Computers/Server");
+        assert_eq!(roles.icon(&media), Some(&server), "icon kept");
+        assert_eq!(roles.add("  ", icon("Phone")), None);
         roles.rename(&Role::Nas, "Storage");
-        assert_eq!(roles.add("storage", DeviceKind::Phone), Some(Role::Nas));
+        assert_eq!(roles.add("storage", icon("Phone")), Some(Role::Nas));
         assert_eq!(roles.roles().count(), Role::STANDARD.len() + 2);
     }
 
@@ -222,7 +227,7 @@ mod tests {
         assert_eq!(roles.rename(&media, " MEDIA "), Some(upper.clone()));
         let streaming = Role::Custom("Streaming".into());
         assert_eq!(roles.rename(&upper, "Streaming"), Some(streaming.clone()));
-        assert_eq!(roles.icon(&streaming), Some(DeviceKind::Server));
+        assert_eq!(roles.icon(&streaming), Some(&icon("Computers/Server")));
     }
 
     #[test]
@@ -237,12 +242,14 @@ mod tests {
     #[test]
     fn icons_can_change_or_follow_the_device() {
         let mut roles = roles();
-        roles.set_icon(&tv(), Some(DeviceKind::Console));
-        assert_eq!(roles.icon(&tv()), Some(DeviceKind::Console));
+        let console = icon("Entertainment/Games console");
+        roles.set_icon(&tv(), Some(console.clone()));
+        assert_eq!(roles.icon(&tv()), Some(&console));
         roles.set_icon(&Role::Printer, None);
         assert_eq!(roles.icon(&Role::Printer), None);
-        roles.set_icon(&Role::Other, Some(DeviceKind::Unknown));
-        assert_eq!(roles.icon(&Role::Other), Some(DeviceKind::Unknown));
+        let dropped_in = icon("My icons/Fish tank");
+        roles.set_icon(&Role::Other, Some(dropped_in.clone()));
+        assert_eq!(roles.icon(&Role::Other), Some(&dropped_in));
     }
 
     #[test]
@@ -263,7 +270,8 @@ mod tests {
         roles.remove(&Role::Camera);
         roles.rename(&Role::Router, "Gateway");
         roles.set_icon(&Role::Phone, None);
-        roles.set_icon(&tv(), Some(DeviceKind::Console));
+        let console = icon("Entertainment/Games console");
+        roles.set_icon(&tv(), Some(console.clone()));
         assert!(roles.standard_changed());
 
         roles.restore_standard();
@@ -271,8 +279,9 @@ mod tests {
         let order: Vec<&Role> = roles.roles().collect();
         assert_eq!(order.get(9), Some(&&Role::Camera), "back in its place");
         assert_eq!(roles.name(&Role::Router), None);
-        assert_eq!(roles.icon(&Role::Phone), Some(DeviceKind::Phone));
-        assert_eq!(roles.icon(&tv()), Some(DeviceKind::Console), "custom kept");
+        let phone = Role::Phone.default_icon();
+        assert_eq!(roles.icon(&Role::Phone), phone.as_ref());
+        assert_eq!(roles.icon(&tv()), Some(&console), "custom kept");
     }
 
     #[test]

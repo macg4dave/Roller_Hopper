@@ -30,8 +30,8 @@ export component RolePicker inherits VerticalLayout {
     }
 
     if adding: NewRole {
-        // Start from the icon the device was detected with.
-        icon: Bridge.details.kind;
+        // Start from the icon the device is shown with.
+        icon: Bridge.details.icon;
         add(name, icon) => {
             Bridge.choose-new-role(name, icon);
             adding = false;

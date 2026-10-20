@@ -149,9 +149,6 @@ msgstr "Back to map"
 msgid "edit.choose-device"
 msgstr "Choose a device to edit it."
 
-msgid "edit.icon"
-msgstr "Icon"
-
 msgid "edit.icon-from-role"
 msgstr "Use the role's icon"
 
@@ -204,9 +201,6 @@ msgstr "Group"
 
 msgid "roles.group"
 msgstr "Group"
-
-msgid "roles.change-icon"
-msgstr "Change icon"
 
 msgid "roles.delete"
 msgstr "Delete role"
@@ -276,6 +270,17 @@ msgstr "Add"
 
 msgid "groups.cancel"
 msgstr "Cancel"
+
+# The icon picker: opened from an icon with a pencil on it.
+msgid "icons.change"
+msgstr "Change icon"
+
+msgid "icons.title"
+msgstr "Choose an icon"
+
+# Shown in the picker when the icon folder has no usable SVG files.
+msgid "icons.none"
+msgstr "No icons found. Add SVG files to the icons folder."
 
 # Device types, as detected
 msgid "kind.router"

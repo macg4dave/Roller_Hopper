@@ -1,6 +1,6 @@
 //! The network as a whole: devices, how they connect, the roles on offer and their groups.
 
-use super::device::{Device, DeviceId, DeviceKind, Role, Status};
+use super::device::{Device, DeviceId, Icon, Role, Status};
 use super::groups::{GroupColour, GroupId, Groups};
 use super::roles::Roles;
 
@@ -113,20 +113,22 @@ impl Network {
     }
 
     /// The icon a role gives its devices; `None` when they keep their detected icon.
-    pub(crate) fn role_icon(&self, role: &Role) -> Option<DeviceKind> {
+    pub(crate) fn role_icon(&self, role: &Role) -> Option<&Icon> {
         self.roles.icon(role)
     }
 
     /// The icon shown for a device: the one picked for it, else its role's, else the detected one.
-    pub(crate) fn icon(&self, device: &Device) -> DeviceKind {
+    pub(crate) fn icon(&self, device: &Device) -> Icon {
         device
             .icon
+            .as_ref()
             .or_else(|| self.role_icon(&device.role))
-            .unwrap_or(device.kind)
+            .cloned()
+            .unwrap_or_else(|| device.kind.icon())
     }
 
     /// Adds a custom role shown with `icon`, and returns it (see [`Roles::add`]).
-    pub(crate) fn add_custom_role(&mut self, name: &str, icon: DeviceKind) -> Option<Role> {
+    pub(crate) fn add_custom_role(&mut self, name: &str, icon: Icon) -> Option<Role> {
         self.roles.add(name, icon)
     }
 
@@ -141,7 +143,7 @@ impl Network {
     }
 
     /// Sets the icon a role gives its devices; `None` lets each keep its detected icon.
-    pub(crate) fn set_role_icon(&mut self, role: &Role, icon: Option<DeviceKind>) {
+    pub(crate) fn set_role_icon(&mut self, role: &Role, icon: Option<Icon>) {
         self.roles.set_icon(role, icon);
     }
 
@@ -207,6 +209,7 @@ impl Network {
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::DeviceKind;
 
     #[test]
     fn filters_combine_status_and_search() {
@@ -250,7 +253,7 @@ mod tests {
     #[test]
     fn custom_roles_are_listed_after_standard_ones() {
         let mut network = Network::default();
-        network.add_custom_role("Media server", DeviceKind::Server);
+        network.add_custom_role("Media server", DeviceKind::Server.icon());
         let roles = network.roles();
         assert_eq!(roles.len(), Role::STANDARD.len() + 1);
         assert_eq!(roles.last(), Some(&Role::Custom("Media server".into())));
@@ -259,19 +262,22 @@ mod tests {
     #[test]
     fn the_icon_follows_the_role_unless_one_was_picked() {
         let mut network = mock_data::network();
-        let media = network.add_custom_role("Media", DeviceKind::Tv).unwrap();
+        let media = network
+            .add_custom_role("Media", DeviceKind::Tv.icon())
+            .unwrap();
         let mut device = network.devices().first().unwrap().clone();
         for (role, expected) in [
-            (Role::Printer, DeviceKind::Printer),
-            (Role::Iot, DeviceKind::Smart),
-            (media, DeviceKind::Tv),
-            (Role::Other, device.kind),
+            (Role::Printer, DeviceKind::Printer.icon()),
+            (Role::Iot, DeviceKind::Smart.icon()),
+            (media, DeviceKind::Tv.icon()),
+            (Role::Other, device.kind.icon()),
         ] {
             device.role = role;
             assert_eq!(network.icon(&device), expected, "{:?}", device.role);
         }
-        device.icon = Some(DeviceKind::Camera);
-        assert_eq!(network.icon(&device), DeviceKind::Camera);
+        let dropped_in = Icon::new("My icons/Fish tank");
+        device.icon = Some(dropped_in.clone());
+        assert_eq!(network.icon(&device), dropped_in);
     }
 
     fn roles_of(network: &Network, role: &Role) -> usize {

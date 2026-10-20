@@ -1,8 +1,7 @@
 import { Button, ComboBox } from "std-widgets.slint";
 import { Bridge, RoleView } from "../bridge.slint";
 import { Theme } from "../theme.slint";
-import { DeviceIcon } from "device-icon.slint";
-import { IconPicker } from "icon-picker.slint";
+import { IconChooser } from "icon-chooser.slint";
 import { NameEdit } from "name-edit.slint";
 
 // Column sizes shared by the rows and the heading above them, so the columns line up.
@@ -31,27 +30,16 @@ export component RoleRow inherits Rectangle {
         padding-right: Theme.space-s;
         spacing: Theme.space-m;
 
-        icon-button := Rectangle {
+        IconChooser {
             width: icon-box;
             height: icon-box;
             y: (parent.height - self.height) / 2;
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: Theme.border;
-            background: touch.has-hover ? Theme.hover : transparent;
-            accessible-role: button;
-            accessible-label: @tr("roles.change-icon");
-            accessible-action-default => { popup.show(); }
-
-            touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { popup.show(); }
-            }
-            if role.has-icon: DeviceIcon {
-                kind: role.icon;
-                width: 20px;
-                height: 20px;
-            }
+            icon: role.icon;
+            has-icon: role.has-icon;
+            reset-text: @tr("roles.detected-icon");
+            can-reset: role.has-icon;
+            picked(icon) => { Bridge.set-role-icon(index, icon.id); }
+            reset => { Bridge.clear-role-icon(index); }
         }
 
         VerticalLayout {
@@ -93,43 +81,6 @@ export component RoleRow inherits Rectangle {
                 colorize-icon: true;
                 accessible-label: @tr("roles.delete");
                 clicked => { Bridge.delete-role(index); }
-            }
-        }
-    }
-
-    popup := PopupWindow {
-        x: icon-button.x;
-        y: icon-button.y + icon-button.height + Theme.space-xs;
-        width: 7 * 28px + 2 * Theme.space-s;
-        height: content.preferred-height;
-        close-policy: close-on-click-outside;
-
-        Rectangle {
-            background: Theme.surface;
-            border-color: Theme.border;
-            border-width: 1px;
-            border-radius: Theme.radius;
-            drop-shadow-blur: 12px;
-            drop-shadow-color: #0000001f;
-        }
-        content := VerticalLayout {
-            padding: Theme.space-s;
-            spacing: Theme.space-s;
-            IconPicker {
-                selected: role.icon;
-                has-selection: role.has-icon;
-                picked(icon) => {
-                    Bridge.set-role-icon(index, icon);
-                    popup.close();
-                }
-            }
-            Button {
-                text: @tr("roles.detected-icon");
-                enabled: role.has-icon;
-                clicked => {
-                    Bridge.clear-role-icon(index);
-                    popup.close();
-                }
             }
         }
     }

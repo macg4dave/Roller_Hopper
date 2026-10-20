@@ -1,0 +1,116 @@
+import { Button, ScrollView } from "std-widgets.slint";
+import { Bridge, IconChoice } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { DeviceIcon } from "device-icon.slint";
+import { IconPicker } from "icon-picker.slint";
+
+// An icon with a small pencil on it; clicking opens every icon in the icon folder to choose
+// from. Reports the choice through `picked` and leaves applying it to the owner. The caller sets
+// the size.
+export component IconChooser inherits Rectangle {
+    in property <IconChoice> icon;
+    // False when there is no icon to show, such as a role whose devices keep their own.
+    in property <bool> has-icon: true;
+    in property <length> icon-size: 20px;
+    in property <color> tint: Theme.icon;
+    // A button under the icons that gives up the chosen icon; hidden when empty.
+    in property <string> reset-text;
+    in property <bool> can-reset;
+    callback picked(IconChoice);
+    callback reset();
+    property <length> badge: 16px;
+
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.accent : Theme.border;
+    background: touch.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: @tr("icons.change");
+    accessible-action-default => { open(); }
+
+    // Icons dropped into the folder since it was last read appear in the picker.
+    function open() {
+        Bridge.refresh-icons();
+        popup.show();
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { open(); }
+    }
+
+    if has-icon: DeviceIcon {
+        icon: root.icon.image;
+        width: icon-size;
+        height: icon-size;
+        colorize: tint;
+    }
+
+    // Says the icon can be changed; overhangs the corner so it never covers the icon.
+    Rectangle {
+        x: parent.width - badge * 2 / 3;
+        y: parent.height - badge * 2 / 3;
+        width: badge;
+        height: badge;
+        border-radius: badge / 2;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        Image {
+            source: @image-url("../icons/edit.svg");
+            width: 10px;
+            height: 10px;
+            colorize: Theme.accent;
+        }
+    }
+
+    popup := PopupWindow {
+        y: root.height + Theme.space-xs;
+        width: 5 * 76px + 2 * Theme.space-m + Theme.space-l;
+        height: 380px;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: Theme.radius;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #0000001f;
+        }
+        VerticalLayout {
+            padding: Theme.space-m;
+            spacing: Theme.space-s;
+
+            Text {
+                text: @tr("icons.title");
+                font-size: Theme.font-heading;
+                font-weight: 600;
+                color: Theme.text;
+            }
+            scroll := ScrollView {
+                vertical-stretch: 1;
+                IconPicker {
+                    width: scroll.visible-width;
+                    selected: root.has-icon ? root.icon.id : "";
+                    picked(icon) => {
+                        root.picked(icon);
+                        popup.close();
+                    }
+                }
+            }
+            if reset-text != "": HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: reset-text;
+                    enabled: can-reset;
+                    clicked => {
+                        root.reset();
+                        popup.close();
+                    }
+                }
+            }
+        }
+    }
+}

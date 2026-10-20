@@ -4,33 +4,35 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use super::{AppState, convert};
 use crate::model::{Device, Network, Role, StatusFilter};
-use crate::ui::{AppWindow, Bridge, Labels};
+use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
 /// consistent; models are updated row by row so nodes being dragged are not recreated.
 pub(super) fn push(ui: &AppWindow, state: &AppState) {
     let bridge = ui.global::<Bridge<'_>>();
     let labels = ui.global::<Labels<'_>>();
-    let network = &state.network;
+    let (network, icons) = (&state.network, &state.icons);
     let at = |id| state.positions.get(&id).copied().unwrap_or_default();
-    let view = |d: &Device, dimmed| {
+    let view = |d: &Device| {
         let role = convert::role_label(&labels, network, &d.role);
-        convert::device_view(network, d, role, at(d.id), dimmed)
+        convert::device_view(network, icons, d, role, at(d.id))
     };
 
     let nodes = network.devices().iter().map(|d| {
         let shown = state.filter.admits(d.status) && d.matches(&state.query);
-        view(d, !shown)
+        ui::DeviceView {
+            dimmed: !shown,
+            ..view(d)
+        }
     });
     if let Some(model) = sync(&bridge.get_devices(), nodes.collect()) {
         bridge.set_devices(model);
     }
     let list = network.filtered(state.filter, &state.query);
-    let list = list.map(|d| view(d, false)).collect();
-    if let Some(model) = sync(&bridge.get_list(), list) {
+    if let Some(model) = sync(&bridge.get_list(), list.map(view).collect()) {
         bridge.set_list(model);
     }
-    push_roles(&bridge, &labels, network);
+    push_roles(&bridge, &labels, state);
 
     bridge.set_lines(convert::lines(network, &state.positions, state.selected));
     bridge.set_bounds(convert::bounds(&state.positions));
@@ -44,7 +46,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
 }
 
 /// The role dropdown's names, the role list's rows and the groups they can be in.
-fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, network: &Network) {
+fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let network = &state.network;
     let roles = network.roles();
     let names: Vec<SharedString> = roles
         .iter()
@@ -53,7 +56,7 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, network: &Network) {
     let rows = roles
         .iter()
         .zip(&names)
-        .map(|(role, name)| convert::role_view(network, role, name.clone()))
+        .map(|(role, name)| convert::role_view(network, &state.icons, role, name.clone()))
         .collect();
     if let Some(model) = sync(&bridge.get_role_list(), rows) {
         bridge.set_role_list(model);
@@ -85,7 +88,7 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
             bridge.set_notes_draft(device.notes.as_str().into());
         }
         let role = convert::role_label(labels, &state.network, &device.role);
-        bridge.set_details(convert::details(&state.network, device, role));
+        bridge.set_details(convert::details(&state.network, &state.icons, device, role));
         let roles = state.network.roles();
         let index = roles
             .iter()

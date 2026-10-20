@@ -47,7 +47,7 @@ export component MapNode inherits Rectangle {
                     // at the next power-of-two of the zoom and scaling back keeps icons sharp,
                     // while the few sizes used stay in Slint's image cache during smooth zooming.
                     property <float> detail: Math.pow(2, Math.ceil(Math.log(zoom, 2)));
-                    kind: device.icon;
+                    icon: device.icon;
                     x: (parent.width - icon-size) / 2;
                     y: (parent.height - icon-size) / 2;
                     width: icon-size * detail;

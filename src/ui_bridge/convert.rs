@@ -3,9 +3,10 @@
 
 use slint::SharedString;
 
+use super::icons::Icons;
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Network, Point, Positions, Role,
-    Status, StatusFilter, route,
+    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Network, Point, Positions,
+    Role, Status, StatusFilter, route,
 };
 use crate::ui::{self, Labels};
 
@@ -66,23 +67,12 @@ fn kind(kind: DeviceKind) -> ui::DeviceKind {
     }
 }
 
-/// An icon picked in the UI.
-pub(super) fn kind_from_ui(kind: ui::DeviceKind) -> DeviceKind {
-    match kind {
-        ui::DeviceKind::Router => DeviceKind::Router,
-        ui::DeviceKind::Switch => DeviceKind::Switch,
-        ui::DeviceKind::AccessPoint => DeviceKind::AccessPoint,
-        ui::DeviceKind::Nas => DeviceKind::Nas,
-        ui::DeviceKind::Desktop => DeviceKind::Desktop,
-        ui::DeviceKind::Laptop => DeviceKind::Laptop,
-        ui::DeviceKind::Server => DeviceKind::Server,
-        ui::DeviceKind::Printer => DeviceKind::Printer,
-        ui::DeviceKind::Phone => DeviceKind::Phone,
-        ui::DeviceKind::Tv => DeviceKind::Tv,
-        ui::DeviceKind::Console => DeviceKind::Console,
-        ui::DeviceKind::Camera => DeviceKind::Camera,
-        ui::DeviceKind::Smart => DeviceKind::Smart,
-        ui::DeviceKind::Unknown => DeviceKind::Unknown,
+/// An icon picked in the UI, by its id; an empty id is the Unknown icon.
+pub(super) fn icon_from_ui(id: &str) -> Icon {
+    if id.is_empty() {
+        DeviceKind::Unknown.icon()
+    } else {
+        Icon::new(id)
     }
 }
 
@@ -142,12 +132,13 @@ pub(super) fn colour_from_ui(colour: ui::GroupColour) -> Option<GroupColour> {
     }
 }
 
+/// A device as drawn at `at`; the caller dims it when the search or filter hides it.
 pub(super) fn device_view(
     network: &Network,
+    icons: &Icons,
     device: &Device,
     role: SharedString,
     at: Point,
-    dimmed: bool,
 ) -> ui::DeviceView {
     ui::DeviceView {
         id: ui_id(device.id),
@@ -155,17 +146,22 @@ pub(super) fn device_view(
         name: device.name.trim().into(),
         ip: device.ip.to_string().into(),
         role,
-        icon: kind(network.icon(device)),
+        icon: icons.image(&network.icon(device)),
         colour: colour(network.colour(device)),
         status: status(device.status),
         x: at.x,
         y: at.y,
-        dimmed,
+        dimmed: false,
     }
 }
 
 /// A role for the role list, with `label` as shown in the role dropdown.
-pub(super) fn role_view(network: &Network, role: &Role, label: SharedString) -> ui::RoleView {
+pub(super) fn role_view(
+    network: &Network,
+    icons: &Icons,
+    role: &Role,
+    label: SharedString,
+) -> ui::RoleView {
     let icon = network.role_icon(role);
     // Choice 0 in the group dropdown is "no group"; the groups follow in order.
     let group = network.role_group(role).and_then(|group| {
@@ -174,14 +170,19 @@ pub(super) fn role_view(network: &Network, role: &Role, label: SharedString) -> 
     });
     ui::RoleView {
         name: label,
-        icon: kind(icon.unwrap_or(DeviceKind::Unknown)),
+        icon: icon.map(|icon| icons.choice(icon)).unwrap_or_default(),
         has_icon: icon.is_some(),
         deletable: *role != Role::Other,
         group: group.unwrap_or(0),
     }
 }
 
-pub(super) fn details(network: &Network, device: &Device, role: SharedString) -> ui::DeviceDetails {
+pub(super) fn details(
+    network: &Network,
+    icons: &Icons,
+    device: &Device,
+    role: SharedString,
+) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let uplink = network.uplink(device.id).and_then(|link| {
         let upstream = network.device(link.upstream)?;
@@ -189,7 +190,7 @@ pub(super) fn details(network: &Network, device: &Device, role: SharedString) ->
     });
     ui::DeviceDetails {
         kind: kind(device.kind),
-        icon: kind(network.icon(device)),
+        icon: icons.choice(&network.icon(device)),
         custom_icon: device.icon.is_some(),
         status: status(device.status),
         name: device.name.trim().into(),

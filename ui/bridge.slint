@@ -4,6 +4,20 @@
 
 export enum DeviceKind { router, switch, access-point, nas, desktop, laptop, server, printer, phone, tv, console, camera, smart, unknown }
 
+/// An icon from the icon folder. `id` is its path there, which identifies it to Rust; `label` is
+/// its file name. `image` is empty when the file is gone, and is then shown as Unknown.
+export struct IconChoice {
+    id: string,
+    label: string,
+    image: image,
+}
+
+/// The icons of one subfolder of the icon folder; `heading` is empty for the folder itself.
+export struct IconGroup {
+    heading: string,
+    icons: [IconChoice],
+}
+
 export enum DeviceStatus { online, offline, unknown }
 
 export enum StatusFilter { all, online, offline }
@@ -21,8 +35,8 @@ export struct DeviceView {
     ip: string,
     // Already translated: standard role names come from Labels.role().
     role: string,
-    // Follows the role; the detected kind when the role has no icon of its own.
-    icon: DeviceKind,
+    // Follows the role; the detected kind's when the role has no icon of its own.
+    icon: image,
     // The colour of the role's group.
     colour: GroupColour,
     status: DeviceStatus,
@@ -36,7 +50,7 @@ export struct DeviceView {
 export struct DeviceDetails {
     // What the device was detected as, and the icon it is shown with.
     kind: DeviceKind,
-    icon: DeviceKind,
+    icon: IconChoice,
     // The icon was picked for this device rather than coming from its role.
     custom-icon: bool,
     status: DeviceStatus,
@@ -66,7 +80,7 @@ export struct PortView {
 export struct RoleView {
     // As shown in the role dropdown: translated, unless the user named it.
     name: string,
-    icon: DeviceKind,
+    icon: IconChoice,
     // False when the role's devices keep their own detected icon.
     has-icon: bool,
     // Other cannot be deleted: it is where devices of a deleted role go.
@@ -119,6 +133,8 @@ export global Bridge {
     in property <bool> scanning;
     // Completed simulated scans.
     in property <int> scans;
+    // Every icon in the icon folder, for the icon picker.
+    in property <[IconGroup]> icons;
 
     // Edit buffers for the selected device, set by Rust when the selection changes.
     in-out property <string> name-draft;
@@ -130,11 +146,14 @@ export global Bridge {
     callback set-filter(StatusFilter);
     callback rename(string);
     callback choose-role(int);
+    // Reads the icon folder again, so icons added since appear. Icons are passed by their id;
+    // an empty id is the Unknown icon.
+    callback refresh-icons();
     // Adds a role, with the icon picked for it, and gives it to the selected device.
-    callback choose-new-role(string, DeviceKind);
+    callback choose-new-role(string, string);
     callback edit-notes(string);
     // The selected device's own icon, or back to its role's icon.
-    callback set-icon(DeviceKind);
+    callback set-icon(string);
     callback reset-icon();
     // Removes the selected device until the app restarts.
     callback forget();
@@ -145,9 +164,9 @@ export global Bridge {
     callback set-port-description(int, string);
     callback remove-port(int);
     // The role list. Roles are identified by their index in role-list.
-    callback add-role(string, DeviceKind);
+    callback add-role(string, string);
     callback rename-role(int, string);
-    callback set-role-icon(int, DeviceKind);
+    callback set-role-icon(int, string);
     // The role's devices keep their own detected icon.
     callback clear-role-icon(int);
     callback delete-role(int);
