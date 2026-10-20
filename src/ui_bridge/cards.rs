@@ -277,16 +277,13 @@ impl AppState {
         }
     }
 
-    /// Changes what the selected guest runs as. Its icon follows, unless one was picked for it.
+    /// Changes what the selected guest runs as. Its icon follows unless it or its role has one
+    /// (see [`Network::icon`]).
     fn set_guest_kind(&mut self, kind: GuestKind) {
         self.edit_selected(|device| {
-            let Some(guest) = &mut device.guest else {
-                return;
-            };
-            if device.icon == Some(guest.kind.icon()) {
-                device.icon = Some(kind.icon());
+            if let Some(guest) = &mut device.guest {
+                guest.kind = kind;
             }
-            guest.kind = kind;
         });
     }
 }
@@ -505,17 +502,18 @@ mod tests {
         let guest = state.selected_device().unwrap();
         let of = |st: &AppState| {
             let d = st.network.device(guest).unwrap();
-            (d.guest.map(|g| g.kind), d.icon.clone())
+            (d.guest.map(|g| g.kind), st.network.icon(d))
         };
+        let vm = Some(GuestKind::VirtualMachine);
+        assert_eq!(of(&state), (vm, GuestKind::VirtualMachine.icon()));
         state.set_guest_kind(GuestKind::Container);
         let container = Some(GuestKind::Container);
-        assert_eq!(of(&state), (container, Some(GuestKind::Container.icon())));
+        assert_eq!(of(&state), (container, GuestKind::Container.icon()));
 
         let fish = Icon::new("My icons/Fish tank");
         state.edit_selected(|d| d.icon = Some(fish.clone()));
         state.set_guest_kind(GuestKind::VirtualMachine);
-        let vm = Some(GuestKind::VirtualMachine);
-        assert_eq!(of(&state), (vm, Some(fish)), "picked icon kept");
+        assert_eq!(of(&state), (vm, fish), "picked icon kept");
 
         state.selected = Some(Selection::Device(PC));
         state.set_guest_kind(GuestKind::Container);

@@ -21,8 +21,9 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, CardId, Connection, Device, DeviceId, GroupId, Icon, Level, Network, NetworkCard,
-    Point, Positions, Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
+    Arrangement, CardId, Connection, Device, DeviceId, GroupId, GuestKind, Icon, Level, Network,
+    NetworkCard, Point, Positions, Role, Snap, StatusFilter, link_route, snap_target, tree_layout,
+    trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -653,9 +654,12 @@ fn refresh_icons(ui: &Weak<AppWindow>, state: &RefCell<AppState>) {
         let icons = &state.borrow().icons;
         let bridge = ui.global::<Bridge<'_>>();
         bridge.set_icons(ModelRc::new(VecModel::from(icons.groups())));
-        // Where the icon new cards start with lives, wherever the user has put that folder.
+        // Where the icons new cards and guests start with live, wherever the user has put
+        // those folders.
         let card_icons = icons.choice(&Icon::new(NetworkCard::DEFAULT_ICON)).group;
         bridge.set_card_icon_category(card_icons);
+        let guest_icons = icons.choice(&GuestKind::VirtualMachine.icon()).group;
+        bridge.set_guest_icon_category(guest_icons);
     }
 }
 

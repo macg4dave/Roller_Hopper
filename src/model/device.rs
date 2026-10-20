@@ -149,11 +149,12 @@ pub(crate) enum GuestKind {
 }
 
 impl GuestKind {
-    /// The icon a guest of this kind is added with: one of the icons that ship with the app.
+    /// The icon a guest of this kind is shown with when neither it nor its role has one: one of
+    /// the icons that ship with the app. Their category is the one a guest's icon picker opens on.
     pub(crate) fn icon(self) -> Icon {
         Icon::new(match self {
-            Self::VirtualMachine => "Computers/Virtual machine",
-            Self::Container => "Computers/Container",
+            Self::VirtualMachine => "Virtual machines/Virtual machine",
+            Self::Container => "Virtual machines/Container",
         })
     }
 }

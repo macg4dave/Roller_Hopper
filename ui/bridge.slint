@@ -248,6 +248,8 @@ export global Bridge {
     // The category of the network card icons in icons, which a card's picker opens on; -1 when
     // the folder has none.
     in property <int> card-icon-category: -1;
+    // Likewise the category of the virtual machine and container icons, for a guest's picker.
+    in property <int> guest-icon-category: -1;
 
     // Edit buffers for the selected device, set by Rust when the selection changes.
     in-out property <string> name-draft;

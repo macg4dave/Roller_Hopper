@@ -38,6 +38,8 @@ export component DeviceForm inherits VerticalLayout {
             width: 52px;
             height: 52px;
             icon: Bridge.details.icon;
+            // A guest's picker opens on the guest icons; a device's on its current icon's.
+            start-category: Bridge.details.guest != GuestKind.none ? Bridge.guest-icon-category : -1;
             icon-size: 36px;
             tint: Theme.group-colour(Bridge.details.colour, Theme.accent);
             reset-text: @tr("edit.icon-from-role");
@@ -122,6 +124,7 @@ export component DeviceForm inherits VerticalLayout {
             spacing: Theme.space-xs;
             for guest in Bridge.guests: ChildRow {
                 icon: guest.icon;
+                start-category: Bridge.guest-icon-category;
                 tint: Theme.group-colour(guest.colour, Theme.accent);
                 name: Labels.device-name(guest.name);
                 detail: Labels.guest-summary(guest.kind, guest.ip);

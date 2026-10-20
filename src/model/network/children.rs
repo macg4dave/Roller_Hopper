@@ -49,9 +49,9 @@ impl Network {
     }
 
     /// Adds a blank device with one blank network card, and returns it. Nothing about it was
-    /// detected, so the user fills it in. A `guest` comes after its host's other guests, shown
-    /// with its kind's icon and its card plugged into the host's first card; refused when the
-    /// host is missing. Any other device comes last, plugged in nowhere.
+    /// detected, so the user fills it in. A `guest` comes after its host's other guests, with
+    /// its card plugged into the host's first card; refused when the host is missing. Any other
+    /// device comes last, plugged in nowhere.
     pub(crate) fn add_device(&mut self, guest: Option<Guest>) -> Option<DeviceId> {
         let (at, host_card) = match guest {
             Some(Guest { host, .. }) => {
@@ -74,7 +74,7 @@ impl Network {
             name: String::new(),
             kind: DeviceKind::Unknown,
             role: Role::Other,
-            icon: guest.map(|g| g.kind.icon()),
+            icon: None,
             status: Status::Unknown,
             cards: vec![NetworkCard::blank(card)],
             guest,
@@ -185,7 +185,7 @@ mod tests {
         let added = network.device(web).unwrap();
         assert_eq!(added.name, "");
         assert_eq!(added.guest.map(|g| g.kind), Some(GuestKind::Container));
-        assert_eq!(added.icon, Some(GuestKind::Container.icon()));
+        assert_eq!(network.icon(added), GuestKind::Container.icon());
         assert_eq!(added.cards, [NetworkCard::blank(added.cards[0].id)]);
         assert_eq!(
             network

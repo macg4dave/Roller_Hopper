@@ -120,14 +120,17 @@ impl Network {
         self.roles.icon(role)
     }
 
-    /// The icon shown for a device: the one picked for it, else its role's, else the detected one.
+    /// The icon shown for a device: the one picked for it, else its role's, else a guest's
+    /// kind's, else the detected one.
     pub(crate) fn icon(&self, device: &Device) -> Icon {
-        device
+        let picked = device
             .icon
             .as_ref()
-            .or_else(|| self.role_icon(&device.role))
-            .cloned()
-            .unwrap_or_else(|| device.kind.icon())
+            .or_else(|| self.role_icon(&device.role));
+        picked.cloned().unwrap_or_else(|| match device.guest {
+            Some(guest) => guest.kind.icon(),
+            None => device.kind.icon(),
+        })
     }
 
     /// Adds a custom role shown with `icon`, and returns it (see [`Roles::add`]).
@@ -223,7 +226,7 @@ impl Network {
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::DeviceKind;
+    use crate::model::{DeviceKind, Guest, GuestKind};
 
     #[test]
     fn filters_combine_status_and_search() {
@@ -289,6 +292,29 @@ mod tests {
         let dropped_in = Icon::new("My icons/Fish tank");
         device.icon = Some(dropped_in.clone());
         assert_eq!(network.icon(&device), dropped_in);
+    }
+
+    #[test]
+    fn a_guest_without_an_icon_of_its_own_or_its_roles_shows_its_kinds() {
+        let network = mock_data::network();
+        let mut guest = network
+            .devices()
+            .iter()
+            .find(|d| d.guest.is_some())
+            .cloned()
+            .unwrap();
+        guest.icon = None;
+        guest.role = Role::Other;
+        for kind in [GuestKind::VirtualMachine, GuestKind::Container] {
+            guest.guest = guest.guest.map(|g| Guest { kind, ..g });
+            assert_eq!(network.icon(&guest), kind.icon(), "{kind:?}");
+        }
+        guest.role = Role::Server;
+        assert_eq!(
+            network.icon(&guest),
+            DeviceKind::Server.icon(),
+            "role first"
+        );
     }
 
     fn roles_of(network: &Network, role: &Role) -> usize {
