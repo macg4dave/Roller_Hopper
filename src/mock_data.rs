@@ -439,7 +439,7 @@ fn interfaces() -> Vec<Interface> {
         device: DeviceId(19),
         upstream: DeviceId(22),
         ip: address(LAB, 23),
-        mac: MacAddr([0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13]),
+        mac: Some(MacAddr([0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13])),
         kind: ConnectionKind::Known,
     }]
 }
@@ -567,9 +567,14 @@ mod tests {
         assert!(unique(ips.map(|ip| ip.to_string()).collect(), addresses));
         let macs = devices
             .iter()
-            .map(|d| d.mac)
+            .map(|d| Some(d.mac))
             .chain(interfaces.iter().map(|i| i.mac));
-        assert!(unique(macs.map(|mac| mac.to_string()).collect(), addresses));
+        let macs: Option<Vec<_>> = macs.collect();
+        let macs = macs.expect("every sample interface has a MAC");
+        assert!(unique(
+            macs.iter().map(ToString::to_string).collect(),
+            addresses
+        ));
     }
 
     #[test]

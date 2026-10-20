@@ -1,0 +1,100 @@
+import { Button, ComboBox, LineEdit } from "std-widgets.slint";
+import { Bridge, OtherAddress } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { NameEdit } from "components/name-edit.slint";
+
+// One further interface: change its address or the device it is attached behind, or remove it.
+component InterfaceRow inherits HorizontalLayout {
+    in property <OtherAddress> address;
+    // Where it sits in Bridge.other-addresses, which identifies it to Rust.
+    in property <int> index;
+    in property <length> ip-width;
+
+    // Picking a device replaces the dropdown's binding, so keep it following Rust's state.
+    changed address => { via-box.current-index = address.via; }
+
+    spacing: Theme.space-xs;
+    NameEdit {
+        width: ip-width;
+        name: address.ip;
+        accessible-label: @tr("details.ip");
+        commit(text) => { Bridge.set-interface-ip(index, text); }
+    }
+    via-box := ComboBox {
+        horizontal-stretch: 1;
+        model: Bridge.upstream-choices;
+        current-index: address.via;
+        accessible-label: @tr("edit.interface-via");
+        selected => { Bridge.set-interface-upstream(index, self.current-index); }
+    }
+    Button {
+        icon: @image-url("icons/delete.svg");
+        colorize-icon: true;
+        accessible-label: @tr("edit.interface-remove");
+        clicked => { Bridge.remove-interface(index); }
+    }
+}
+
+// The selected device's further interfaces on the edit page, each with its own address and the
+// device it is attached behind; add as many as needed.
+export component InterfaceEditor inherits VerticalLayout {
+    property <bool> adding;
+    property <length> ip-width: 140px;
+    // Half-typed interfaces belong to the device they were typed for.
+    property <int> selected-id: Bridge.selected-id;
+    changed selected-id => { adding = false; }
+
+    spacing: Theme.space-xs;
+    horizontal-stretch: 1;
+
+    for address[i] in Bridge.other-addresses: InterfaceRow {
+        address: address;
+        index: i;
+        ip-width: ip-width;
+    }
+    if !adding: HorizontalLayout {
+        alignment: start;
+        Button {
+            text: @tr("edit.interface-add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            clicked => { adding = true; }
+        }
+    }
+    if adding: HorizontalLayout {
+        spacing: Theme.space-xs;
+
+        // As with ports, the row stays open for the next interface; a refused address stays in
+        // the field to be corrected.
+        function add() {
+            if Bridge.add-interface(ip-field.text, via-field.current-index) {
+                ip-field.text = "";
+                ip-field.focus();
+            }
+        }
+
+        ip-field := LineEdit {
+            width: ip-width;
+            placeholder-text: @tr("details.ip");
+            init => { self.focus(); }
+            accepted => { add(); }
+        }
+        via-field := ComboBox {
+            horizontal-stretch: 1;
+            model: Bridge.upstream-choices;
+            accessible-label: @tr("edit.interface-via");
+        }
+        Button {
+            text: @tr("edit.interface-confirm-add");
+            primary: true;
+            enabled: ip-field.text != "";
+            clicked => { add(); }
+        }
+        Button {
+            icon: @image-url("icons/close.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.cancel");
+            clicked => { root.adding = false; }
+        }
+    }
+}

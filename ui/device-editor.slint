@@ -6,6 +6,7 @@ import { DetailField } from "components/detail-field.slint";
 import { DeviceRow } from "components/device-row.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { Splitter } from "components/splitter.slint";
+import { InterfaceEditor } from "interface-editor.slint";
 import { PortEditor } from "port-editor.slint";
 
 // Edit page, left side: every device on the left, the selected one's editable fields on the right.
@@ -101,6 +102,10 @@ export component DeviceEditor inherits HorizontalLayout {
                     current-index <=> Bridge.role-index;
                     selected => { Bridge.choose-role(self.current-index); }
                 }
+            }
+            DetailField {
+                label: @tr("edit.interfaces");
+                InterfaceEditor { }
             }
             DetailField {
                 label: @tr("details.open-ports");

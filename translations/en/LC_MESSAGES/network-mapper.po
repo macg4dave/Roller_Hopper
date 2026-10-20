@@ -187,6 +187,23 @@ msgstr "Forget"
 msgid "edit.cancel"
 msgstr "Cancel"
 
+# The further network interfaces of the device being edited: each has its own IP address and is
+# attached behind another device, chosen from a dropdown.
+msgid "edit.interfaces"
+msgstr "Other interfaces"
+
+msgid "edit.interface-via"
+msgstr "Attached behind"
+
+msgid "edit.interface-remove"
+msgstr "Remove interface"
+
+msgid "edit.interface-add"
+msgstr "Add interface"
+
+msgid "edit.interface-confirm-add"
+msgstr "Add"
+
 # The open ports of the device being edited.
 msgid "edit.port-number"
 msgstr "Port"

@@ -29,7 +29,8 @@ pub(crate) struct Interface {
     pub(crate) device: DeviceId,
     pub(crate) upstream: DeviceId,
     pub(crate) ip: Ipv4Addr,
-    pub(crate) mac: MacAddr,
+    /// Detected with the interface; `None` for one the user added.
+    pub(crate) mac: Option<MacAddr>,
     pub(crate) kind: ConnectionKind,
 }
 
@@ -114,6 +115,83 @@ impl Network {
     /// The interfaces of other devices attached behind `id`, in the order they were found.
     pub(crate) fn attached(&self, id: DeviceId) -> impl Iterator<Item = &Interface> {
         self.interfaces.iter().filter(move |i| i.upstream == id)
+    }
+
+    /// Adds a further interface of `device` at `ip`, attached behind `upstream`, as one the user
+    /// made. Refused (false) when either device is missing, they are the same, or `ip` is taken.
+    pub(crate) fn add_interface(
+        &mut self,
+        device: DeviceId,
+        upstream: DeviceId,
+        ip: Ipv4Addr,
+    ) -> bool {
+        let refused = !self.can_attach(device, upstream) || self.address_taken(ip);
+        if !refused {
+            self.interfaces.push(Interface {
+                device,
+                upstream,
+                ip,
+                mac: None,
+                kind: ConnectionKind::Known,
+            });
+        }
+        !refused
+    }
+
+    /// Gives the `index`th further interface of `device` a new address, unless `ip` is taken.
+    pub(crate) fn set_interface_ip(&mut self, device: DeviceId, index: usize, ip: Ipv4Addr) {
+        if !self.address_taken(ip)
+            && let Some(interface) = self.interface_mut(device, index)
+        {
+            interface.ip = ip;
+        }
+    }
+
+    /// Attaches the `index`th further interface of `device` behind `upstream`, as a link the user
+    /// made. Ignored for a missing upstream or the device itself.
+    pub(crate) fn set_interface_upstream(
+        &mut self,
+        device: DeviceId,
+        index: usize,
+        upstream: DeviceId,
+    ) {
+        if !self.can_attach(device, upstream) {
+            return;
+        }
+        if let Some(interface) = self.interface_mut(device, index)
+            && interface.upstream != upstream
+        {
+            interface.upstream = upstream;
+            interface.kind = ConnectionKind::Known;
+        }
+    }
+
+    pub(crate) fn remove_interface(&mut self, device: DeviceId, index: usize) {
+        if let Some(position) = self.interface_position(device, index) {
+            self.interfaces.remove(position);
+        }
+    }
+
+    /// Whether an interface of `device` can hang behind `upstream`: both exist and differ.
+    fn can_attach(&self, device: DeviceId, upstream: DeviceId) -> bool {
+        device != upstream && self.device(device).is_some() && self.device(upstream).is_some()
+    }
+
+    /// Whether `ip` is already the address of a device or an interface.
+    fn address_taken(&self, ip: Ipv4Addr) -> bool {
+        self.devices.iter().any(|d| d.ip == ip) || self.interfaces.iter().any(|i| i.ip == ip)
+    }
+
+    /// Where the `index`th further interface of `device` is in `interfaces`.
+    fn interface_position(&self, device: DeviceId, index: usize) -> Option<usize> {
+        let positions = self.interfaces.iter().enumerate();
+        let of_device = positions.filter(|(_, i)| i.device == device);
+        of_device.map(|(position, _)| position).nth(index)
+    }
+
+    fn interface_mut(&mut self, device: DeviceId, index: usize) -> Option<&mut Interface> {
+        let position = self.interface_position(device, index)?;
+        self.interfaces.get_mut(position)
     }
 
     pub(crate) fn device(&self, id: DeviceId) -> Option<&Device> {
@@ -519,6 +597,61 @@ mod tests {
             .map(|d| d.id)
             .collect();
         assert_eq!(found, [interface.device]);
+    }
+
+    #[test]
+    fn an_interface_is_added_only_behind_another_device_at_a_free_address() {
+        let mut network = mock_data::network();
+        let (router, pc) = (DeviceId(1), DeviceId(5));
+        let free = Ipv4Addr::new(10, 0, 0, 5);
+        let router_ip = network.device(router).unwrap().ip;
+        let taken = network.interfaces().first().unwrap().ip;
+        assert!(!network.add_interface(pc, router, router_ip));
+        assert!(!network.add_interface(pc, router, taken));
+        assert!(!network.add_interface(pc, pc, free), "behind itself");
+        assert!(!network.add_interface(pc, DeviceId(999), free));
+        assert!(network.add_interface(pc, router, free));
+        let added: Vec<_> = network.interfaces_of(pc).copied().collect();
+        assert_eq!(
+            added,
+            [Interface {
+                device: pc,
+                upstream: router,
+                ip: free,
+                mac: None,
+                kind: ConnectionKind::Known,
+            }]
+        );
+        assert!(
+            !network.add_interface(DeviceId(6), router, free),
+            "now taken"
+        );
+    }
+
+    #[test]
+    fn a_devices_interfaces_are_edited_and_removed_by_their_place_in_its_list() {
+        let mut network = mock_data::network();
+        let (router, switch, pc) = (DeviceId(1), DeviceId(2), DeviceId(5));
+        let (first, second) = (Ipv4Addr::new(10, 0, 0, 5), Ipv4Addr::new(10, 0, 1, 5));
+        assert!(network.add_interface(pc, router, first));
+        assert!(network.add_interface(pc, router, second));
+        let ips = |n: &Network| n.interfaces_of(pc).map(|i| i.ip).collect::<Vec<_>>();
+
+        network.set_interface_ip(pc, 1, first);
+        assert_eq!(ips(&network), [first, second], "taken");
+        let third = Ipv4Addr::new(10, 0, 2, 5);
+        network.set_interface_ip(pc, 1, third);
+        assert_eq!(ips(&network), [first, third]);
+
+        network.set_interface_upstream(pc, 0, switch);
+        network.set_interface_upstream(pc, 1, pc);
+        let upstreams: Vec<_> = network.interfaces_of(pc).map(|i| i.upstream).collect();
+        assert_eq!(upstreams, [switch, router]);
+
+        network.remove_interface(pc, 0);
+        network.remove_interface(pc, 5);
+        assert_eq!(ips(&network), [third]);
+        assert_eq!(network.interfaces().len(), 2, "the Docker Host's stays");
     }
 
     #[test]

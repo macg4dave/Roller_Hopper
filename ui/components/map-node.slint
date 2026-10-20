@@ -36,8 +36,8 @@ export component MapNode inherits Rectangle {
     // The map zoom, used only to keep the icon crisp under the canvas's scale transform.
     in property <float> zoom: 1;
     in property <bool> selected;
-    // A ghost of a device on another of its interfaces: faded, and it cannot be dragged.
-    in property <bool> ghost;
+    // A ghost is faded, and it cannot be dragged.
+    property <bool> ghost: device.ghost;
     out property <length> icon-size: Theme.map-icon;
     callback clicked;
     // Pointer movement since the press, while dragging.
@@ -105,7 +105,7 @@ export component MapNode inherits Rectangle {
         }
         if MapSettings.show-roles: NodeLabel { text: device.role; }
         if MapSettings.show-addresses: NodeLabel { text: device.ip; }
-        if MapSettings.show-macs: NodeLabel { text: device.mac; }
+        if MapSettings.show-macs && device.mac != "": NodeLabel { text: device.mac; }
         if MapSettings.show-hostnames && device.hostname != "": NodeLabel { text: device.hostname; }
     }
 }

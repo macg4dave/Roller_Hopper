@@ -40,8 +40,14 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         bridge.set_ghosts(model);
     }
     push_map(&bridge, state, &ghosts);
-    let list = network.filtered(state.filter, &state.query);
-    if let Some(model) = sync(&bridge.get_list(), list.map(view).collect()) {
+    let list = state
+        .listed()
+        .into_iter()
+        .map(|(device, ghost)| match ghost {
+            Some(ghost) => convert::ghost_view(view(device), &ghost),
+            None => view(device),
+        });
+    if let Some(model) = sync(&bridge.get_list(), list.collect()) {
         bridge.set_list(model);
     }
     push_roles(&bridge, &labels, state);
@@ -145,11 +151,21 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     if let Some(model) = sync(&bridge.get_ports(), ports) {
         bridge.set_ports(model);
     }
+    let upstreams = selected
+        .map(|_| state.upstream_choices())
+        .unwrap_or_default();
     let addresses = selected
-        .map(|d| convert::other_addresses(&state.network, d))
+        .map(|d| convert::other_addresses(&state.network, d, &upstreams))
         .unwrap_or_default();
     if let Some(model) = sync(&bridge.get_other_addresses(), addresses) {
         bridge.set_other_addresses(model);
+    }
+    let upstream_names = upstreams.iter().filter_map(|&upstream| {
+        let name = state.network.device(upstream)?.name.trim();
+        Some(labels.invoke_device_name(name.into()))
+    });
+    if let Some(model) = sync(&bridge.get_upstream_choices(), upstream_names.collect()) {
+        bridge.set_upstream_choices(model);
     }
     bridge.set_selected_id(id);
 }

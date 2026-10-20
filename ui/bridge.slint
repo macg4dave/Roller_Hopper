@@ -51,6 +51,9 @@ export struct DeviceView {
     y: float,
     // Hidden by the current search or filter: faded on the map.
     dimmed: bool,
+    // A ghost of the device on another of its interfaces (see Bridge.ghosts), which has the
+    // device's id but the interface's address and MAC, and is drawn where the ghost is.
+    ghost: bool,
 }
 
 /// Where a device in Bridge.devices is drawn on the map right now, at the same index. Kept apart
@@ -63,10 +66,12 @@ export struct NodePlace {
     root-y: float,
 }
 
-/// A further address of the selected device, and the device it is attached behind.
+/// A further interface of the selected device: its address, and the device it is attached
+/// behind, by name and by its index in Bridge.upstream-choices.
 export struct OtherAddress {
     ip: string,
     via-name: string,
+    via: int,
 }
 
 /// Read-only details of the selected device. Empty strings are not shown.
@@ -159,6 +164,8 @@ export global Bridge {
     // is attached to: the device with the interface's address and MAC, at the spot where the
     // ghost is drawn right now.
     in property <[DeviceView]> ghosts;
+    // The devices the search and filter let through, each followed by its ghosts, at their
+    // settled spots.
     in property <[DeviceView]> list;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
@@ -170,6 +177,9 @@ export global Bridge {
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[OtherAddress]> other-addresses;
+    // The names of the devices an interface of the selected device can be attached behind:
+    // every other device, in device order.
+    in property <[string]> upstream-choices;
     in property <[PortView]> ports;
     in property <[string]> roles;
     in property <[RoleView]> role-list;
@@ -215,6 +225,14 @@ export global Bridge {
     callback set-port-number(int, string);
     callback set-port-description(int, string);
     callback remove-port(int);
+    // The selected device's further interfaces, identified by their index in other-addresses,
+    // with the device they are attached behind by its index in upstream-choices. Addresses come
+    // as typed; one that is not an IPv4 address, or is already in use, is refused
+    // (add-interface returns false).
+    callback add-interface(string, int) -> bool;
+    callback set-interface-ip(int, string);
+    callback set-interface-upstream(int, int);
+    callback remove-interface(int);
     // The role list. Roles are identified by their index in role-list.
     callback add-role(string, string);
     callback rename-role(int, string);

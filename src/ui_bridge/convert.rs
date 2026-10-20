@@ -1,6 +1,8 @@
 //! Conversion of model data into the Slint structs declared in `ui/bridge.slint`.
 //! Only data crosses over; wording is added on the Slint side so it can be translated.
 
+use std::net::Ipv4Addr;
+
 use slint::SharedString;
 
 use super::icons::Icons;
@@ -157,6 +159,7 @@ pub(super) fn device_view(
         x: at.x,
         y: at.y,
         dimmed: false,
+        ghost: false,
     }
 }
 
@@ -165,15 +168,26 @@ pub(super) fn device_view(
 pub(super) fn ghost_view(view: ui::DeviceView, ghost: &Ghost) -> ui::DeviceView {
     ui::DeviceView {
         ip: ghost.interface.ip.to_string().into(),
-        mac: ghost.interface.mac.to_string().into(),
+        mac: ghost
+            .interface
+            .mac
+            .map(|mac| mac.to_string())
+            .unwrap_or_default()
+            .into(),
         x: ghost.at.x,
         y: ghost.at.y,
+        ghost: true,
         ..view
     }
 }
 
-/// The further addresses of `device`, each with the name of the device it is attached behind.
-pub(super) fn other_addresses(network: &Network, device: &Device) -> Vec<ui::OtherAddress> {
+/// The further addresses of `device`, each with the device it is attached behind: by name, and
+/// by its place in `upstreams`, the edit page's dropdown.
+pub(super) fn other_addresses(
+    network: &Network,
+    device: &Device,
+    upstreams: &[DeviceId],
+) -> Vec<ui::OtherAddress> {
     let addresses = network.interfaces_of(device.id).map(|i| ui::OtherAddress {
         ip: i.ip.to_string().into(),
         via_name: network
@@ -181,6 +195,11 @@ pub(super) fn other_addresses(network: &Network, device: &Device) -> Vec<ui::Oth
             .map(|d| d.name.trim())
             .unwrap_or_default()
             .into(),
+        via: upstreams
+            .iter()
+            .position(|&id| id == i.upstream)
+            .and_then(|choice| i32::try_from(choice).ok())
+            .unwrap_or(-1),
     });
     addresses.collect()
 }
@@ -251,6 +270,11 @@ pub(super) fn port_views(device: &Device) -> Vec<ui::PortView> {
 /// A port number as typed; anything but a whole number from 1 to 65535 is refused.
 pub(super) fn port(text: &str) -> Option<u16> {
     text.trim().parse().ok().filter(|&port| port != 0)
+}
+
+/// An IPv4 address as typed, such as `192.168.1.20`.
+pub(super) fn ip(text: &str) -> Option<Ipv4Addr> {
+    text.trim().parse().ok()
 }
 
 /// The group list's rows, in order.
@@ -335,6 +359,14 @@ mod tests {
         assert_eq!(port("65535"), Some(65535));
         for refused in ["0", "65536", "-1", "80a", ""] {
             assert_eq!(port(refused), None, "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn only_ipv4_addresses_are_accepted() {
+        assert_eq!(ip(" 10.0.0.5 "), Some(Ipv4Addr::new(10, 0, 0, 5)));
+        for refused in ["10.0.0", "10.0.0.256", "fe80::1", ""] {
+            assert_eq!(ip(refused), None, "{refused:?}");
         }
     }
 

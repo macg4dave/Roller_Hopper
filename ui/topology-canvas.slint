@@ -170,7 +170,6 @@ export component TopologyCanvas inherits Rectangle {
         // Ghosts select the device they stand for; only the device itself can be dragged.
         for ghost in Bridge.ghosts: MapNode {
             device: ghost;
-            ghost: true;
             zoom: zoom;
             selected: ghost.id == Bridge.selected-id;
             x: (ghost.x - Bridge.bounds.x) * 1px - self.width / 2;
