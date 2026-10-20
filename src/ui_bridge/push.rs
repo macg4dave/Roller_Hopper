@@ -12,7 +12,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     let bridge = ui.global::<Bridge<'_>>();
     let labels = ui.global::<Labels<'_>>();
     let (network, icons) = (&state.network, &state.icons);
-    let at = |id| state.positions.get(&id).copied().unwrap_or_default();
+    let on_map = state.motion.shown();
+    let at = |id| on_map.get(&id).copied().unwrap_or_default();
     let view = |d: &Device| {
         let role = convert::role_label(&labels, network, &d.role);
         convert::device_view(network, icons, d, role, at(d.id))
@@ -35,12 +36,12 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_roles(&bridge, &labels, state);
 
     let highlighted = state.dragging.or(state.selected);
-    let mut lines = convert::lines(network, &state.links(), &state.positions, highlighted);
-    lines.extend(state.preview().map(|line| convert::preview_line(&line)));
+    let lines = convert::lines(network, &state.links(), on_map, highlighted);
+    bridge.set_strand(convert::strand(state.strand().as_ref()));
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }
-    bridge.set_bounds(convert::bounds(&state.positions));
+    bridge.set_bounds(convert::bounds(on_map));
     bridge.set_filter(convert::filter_to_ui(state.filter));
     bridge.set_count_all(count(network, StatusFilter::All));
     bridge.set_count_online(count(network, StatusFilter::Online));

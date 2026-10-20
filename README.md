@@ -32,7 +32,7 @@ src/main.rs        wiring only: build state, create window, connect callbacks, r
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices, connections, roles, groups) — no Slint imports
 src/mock_data.rs   the sample network
-src/ui_bridge/     model ↔ Slint conversion, callback handlers, reading the icon folder
+src/ui_bridge/     model ↔ Slint conversion, callback handlers, map motion, reading the icon folder
 ui/                .slint files: app window, panels, canvas, components/, theme
 ui/icons/          icons that are part of the UI (buttons, logo), compiled in
 icons/             device icons for the picker, read at run time (see above)

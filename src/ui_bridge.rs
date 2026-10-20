@@ -5,6 +5,7 @@
 mod convert;
 mod i18n;
 mod icons;
+mod motion;
 mod push;
 
 pub(crate) use i18n::select_language;
@@ -13,7 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, VecModel, Weak};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel, Weak};
 
 use crate::mock_data;
 use crate::model::{
@@ -22,15 +23,21 @@ use crate::model::{
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
+use motion::Motion;
 use push::push;
 
 /// How long the simulated scan pretends to take, so the refresh is visible.
 const SCAN_DURATION: Duration = Duration::from_millis(1500);
+/// One frame of the map's motion, at about 60 frames a second.
+const FRAME: Duration = Duration::from_millis(16);
 
 /// Everything the window shows, owned by `main` and shared with the callbacks.
 pub(crate) struct AppState {
     network: Network,
+    /// Where the layout puts each device, and the dragged one at the pointer.
     positions: Positions,
+    /// Where each device is shown, on its way to its spot in `positions`.
+    motion: Motion,
     /// The device being dragged on the map, until it is dropped.
     dragging: Option<DeviceId>,
     selected: Option<DeviceId>,
@@ -47,6 +54,7 @@ impl AppState {
         let positions = tree_layout(&network);
         Self {
             network,
+            motion: Motion::new(positions.clone()),
             positions,
             dragging: None,
             selected: None,
@@ -141,17 +149,26 @@ impl AppState {
         if let Some(id) = self.selected.take() {
             self.network.remove_device(id);
             self.positions.remove(&id);
+            self.motion.forget(id);
         }
     }
 
-    /// Where the dragged device `id` would go if dropped now: on the line it is near, between
-    /// the devices it is between; `None` to stand alone.
-    fn snap(&self, id: DeviceId) -> Option<Snap> {
-        let at = self.positions.get(&id).copied()?;
-        snap_target(&self.network, &self.positions, id, at)
+    /// Drags device `id` so its icon is centred on `at`.
+    fn drag_to(&mut self, id: DeviceId, at: Point) {
+        self.positions.insert(id, at);
+        self.motion.place(id, at);
+        self.dragging = Some(id);
     }
 
-    /// The connections to draw: all but the dragged device's uplink, which [`Self::preview`]
+    /// Where the dragged device `id` would go if dropped now, judged by the map as shown: on the
+    /// line it is near, between the devices it is between; `None` to stand alone.
+    fn snap(&self, id: DeviceId) -> Option<Snap> {
+        let shown = self.motion.shown();
+        let at = shown.get(&id).copied()?;
+        snap_target(&self.network, shown, id, at)
+    }
+
+    /// The connections to draw: all but the dragged device's uplink, which [`Self::strand`]
     /// stands in for.
     fn links(&self) -> Vec<Connection> {
         let mut links = self.network.connections().to_vec();
@@ -159,21 +176,34 @@ impl AppState {
         links
     }
 
-    /// While a device is dragged near a line, the short line showing where it would join.
-    fn preview(&self) -> Option<[Point; 2]> {
-        let snap = self.dragging.and_then(|id| self.snap(id))?;
-        Some(snap.line)
+    /// While a device is dragged near a line, how it would join it.
+    fn strand(&self) -> Option<Snap> {
+        self.dragging.and_then(|id| self.snap(id))
     }
 
     /// Ends a drag: the device joins the line it was dropped on, or stands alone, and the map
-    /// is laid out again around the change, making room where it went in.
+    /// is laid out again around the change, making room where it went in. The devices on the
+    /// line it joined bob as it settles in.
     fn drop_dragged(&mut self) {
         if let Some(id) = self.dragging.take() {
             let snap = self.snap(id);
             let (upstream, before) = (snap.map(|s| s.upstream), snap.and_then(|s| s.before));
             self.network.connect(id, upstream, before);
             self.positions = tree_layout(&self.network);
+            if let Some(upstream) = upstream {
+                let links = self.network.connections().iter();
+                let line = links
+                    .filter(|c| c.upstream == upstream && c.downstream != id)
+                    .map(|c| c.downstream);
+                self.motion.jiggle(line.chain([upstream]));
+            }
         }
+    }
+
+    /// Moves the map one frame on; true once everything has settled.
+    fn step_motion(&mut self) -> bool {
+        self.motion.step(&self.positions, FRAME.as_secs_f32());
+        self.motion.settled(&self.positions)
     }
 
     fn finish_scan(&mut self) {
@@ -201,21 +231,7 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     connect_group_edits(ui, state);
     let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_refresh_icons(move || refresh_icons(&icons_ui, &icons_state));
-
-    let reset = handler(ui, state, |st, ()| {
-        st.network.restore_connections();
-        st.positions = tree_layout(&st.network);
-    });
-    bridge.on_reset_layout(move || reset(()));
-    let move_device = handler(ui, state, |st, (id, x, y)| {
-        if let Some(id) = convert::device_id(id) {
-            st.positions.insert(id, Point { x, y });
-            st.dragging = Some(id);
-        }
-    });
-    bridge.on_move_device(move |id, x, y| move_device((id, x, y)));
-    let drop_device = handler(ui, state, |st, ()| st.drop_dragged());
-    bridge.on_drop_device(move || drop_device(()));
+    connect_map(ui, state);
 
     let start_scan = handler(ui, state, |st, ()| st.scanning = true);
     let finish_scan = Rc::new(handler(ui, state, |st, ()| st.finish_scan()));
@@ -227,6 +243,52 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
 
     // Shows the initial state, with the icons.
     refresh_icons(&ui.as_weak(), state);
+}
+
+/// Dragging, dropping and resetting on the map, each followed by the motion that settles it.
+fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    let timer = Rc::new(Timer::default());
+    let settle = {
+        let (ui, state) = (ui.as_weak(), Rc::clone(state));
+        Rc::new(move || animate(&ui, &state, &timer))
+    };
+
+    let reset = handler(ui, state, |st, ()| {
+        st.network.restore_connections();
+        st.positions = tree_layout(&st.network);
+    });
+    let reset_settle = Rc::clone(&settle);
+    bridge.on_reset_layout(move || {
+        reset(());
+        reset_settle();
+    });
+    let move_device = handler(ui, state, |st, (id, x, y)| {
+        if let Some(id) = convert::device_id(id) {
+            st.drag_to(id, Point { x, y });
+        }
+    });
+    bridge.on_move_device(move |id, x, y| move_device((id, x, y)));
+    let drop_device = handler(ui, state, |st, ()| st.drop_dragged());
+    bridge.on_drop_device(move || {
+        drop_device(());
+        settle();
+    });
+}
+
+/// Steps the map's motion every frame until everything has settled (or the window closed).
+fn animate(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, timer: &Rc<Timer>) {
+    if timer.running() {
+        return;
+    }
+    let (ui, state, this) = (ui.clone(), Rc::clone(state), Rc::downgrade(timer));
+    timer.start(TimerMode::Repeated, FRAME, move || {
+        let mut settled = true;
+        update(&ui, &state, |st| settled = st.step_motion());
+        if let Some(running) = this.upgrade().filter(|_| settled) {
+            running.stop();
+        }
+    });
 }
 
 /// Name, notes, role, icon and forgetting, for the selected device.
@@ -584,13 +646,12 @@ mod tests {
             x: f32::midpoint(switch_x, access_point_x),
             y: state.positions[&switch].y,
         };
-        state.positions.insert(pc, between);
-        state.dragging = Some(pc);
+        state.drag_to(pc, between);
         assert!(
             state.links().iter().all(|c| c.downstream != pc),
             "old line hidden"
         );
-        assert!(state.preview().is_some());
+        assert!(state.strand().is_some());
 
         state.drop_dragged();
         assert_eq!(state.dragging, None);
@@ -598,22 +659,25 @@ mod tests {
         assert_eq!(state.positions, tree_layout(&state.network), "tidied again");
         assert!(x(&state, switch) < x(&state, pc) && x(&state, pc) < x(&state, access_point));
         assert!(x(&state, access_point) > access_point_x, "pushed apart");
+
+        assert!(!state.step_motion(), "glides into place");
+        assert!((0..600).any(|_| state.step_motion()), "and settles");
+        assert_eq!(state.motion.shown(), &state.positions);
     }
 
     #[test]
     fn a_device_dropped_far_from_every_line_stands_alone() {
         let mut state = AppState::new(mock_data::network());
         let pc = DeviceId(5);
-        state.positions.insert(
+        state.drag_to(
             pc,
             Point {
                 x: -1000.0,
                 y: -1000.0,
             },
         );
-        state.dragging = Some(pc);
         assert!(state.links().iter().all(|c| c.downstream != pc));
-        assert_eq!(state.preview(), None);
+        assert_eq!(state.strand(), None);
         state.drop_dragged();
         assert!(state.network.uplink(pc).is_none());
     }

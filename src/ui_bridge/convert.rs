@@ -6,10 +6,12 @@ use slint::SharedString;
 use super::icons::Icons;
 use crate::model::{
     Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Network, Point,
-    Positions, Role, Status, StatusFilter, route,
+    Positions, Role, Snap, Status, StatusFilter, route,
 };
 use crate::ui::{self, Labels};
 
+/// How far a slack strand sags under its own weight, as a share of its length.
+const SAG: f32 = 0.3;
 /// Dash and gap lengths of inferred links, in map units.
 const DASH: f32 = 6.0;
 const GAP: f32 = 4.0;
@@ -308,17 +310,29 @@ pub(super) fn bounds(positions: &Positions) -> ui::MapBounds {
     }
 }
 
-/// A polyline as SVG path commands.
-/// The line a dragged device would join by, highlighted, so it is drawn on top.
-pub(super) fn preview_line(points: &[Point]) -> ui::LineSet {
-    ui::LineSet {
-        commands: solid(points).into(),
-        colour: colour(None),
-        inferred: false,
-        selected: true,
+/// The stretchy strand from the line a dragged device would join to the device: it sags when
+/// slack and pulls straight as it stretches. No commands when there is none.
+pub(super) fn strand(snap: Option<&Snap>) -> ui::Strand {
+    let Some(snap) = snap else {
+        return ui::Strand::default();
+    };
+    let [from, to] = snap.line;
+    let sag = (to.x - from.x).hypot(to.y - from.y) * SAG * (1.0 - snap.pull);
+    let bend = Point {
+        x: f32::midpoint(from.x, to.x),
+        y: f32::midpoint(from.y, to.y) + sag,
+    };
+    let commands = format!(
+        "M{:.1} {:.1} Q{:.1} {:.1} {:.1} {:.1}",
+        from.x, from.y, bend.x, bend.y, to.x, to.y
+    );
+    ui::Strand {
+        commands: commands.into(),
+        pull: snap.pull,
     }
 }
 
+/// A polyline as SVG path commands.
 fn solid(points: &[Point]) -> String {
     let commands = points.iter().enumerate().map(|(i, p)| {
         let command = if i == 0 { 'M' } else { 'L' };
@@ -360,6 +374,25 @@ mod tests {
         for refused in ["0", "65536", "-1", "80a", ""] {
             assert_eq!(port(refused), None, "{refused:?}");
         }
+    }
+
+    #[test]
+    fn a_strand_sags_when_slack_and_pulls_straight_when_stretched() {
+        let snap = |pull| Snap {
+            upstream: DeviceId(1),
+            before: None,
+            line: [Point { x: 0.0, y: 0.0 }, Point { x: 40.0, y: 0.0 }],
+            pull,
+        };
+        assert_eq!(
+            strand(Some(&snap(0.5))).commands,
+            "M0.0 0.0 Q20.0 6.0 40.0 0.0"
+        );
+        assert_eq!(
+            strand(Some(&snap(1.0))).commands,
+            "M0.0 0.0 Q20.0 0.0 40.0 0.0"
+        );
+        assert_eq!(strand(None).commands, "");
     }
 
     #[test]

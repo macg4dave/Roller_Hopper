@@ -119,6 +119,18 @@ export component TopologyCanvas inherits Rectangle {
             stroke-width: Theme.line-width / zoom;
         }
 
+        if Bridge.strand.commands != "": Path {
+            width: parent.width;
+            height: parent.height;
+            viewbox-x: Bridge.bounds.x;
+            viewbox-y: Bridge.bounds.y;
+            viewbox-width: Bridge.bounds.width;
+            viewbox-height: Bridge.bounds.height;
+            commands: Bridge.strand.commands;
+            stroke: Theme.accent;
+            stroke-width: (Theme.strand-width + (Theme.line-width - Theme.strand-width) * Bridge.strand.pull) / zoom;
+        }
+
         for device in Bridge.devices: MapNode {
             device: device;
             zoom: zoom;

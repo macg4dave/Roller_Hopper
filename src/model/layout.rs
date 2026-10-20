@@ -83,6 +83,9 @@ pub(crate) struct Snap {
     /// A short line showing the join: from the nearest point of the line it would join to the
     /// top of its icon.
     pub(crate) line: [Point; 2],
+    /// How far that line is stretched towards the edge of the reach, from 0 (no gap) to 1 (about
+    /// to let go).
+    pub(crate) pull: f32,
 }
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: the nearest of the lines
@@ -130,6 +133,7 @@ pub(crate) fn snap_target(
             before: others_behind(network, upstream, dragged)
                 .find(|other| positions.get(other).is_some_and(|&p| reads_after(p, at))),
             line: [joins, end],
+            pull: distance(end, joins) / SNAP_DISTANCE,
         })
 }
 
