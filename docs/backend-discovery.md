@@ -121,7 +121,8 @@ Pause should stop launching new work while allowing in-flight operations to fini
 their timeouts; final in-flight results may appear while paused. The user confirmed these
 pause semantics in Q6a. Resume only starts remaining work. Stop cancels scheduling, signals
 active operations, drains/abandons them safely, retains valid partial observations and reports
-cancellation acknowledgement. Navigation/close/restart policy still needs Q6 agreement;
+cancellation acknowledgement. The user confirmed that navigation keeps a run active, close
+cancels it and restart never resumes traffic silently (Q6b). Shutdown wait limits remain Q6;
 a token alone cannot interrupt every blocking/native call.
 
 Measure elapsed time using a monotonic clock; persist wall-clock start/end separately.
@@ -129,6 +130,8 @@ Report per-stage completed/eligible work and coverage. A variable-length enrichm
 be indeterminate; do not fabricate a smooth percentage or call it finished at 100% scheduling.
 Terminal delivery and save outcomes are distinct. Closing the app should stop new work, finish
 a bounded save/shutdown and never silently continue scanning in a background service.
+Apply all retained observation batches before acknowledging their terminal outcome; a run must
+not show Completed while earlier accepted findings are still waiting to enter the document.
 
 Missing ICMP, exhausted sockets, DNS failure, revoked permissions, disconnected adapters and
 collector overload are recoverable method/run outcomes, not reasons to erase past inventory.
@@ -152,3 +155,9 @@ Provisional resource budgets must be chosen for the required scale in Q7: cap si
 probes and starts/second separately, bound per-device enrichment and total run work, keep only
 a bounded UI log, and apply retention. Subnet size × port count, not host count alone, drives
 scan cost. Validate on all three OSes before claiming capability parity.
+
+The agreed background policy is manual broad scans with optional lightweight refresh (Q5).
+Refresh known endpoints within the chosen scope; do not turn it into periodic full port scans.
+Reconcile observed changes against protected manual values and use the proposed
+[field warning](backend-architecture.md#field-precedence-and-topology). Cached facts or an AI
+guess never count as a fresh successful probe. Cadence and stale/offline thresholds remain Q5a.

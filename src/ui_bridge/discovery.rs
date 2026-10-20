@@ -93,7 +93,7 @@ fn filter_from_ui(filter: ui::FoundFilter) -> FoundFilter {
     }
 }
 
-/// The run's controls and options, the result filter, and what is done with a found host.
+/// The run's controls and options, the result filter, and the found hosts.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let timer = Rc::new(Timer::default());
@@ -126,6 +126,12 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_set_found_filter(handler(ui, state, |st, filter| {
         st.discovery.filter = filter_from_ui(filter);
     }));
+    connect_found(ui, state);
+}
+
+/// Selecting a found host, editing one not on the map, and adding or ignoring it.
+fn connect_found(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
     bridge.on_select_found(handler(ui, state, |st, index| {
         st.select_found(usize::try_from(index).ok());
     }));

@@ -8,6 +8,9 @@ coverage do not establish a security audit or production interoperability.
 The app currently resolves Slint/slint-build 1.18.1 and ipnet 2.12.2, with protected Rust 1.94.0.
 Prefer current std/Slint facilities before new dependencies; enable only required features.
 MSRV means declared minimum Rust version, not proof all selected transitive dependencies build.
+This pass rechecked the foundation manifests, pinned Slint APIs, mdns-sd release changes,
+save limitations and Qwen/Candle availability. The wider conditional shortlist retains earlier
+research; it is not an independently requalified dependency set or a promise of latest versions.
 All chosen runtime dependencies must execute in process and ship with the app. External
 programs, services, scanner/model runners and localhost backends are excluded. Native Open,
 Save and Save As are required; versioned JSON snapshots are now selected (Q22b), rather than a
@@ -17,7 +20,7 @@ private database-only inventory.
 
 | Candidate | Purpose and fit over alternatives | Maintenance, compatibility and limits |
 | --- | --- | --- |
-| Existing **Slint 1.18.1** | Reuse `Bridge`, weak event-loop scheduling and retained `VecModel` updates; avoids a second UI or custom observer framework | Pinned APIs: [Weak](https://docs.rs/slint/1.18.1/slint/struct.Weak.html), [VecModel](https://docs.rs/slint/1.18.1/slint/struct.VecModel.html). Models are UI-thread objects, not worker payloads. No Slint upgrade is needed for the proposed boundary. |
+| Existing **Slint 1.18.1** | Reuse `Bridge`, weak event-loop scheduling and retained `VecModel` updates; avoids a second UI or custom observer framework | Pinned APIs: [Weak](https://docs.rs/slint/1.18.1/slint/struct.Weak.html), [VecModel](https://docs.rs/slint/1.18.1/slint/struct.VecModel.html), [ModelRc thread boundary](https://docs.rs/slint/1.18.1/slint/struct.ModelRc.html#updating-the-model-from-a-thread). Keep the document in UI-owned Rust state and send owned worker data; moving domain ownership to a worker is not required by Slint. No upgrade is needed. |
 | Existing **std + ipnet 2.12.2** | Address types, prefix arithmetic, clocks, paths and collections; extend existing use instead of adding a second CIDR parser | [ipnet API](https://docs.rs/ipnet/2.12.2/ipnet/) already offers IPv4/IPv6 types and lazy host ranges. Limits/authorisation must be checked before enumeration. |
 | **Tokio 1.54.0** | TCP/UDP, timers, bounded channels, task supervision and semaphores; simpler than building a socket/thread scheduler or adding an actor framework | Established runtime; release 19 October 2026, MIT, MSRV 1.85: [manifest](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.54.0/tokio/Cargo.toml), [releases](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.54.0/tokio/CHANGELOG.md). One dedicated current-thread runtime is an initial I/O candidate; do not enable `full` by default. |
 | **tokio-util 0.7.20** | `CancellationToken`/child tokens instead of custom cancellation flags | MIT, MSRV 1.85: [manifest](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-util-0.7.20/tokio-util/Cargo.toml), [API](https://docs.rs/tokio-util/0.7.20/tokio_util/sync/struct.CancellationToken.html). Cooperative cancellation still needs I/O timeouts, owned-task cleanup and a terminal acknowledgement. |

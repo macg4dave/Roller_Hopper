@@ -18,36 +18,47 @@ network targets remain the collection boundary, not an externally hosted applica
 ```mermaid
 flowchart LR
     UI[Slint pages and callbacks] --> B[UI-thread bridge and AppState]
-    B -->|run, revisioned edit and policy commands| W[Bounded background coordinator]
+    B --> R[Pure model validation and reconciliation]
+    R --> D[One authoritative in-memory document]
+    D -->|existing view projection| UI
+    B -->|frozen run commands| W[Bounded background coordinator]
     W --> P[OS and protocol collectors]
-    P --> R[Validate and reconcile evidence]
-    R -->|owned batches and terminal outcome| B
-    B -->|project accepted state| UI
-    R --> S[In-process document file I/O]
-    S -->|save acknowledgement or failure| R
-    W --> R
-    R --> A[Bundled CPU inference, user controlled]
-    A -->|labelled suggestions| R
+    P -->|owned observation batches| B
+    W -->|terminal outcome| B
+    D -->|immutable save snapshot| S[Background document file I/O]
+    S -->|validated open candidate or save receipt| B
+    D -->|bounded evidence snapshot| A[Bundled CPU inference, user controlled]
+    A -->|revisioned suggestions| B
 ```
 
-The arrows are in-process messages. The open in-memory document has one background owner;
-observations, user overlays and discovery/map admission use explicit commands and revisions.
-`AppState.network` remains the UI-thread projection used by the existing editor and map.
-This avoids two independent mutable inventories. An accepted edit marks the document dirty;
-Save writes a revisioned snapshot and acknowledges which revision reached disk. A newer edit
-must remain dirty after an older snapshot finishes saving. Decide autosave/recovery in Q13.
+Cross-thread arrows carry owned messages; calls within the UI thread remain ordinary Rust
+calls. Keep the authoritative document in `AppState`, extending today's ownership. Pure model
+functions validate bounded observation batches and manual edits on that thread; Slint only
+presents their projection. Workers own I/O tasks, temporary parse data and immutable snapshots,
+never a second editable inventory. Parsing, full import validation, file serialisation and AI
+stay off the event loop. A validated Open candidate is installed in one short UI transition.
+
+For roughly 250 devices this is the simpler initial recommendation: it preserves immediate
+editing and avoids edit acknowledgements, optimistic rollback and synchronisation of two
+inventories. Measure batch-application, snapshot and projection time before promising UI
+latency. If measured work exceeds a frame budget after batching, reconsider ownership with
+evidence rather than introducing an actor or a generic state store now.
+
+An accepted edit marks the document dirty. Save writes a revisioned snapshot and acknowledges
+which revision reached disk; newer edits remain dirty. The user selected separate, labelled
+crash recovery alongside explicit saves (Q13a); it never replaces the saved document silently.
 
 | Responsibility | Owns | Must not do |
 | --- | --- | --- |
-| Slint/bridge | Selection, drafts, filters, presentation models, animation, callback conversion | Network/database/inference work on event-loop callbacks |
+| Slint/bridge and AppState | Authoritative Rust document, selection, drafts, filters, presentation models, animation, callback conversion | Socket I/O, file serialisation or inference on event-loop callbacks |
 | Coordinator | One active run initially, target validation, bounded scheduling, run ID, cancellation, method outcomes | Assume every platform/method is available or trust UI indices as identities |
 | Collectors | Protocol/OS I/O and source-labelled observations | Invent missing metadata or mutate user labels |
-| Reconciliation | Identity candidates, current facts, field freshness, conflicts, admission suggestions | Treat AI output or a port number as verified identity |
-| Document I/O | Versioned snapshots, validation/migration, reliable Open/Save/Save As, optional separate recovery | Hold UI handles, overwrite an unsaved document silently or discard failed saves |
+| Pure model reconciliation | Validation of manual changes and bounded batches, identity candidates, facts, freshness, conflicts, admission | Import Slint, perform I/O, or treat AI output or a port number as verified identity |
+| Document I/O | Versioned snapshots, validation/migration, reliable Open/Save/Save As and separate recovery | Hold UI handles, overwrite an unsaved document silently or discard failed saves |
 | AI inference | A constrained suggestion from existing evidence and a bundled pretrained model | Send probes, execute commands, change scope, merge identities or override user policy |
 
-Route manual edits and AI/admission policy through the same owner before projection, so
-collection/inference cannot apply an obsolete policy. Persistence has its own acknowledgement. Keep
+Route manual edits, observations and AI/admission policy through the same UI-owned model before
+projection, so collection/inference cannot apply an obsolete policy. Persistence has its own acknowledgement. Keep
 `Rc<RefCell<AppState>>`, `ModelRc`, images and all Slint mutation on the UI thread. Send
 owned Rust data through bounded channels. Wake the event loop using the pinned Slint API,
 then drain bounded batches and reuse `view::sync`; avoid one queued closure per packet.
@@ -59,7 +70,9 @@ Extending the existing UI-side Slint timer to drain a receiver with a bounded it
 is a simple initial option. Cross-thread wake-ups carry only thread-safe notification data
 or weak handles. Slint's [spawn_local](https://docs.rs/slint/1.18.1/slint/fn.spawn_local.html)
 does not provide a Tokio runtime; network I/O needs its explicitly owned background runtime.
-UI command enqueueing must not block: surface a full/closed command queue and preserve edits.
+Worker command enqueueing must not block: surface a full/closed queue and preserve local
+edits. Ordinary manual edits need no worker round trip. Keep UI-thread reconciliation small;
+expensive matching can propose candidates on a worker, checked against the current revision.
 
 ## Data model: extend existing concepts
 
@@ -118,12 +131,25 @@ useful; authenticated platform integrations are a separate enhancement.
 
 ## Field precedence and topology
 
-Proposed default precedence: explicit user overlay → current best supported observation →
-clearly labelled inferred/AI fallback → unknown. The user has requested control over AI
-overwrites; separately enabled field policies may permit replacements, with preview/history
-and undo, while retaining the original observed and manual values. An observed IP and a user's
-intended IP remain different facts. Keep display labels separate from protocol hostnames;
-an AI guess must retain its provenance even when applied. Q9/Q10 settle the exact policy.
+Field precedence: explicit user overlay → current best supported observation → clearly labelled
+inferred/AI fallback → unknown. The latest user answer is **manual is king** (Q10a): neither AI
+nor incoming observations silently replaces manual values. AI primarily assists first-time
+devices. An observed IP and a user's intended IP remain different facts. Keep display labels
+separate from protocol hostnames; an AI guess retains its provenance even when applied.
+
+For Q9, the user asked for a way to alert them when values disagree. Proposed design: show a
+persistent warning on the affected existing device/card field and a compact marker in its
+existing row. Details compare “Your value” and “Detected value”, with source and observation
+time. Offer explicit Keep my value / Use detected value actions; the latter is a user edit,
+not permission for later automatic replacement. Deduplicate by field and differing value so
+refreshes update the warning instead of repeatedly opening dialogs. Keeping an assertion does
+not delete contrary evidence or make it verified. Mark acknowledged differences unobtrusively;
+alert again if the observed value changes. Exact presentation remains a proposal, not UI work.
+
+Before presenting an address mismatch as a field conflict, establish whether the evidence
+belongs to the same device. Ambiguous IP reuse stays in identity review; it must not attach
+another host's observations to this one. A manually documented address never expands scan
+scope automatically. All these edits remain local inventory, not equipment configuration.
 
 OS family is a separate inferred/observed field, not a role or device kind. In the user's
 example, `DESKTOP-13123` plus a reachable RDP endpoint may suggest “Windows PC”; store the
@@ -148,7 +174,7 @@ Do not add both JSON and a database as competing stores of the same inventory.
 
 The document should carry its schema version, ID allocator, network contexts, devices/cards,
 current address/service/evidence snapshots with timestamps, user labels/notes/icons, roles/groups,
-manual and inferred relationships, and map arrangement. Decide per-document AI policy in Q10a.
+manual and inferred relationships, and map arrangement. Decide per-document AI policy in Q10b.
 Do not serialise Slint handles, pixel animation state, running tasks, credentials or bundled
 model weights. Treat previously online devices as last-known observations on reopening, not
 current reachability. Map pan/zoom and panel sizes are a separate preference decision.
@@ -173,16 +199,23 @@ changes the active path only after success. Cancellation of a picker/save leaves
 unchanged. An Open/close action with dirty edits needs Save/Discard/Cancel; inference and scans
 must not race a document switch. A new document generation invalidates old callbacks/results.
 
-Treat custom icons as portable resources: store safe relative identifiers, use built-in
-fallbacks, and decide whether imported icons are embedded or carried alongside the file.
-Do not save build-machine or arbitrary absolute paths as the only way to reopen a map.
+Store safe relative icon identifiers and use built-in fallbacks when an icon is unavailable.
+The user deferred custom-icon saving (Q22c): embedding icons or copying companion folders is
+not an initial requirement. A map must still open with a fallback; do not make an absolute
+build-machine icon path a document dependency.
 Native file pickers must use in-process APIs/normal desktop integration, never launch another
-program. Extension, resource portability, recovery and conflict policies remain Q13/Q22a.
+program. Extension, saved views/history and multi-writer conflict policy remain Q13/Q22a.
 
-User-selected document paths are distinct from per-user preferences and an optional crash
+Serialise saves to the same destination: an older snapshot finishing after a newer one must
+not replace newer saved content. Each receipt identifies document generation, revision and
+destination, so an old Save or Save As cannot change a newly opened document's path/dirty state.
+Cancelling a picker or switching documents does not undo a replacement that already committed;
+finish or account for that save explicitly. Recovery writes use their own destination.
+
+User-selected document paths are distinct from per-user preferences and the requested crash
 recovery snapshot. Recovery must be labelled unsaved, respect the same validation, and never
 silently overwrite a user's saved document. Network credentials belong in OS credential storage,
-not portable documents. Opened files carry no authority to enable scanning, AI overwrites or
+not portable documents. Opened files carry no authority to enable scanning, AI automation or
 auto-add without the local user's policy.
 
 If later history/scale requirements justify SQLite, consider a single documented SQLite-native
@@ -209,9 +242,10 @@ reliably; if a collector overflows, report lost coverage and re-observe within a
 Throttle GUI projection (a proposed 5–10 batches/second) while retaining final state. These
 are starting points to measure, not demonstrated performance figures.
 
-Prefer protocol TTLs, small directed refreshes of known endpoints, cached name results and
-network-change invalidation over repeated broad scans. Continuous active refresh and refresh
-cadence need Q5 approval. Missing responses make evidence stale/unknown unless an agreed
+The user selected manual broad scans and optional lightweight refresh (Q5). Prefer protocol
+TTLs, small directed refreshes of known endpoints, cached name results and network-change
+invalidation over repeated broad scans. Refresh is opt-in; exact cadence and traffic budget
+remain Q5a. Missing responses make evidence stale/unknown unless an agreed
 policy supports a stronger offline conclusion. Link loss invalidates that scope's current
 reachability without declaring every device globally offline.
 

@@ -1,31 +1,29 @@
 # Backend review
 
-Reviewed 20 October 2026 against source at `0d5637e` and the initially clean working tree. This is a
-documentation-only assessment under [the review brief](chatgpt_document_promt.md).
-This review changed no application code, configuration or agent rules. No application, network scan,
-test suite or quality gate was run; behaviour below is established by reading source, not by
-runtime or visual acceptance. Unrelated source/UI edits appeared during the follow-up and
-were left untouched; the assessment refers to the baseline, not acceptance of that concurrent
-work.
+Reviewed 20 October 2026 against committed source at `c6d389e`, after the user committed the
+previously overlapping work. This extends the existing seven documents under
+[the review brief](chatgpt_document_promt.md); it creates no implementation tasks.
+Only planning documents were edited. No application, network scan, test suite or quality gate
+was run: the brief explicitly prohibits code testing. Source inspection and primary-source
+research establish the findings below, not runtime, visual or cross-platform acceptance.
+Subsequent unrelated source edits are outside this baseline and remain untouched.
 
-## Bounded follow-up review
+## Current-source refresh
 
-The user requested a maximum of approximately two minutes investigating each idea before
-recording its finding and moving on. This follow-up reuses the seven existing planning
-documents; it does not restart the architecture exercise or treat further research as approval.
-Each topic below records its conclusion and remaining uncertainty. An unresolved candidate
-stays unresolved when its time box ends.
+The latest reviewed commit extends discovery editing: a new finding can have its name, role,
+icon and notes edited before admission; selecting an on-map finding reuses the mapped-device
+editor. Read-only discovery facts are shared by [FoundFacts](../ui/found-facts.slint). Preserve
+these workflows rather than implementing another backend-specific editor. The finding's
+captured facts and the current inventory are distinct views; production must label observation
+age and avoid presenting a previous scan's snapshot as newly verified information.
 
-| Topic | Recorded finding | Follow-through |
-| --- | --- | --- |
-| Existing plan and scope | The current documents already cover the requested assessment, architecture, discovery, crates, questions, opportunities and conditional roadmap. Their recorded user answers remain the baseline; this follow-up grants no implementation approval. | Extend the relevant document rather than create another review or backlog. |
-| Model validation | Constructor validation alone cannot protect future imported/collected data: mutable device/card access can also bypass address invariants. | Use the same validated command path for collector, import and manual mutations; see [architecture](backend-architecture.md). No prototype code changed. |
-| Discovery admission | A simulated result retains every card of a device although only one matches the target; adding it connects the first card. | Preserve the matched endpoint and revalidate conflicts on admission. |
-| Imported topology | Interactive plugging rejects cycles, but construction/import has no equivalent check. A rootless cycle has no layout entry point. | Validate ownership and display-tree invariants before replacing a document. |
-| Slint and cancellation | Event-loop closures require `Send`; current state uses `Rc<RefCell<AppState>>`. A full result queue must not prevent Stop. | Keep state on the UI thread, drain bounded batches, and give cancellation an independent signal. |
-| macOS and mDNS | Terminal permission behaviour differs from packaged launch; mDNS subscription loss ends collection. | Require packaged permission evidence and truthful partial outcomes; see [discovery](backend-discovery.md). |
-| Saving | Atomic replacement alone does not preserve all access metadata. | Keep the save library provisional until permissions and failure semantics are qualified. |
-| Protocol and model candidates | Published surge-ping 0.9.1 resolves the old version ambiguity; an available model/adapter does not prove compatibility or accuracy. | Record exact candidates and remaining qualification in [crates](backend-crates.md) and [AI opportunities](backend-opportunities.md). |
+The earlier review's identity, admission, topology-validation and platform limitations remain
+visible in the reviewed source. The architectural refresh recommends keeping one authoritative
+document in today's UI-owned Rust state, with bounded worker results, instead of introducing a
+background inventory plus a mutable UI copy. This recommendation awaits architecture approval.
+Primary-source checks reconfirmed Slint's thread boundary, Tokio cancellation limitations,
+the mdns-sd backpressure fix, save-library metadata limitations and candidate model availability;
+these are library facts, not evidence that the candidates work together in this application.
 
 ## Reading order and decision status
 
@@ -43,7 +41,9 @@ stays unresolved when its time box ends.
 release; cover local subnets, routed/VLAN targets and broad port scanning; IPv4 first, IPv6
 later; retain review and manual addition. Bundle one or two existing small CPU AI models for
 offline guesses and field updates, with confidence for review and user control over automatic
-addition and overwrites. This is not a request to train a bespoke AI system. Exact policies,
+addition. The latest direction is **manual is king**: AI is most useful for first-time devices
+and must not overwrite manual fields. This refines the earlier overwrite discussion. This is
+not a request to train a bespoke AI system. Exact policies,
 model selection and operational limits remain questions.
 
 **Additional confirmed constraints:** everything runs inside the app; no outside backend/AI
@@ -55,7 +55,13 @@ in-flight results while launching no new probes, and versioned JSON with explici
 The first-release target is home/small-office networks of roughly 250 devices, up to roughly
 700 MB of AI weights if useful on a normal CPU, and the existing inferred tree with managed
 topology deferred. These settle Q4a/Q6a/Q22b/Q7a/Q16c/Q14, not the remaining workload, lifecycle,
-runtime-resource or accuracy questions.
+runtime-resource or accuracy questions. The current answers also confirm manual broad scans
+with optional lightweight refresh (Q5) and manual precedence over AI (Q10a). For conflicting
+detected/manual values, the user requested an alert design rather than selecting a resolution
+policy; [the architecture](backend-architecture.md#field-precedence-and-topology) proposes a
+persistent comparison warning for review.
+Further answers confirm run lifetime across pages with cancellation on close (Q6b), separate
+crash recovery (Q13a), and deferral of custom-icon saving (Q22c).
 
 Everything described as a recommendation is provisional. The current
 [product guide](agents/product.md) still authorises a frontend prototype only. These documents
@@ -75,7 +81,7 @@ control and review workflow exists, but every network result is fabricated.
 | Map | One node per **card**, not per device; pan, zoom, fit, reset, dragging/reconnection, snapping and motion; known/inferred links | [tree.rs](../src/model/network/tree.rs), [map bridge](../src/ui_bridge/map.rs), [canvas](../ui/topology-canvas.slint) |
 | Editing | Inline details editor and separate edit page reuse forms; add/forget devices, cards, VMs and containers; edit names, roles, icons, notes, IPv4 settings, MACs and ports | [edit bridge](../src/ui_bridge/edit.rs), [device form](../ui/device-form.slint), [card editor](../ui/card-editor.slint) |
 | Roles and groups | Standard/custom role edits and restoration; role groups with colours and line styles | [roles.rs](../src/model/roles.rs), [groups.rs](../src/model/groups.rs), [edit page](../ui/edit-page.slint) |
-| Discovery review | Target/options; Start/Pause/Resume/Stop; progress/time, counts/filters, method/confidence, logs, role choice, Add/Ignore and Show on map | [discovery model](../src/model/discovery.rs), [discovery bridge](../src/ui_bridge/discovery.rs), [discovery page](../ui/discovery-page.slint) |
+| Discovery review | Target/options; Start/Pause/Resume/Stop; progress/time, counts/filters, method/confidence, logs; edit new findings' name/role/icon/notes; reuse mapped-device editing; Add/Ignore and Show on map | [discovery model](../src/model/discovery.rs), [discovery bridge](../src/ui_bridge/discovery.rs), [discovery details](../ui/discovery-details.slint) |
 | Presentation | Fluent, light-only design; retained map pan/zoom under other pages; resizable panels; runtime SVG picker; bundled gettext English | [window](../ui/app-window.slint), [theme](../ui/theme.slint), [icons](../src/ui_bridge/icons.rs), [build.rs](../build.rs), [translations](../translations/README.md) |
 
 The Settings button currently explains where display options live; it is not a backend

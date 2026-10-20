@@ -8,7 +8,9 @@ See [the decision register](backend-decisions.md) for confirmed answers and rema
 
 The goal is useful suggestions inside the existing map/discovery workflow: infer device type,
 OS family or missing descriptive details from collected evidence, show confidence and let the
-user review, enable automatic updates, permit selected overwrites or choose auto-add. Bundle
+user review and choose limited automation for missing inferred fields or auto-add. The latest
+direction is **manual is king**, with AI most useful for first-time devices: automatic manual
+field replacement is excluded. Bundle
 one or two existing models; do not create a training service, agent framework, cloud dependency,
 GPU requirement or separate chatbot application.
 Everything runs in the app process. No Ollama/other model runner, child executable, localhost
@@ -66,7 +68,8 @@ alternatives remain candidates.
 4. Cache suggestions by evidence fingerprint and model/feature-schema version. New observations
    may refresh the guess; that is inference, not training, self-learning or a weight download.
 5. Apply through ordinary reconciliation and the user's settings, with retained previous values
-   and undo. Keep current manual Add, Ignore, review and manual editing available without AI.
+   and undo. Recheck that the field has not become manual since inference started. Keep current
+   manual Add, Ignore, review and manual editing available without AI.
 
 An inference result also carries its document generation, evidence revision and model version.
 Recheck the current field policy when applying it: a result started before Open, Forget, an
@@ -92,27 +95,38 @@ self-reported number is not calibration. NLI label-normalised scores and embeddi
 also do not supply that probability. Model quality can be evaluated on a representative held-out
 set without training a new model.
 
-Proposed separate user controls:
+Prioritise the existing first-time discovery review: show a suggestion, reasons and an explicit
+accept/edit action in that workflow. A value typed before Add is already manual and stays
+protected after admission. Existing devices may receive reviewable suggestions for missing
+fields, but that is not permission to replace their user data. Whether inferred fields may
+auto-fill or refresh and whether auto-add is enabled remain Q10b.
+
+Proposed separate user controls, subject to the confirmed manual-precedence rule:
 
 | Control | Proposed initial setting, awaiting approval |
 | --- | --- |
 | Produce suggestions for review | Available on demand |
 | Fill missing inferred fields | User opt-in |
 | Refresh previously inferred values | User opt-in; keep observed/manual values distinct |
-| Replace user-entered fields | Off until explicitly enabled for selected fields; retain previous values and undo |
+| Replace user-entered fields automatically | Unavailable: manual values win; only an explicit user edit/adoption can change one |
 | Add a new finding to the map automatically | Off until user enables policy and quality thresholds are supported |
 
 Auto-add requires a valid scoped observation and resolved identity, not only an AI guess.
 Ambiguous identity/duplicate findings still enter review. The model cannot choose its own
 threshold, bypass a disabled policy, merge/delete devices or promote inferred topology to
-observed adjacency. These are proposed application boundaries, while the user's permission
-to choose field replacements is a confirmed requirement.
+observed adjacency. Manual precedence is confirmed; the remaining automatic admission and
+missing-field policies are proposals awaiting agreement.
 
 Suggested evaluation cases include Linux RDP servers, renamed Windows hosts, generic
 hostnames, shared/vendor NICs, routed hosts without MACs, missing services, spoofed banners,
 unknown product families and contradictory evidence. Record false positives and abstention
 separately for each field; automatic changes need a stricter acceptance bar than suggestions.
 No published model card establishes these application-specific results today.
+
+Compare the candidate model with a small explainable baseline using the same hostname/service
+evidence. The requested AI remains in scope; the comparison establishes whether its extra CPU,
+memory and uncertainty improve first-time suggestions. Do not add another inference framework,
+custom training pipeline or second model merely to compensate for unmeasured accuracy.
 
 Ship model/tokenizer/runtime files with pinned revisions, hashes and licences. Verify the
 packaged app with networking unavailable: no first-run download, external inference, model hub
