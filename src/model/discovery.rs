@@ -11,7 +11,7 @@ use std::net::Ipv4Addr;
 use ipnet::Ipv4Net;
 
 use super::card::{CardId, MacAddr};
-use super::device::{DeviceId, DeviceKind, LastSeen, Role, Status};
+use super::device::{Device, DeviceId, DeviceKind, LastSeen, Status};
 use super::network::{ConnectionKind, Network};
 
 /// Steps a whole run takes, whatever the size of the subnet, so every run is short.
@@ -212,10 +212,11 @@ impl Discovery {
         self.hosts.get_mut(..self.revealed)?.get_mut(index)
     }
 
-    /// Gives a host not on the map the role it will be added with.
-    pub(crate) fn set_role(&mut self, index: usize, role: Role) {
+    /// Edits a host not on the map (its name, role, icon or notes), which it will be added
+    /// with. A host on the map is edited there instead.
+    pub(crate) fn edit(&mut self, index: usize, edit: impl FnOnce(&mut Device)) {
         if let Some(found) = self.found_mut(index).filter(|f| f.addable()) {
-            found.device.role = role;
+            edit(&mut found.device);
         }
     }
 
@@ -255,6 +256,7 @@ fn gateway(network: &Network, ip: Ipv4Addr) -> Option<CardId> {
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::Role;
 
     fn home() -> Ipv4Net {
         "192.168.1.0/24".parse().unwrap()
@@ -387,16 +389,26 @@ mod tests {
     }
 
     #[test]
-    fn a_new_host_is_added_once_with_its_role_behind_the_router() {
+    fn a_new_host_is_added_once_as_edited_behind_the_router() {
         let (mut discovery, mut network) = started(ScanOptions::default());
         run_to_end(&mut discovery);
         let (index, _) = named(&discovery, "Kitchen Speaker");
-        discovery.set_role(index, Role::Other);
+        discovery.edit(index, |d| {
+            d.name = "Kitchen".into();
+            d.role = Role::Other;
+            d.notes = "On the fridge".into();
+        });
         let id = discovery.add(index, &mut network).unwrap();
         let added = network.device(id).unwrap();
         assert_eq!(
-            (added.name.as_str(), &added.role),
-            ("Kitchen Speaker", &Role::Other)
+            (added.name.as_str(), &added.role, added.notes.as_str()),
+            ("Kitchen", &Role::Other, "On the fridge")
+        );
+        discovery.edit(index, |d| d.name = "Changed".into());
+        assert_eq!(
+            discovery.found()[index].device.name,
+            "Kitchen",
+            "on the map, it is edited there"
         );
         assert!(added.cards[0].services.iter().count() > 0);
         let uplink = network.uplink(added.cards[0].id).unwrap();

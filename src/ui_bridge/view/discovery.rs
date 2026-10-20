@@ -74,7 +74,8 @@ fn seconds(steps: u32) -> i32 {
 fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found) -> ui::FoundView {
     let network = &state.network;
     let device = &found.device;
-    let on_map = found.on_map();
+    // Not once it has been forgotten from the map.
+    let on_map = found.on_map().filter(|&id| network.device(id).is_some());
     let spot = on_map
         .and_then(|id| network.device(id)?.primary_card())
         .and_then(|card| state.positions.get(&card.id));
@@ -104,7 +105,9 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         kind: convert::kind(device.kind),
         role: convert::role_label(labels, network, &device.role),
         role_index: role_index.map_or(-1, int),
-        icon: state.icons.image(&network.icon(device)),
+        icon: state.icons.choice(&network.icon(device)),
+        custom_icon: device.icon.is_some(),
+        notes: device.notes.as_str().into(),
         services: card
             .map(|c| c.services.to_string())
             .unwrap_or_default()

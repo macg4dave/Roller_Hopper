@@ -54,6 +54,13 @@ then drain bounded batches and reuse `view::sync`; avoid one queued closure per 
 Slint's [1.18.1 event-loop API](https://docs.rs/slint/1.18.1/slint/fn.invoke_from_event_loop.html)
 and [weak-handle API](https://docs.rs/slint/1.18.1/slint/struct.Weak.html) support this boundary.
 
+The scheduled closure must be `Send`; it cannot capture today's `Rc<RefCell<AppState>>`.
+Extending the existing UI-side Slint timer to drain a receiver with a bounded item/time budget
+is a simple initial option. Cross-thread wake-ups carry only thread-safe notification data
+or weak handles. Slint's [spawn_local](https://docs.rs/slint/1.18.1/slint/fn.spawn_local.html)
+does not provide a Tokio runtime; network I/O needs its explicitly owned background runtime.
+UI command enqueueing must not block: surface a full/closed command queue and preserve edits.
+
 ## Data model: extend existing concepts
 
 The immediate requirement is trustworthy facts and user ownership, not an exhaustive network
@@ -76,6 +83,12 @@ Avoid a new wrapper/type for every cell. These are schema obligations to refine 
 not a pre-approved list of Rust structs. Use a small typed collection outcome where relevant:
 not queried, unavailable/unsupported, denied, timeout, malformed response, success with value,
 or success with a meaningful negative result. A timeout is not proof a host or service is absent.
+
+Validation must cover mutations as well as Open: today's `Network::device_mut` and mutable card
+access permit direct field changes outside `set_card_address`. Future collectors, imports and
+manual edits should pass through the same validated reconciliation commands before accepting
+a revision. Preserve the prototype's interfaces until that integration is authorised; an
+extra validation framework is not required by this finding.
 
 ## Identity and reconciliation
 
@@ -119,15 +132,16 @@ open port alone verifies Windows. The current model has no OS-family field; addi
 inference/review presentation is an intentional future capability, not an existing feature.
 
 Retain all supported relationship evidence, but project a deterministic, acyclic tree into
-today's map. Prefer explicit manual display choices, then supported adjacency, then labelled
+today's map. The user confirmed retaining this inferred view and deferring managed topology
+(Q14). Prefer explicit manual display choices, then supported adjacency, then labelled
 inference; retain unrepresented/conflicting edges rather than silently dropping their meaning.
 An inferred gateway link means plausible reachability, not a physical cable. Do not add a graph
 crate or replace the layout until approved physical-topology requirements need it.
 
 ## Native documents: Open, Save and Save As
 
-The user explicitly requires save files and opening files. **Recommended default, pending
-format approval:** a versioned JSON native document using Serde/serde_json, with one in-memory
+The user explicitly requires save files and opening files and has selected **versioned JSON
+with explicit saves** (Q22b). Use Serde/serde_json with one in-memory
 document as authority. It fits explicit Save/dirty-state semantics and reuses the current
 in-memory model. A private auto-updating SQLite catalogue is not a substitute for user files.
 Do not add both JSON and a database as competing stores of the same inventory.
@@ -139,12 +153,18 @@ Do not serialise Slint handles, pixel animation state, running tasks, credential
 model weights. Treat previously online devices as last-known observations on reopening, not
 current reachability. Map pan/zoom and panel sizes are a separate preference decision.
 
-Use a stable native extension after Q22; the extension is not validation. Open reads into a
+Use a stable native extension after Q22a; the extension is not validation. Open reads into a
 candidate document, bounds file size/record counts/strings, validates schema and cross-record
 references, migrates supported older versions, then replaces the active document only after
 unsaved changes are handled. Unknown newer formats, corrupt data and failed migrations leave
 the current document intact. Never execute file contents, follow embedded remote references,
 load database extensions or automatically resume scans because a file requests it.
+
+Validation includes unique device/card keys, valid ownership/references, at least one card per
+device, acyclic guest ownership and an acyclic display tree with at most one upstream per card.
+The current constructor does not enforce these conditions and rootless card cycles disappear
+from layout. Revalidate discovered endpoints at admission against the latest document revision;
+do not copy a whole fixture device because one card matched the selected target.
 
 Save writes a complete snapshot to a sibling temporary file, finishes/flushes it and uses a
 vetted platform-aware replacement implementation. Keep the previous destination on failure,
@@ -157,7 +177,7 @@ Treat custom icons as portable resources: store safe relative identifiers, use b
 fallbacks, and decide whether imported icons are embedded or carried alongside the file.
 Do not save build-machine or arbitrary absolute paths as the only way to reopen a map.
 Native file pickers must use in-process APIs/normal desktop integration, never launch another
-program. Format, resource portability, recovery and conflict policies remain Q13/Q22.
+program. Extension, resource portability, recovery and conflict policies remain Q13/Q22a.
 
 User-selected document paths are distinct from per-user preferences and an optional crash
 recovery snapshot. Recovery must be labelled unsaved, respect the same validation, and never
@@ -194,3 +214,9 @@ network-change invalidation over repeated broad scans. Continuous active refresh
 cadence need Q5 approval. Missing responses make evidence stale/unknown unless an agreed
 policy supports a stronger offline conclusion. Link loss invalidates that scope's current
 reachability without declaring every device globally offline.
+
+Cancellation needs an independent token/control path so a full result queue cannot prevent
+Stop. After signalling, supervise all owned tasks and acknowledge one terminal outcome;
+ignore late batches by generation. A started blocking call cannot be killed by dropping a
+Tokio handle. Persistent blocking storage/inference workers need bounded admission and an
+explicit shutdown contract; no unconditional wait on an unbounded native call.

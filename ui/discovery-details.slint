@@ -1,18 +1,26 @@
-import { Button, ComboBox, ScrollView } from "std-widgets.slint";
+import { Button, ComboBox, ScrollView, TextEdit } from "std-widgets.slint";
 import { Bridge, FoundDecision, FoundFinding, FoundView } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
-import { Chip, FlagChip } from "components/chip.slint";
+import { FlagChip } from "components/chip.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
+import { IconChooser } from "components/icon-chooser.slint";
+import { NameBox } from "components/name-box.slint";
+import { CardEditor } from "card-editor.slint";
+import { DeviceForm } from "device-form.slint";
+import { FoundFacts } from "found-facts.slint";
 
-// Right of the discovery results: what the run found out about the selected host. A host not on
-// the map can be given a role and added to it, or ignored; one on the map can be shown there.
+// Right of the discovery results: an editor for the selected host, over what the run found out
+// about it. A host on the map is selected there too and gets the edit page's editor, so changes
+// go straight to the map; it can also be shown there. A host not on the map can be renamed and
+// given a role, an icon and notes, then added to the map with them, or ignored.
 export component DiscoveryDetails inherits Rectangle {
     // Show the device with this id on the map, whose first card sits at (x, y) on it.
     callback show-on-map(int, float, float);
 
     property <FoundView> found: Bridge.found-details;
+    property <bool> on-map: found.device-id >= 0 && Bridge.selected-id >= 0;
     property <bool> addable: found.finding != FoundFinding.known && found.decision != FoundDecision.added;
 
     background: Theme.surface;
@@ -30,7 +38,48 @@ export component DiscoveryDetails inherits Rectangle {
         width: parent.width - 4 * Theme.space-l;
     }
 
-    if Bridge.selected-found >= 0: scroll := ScrollView {
+    if Bridge.selected-found >= 0 && on-map: map-scroll := ScrollView {
+        VerticalLayout {
+            width: map-scroll.visible-width;
+            alignment: start;
+            padding: Theme.space-l;
+            spacing: Theme.space-s;
+
+            HorizontalLayout {
+                spacing: Theme.space-xs;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    HorizontalLayout {
+                        alignment: start;
+                        FlagChip {
+                            finding: found.finding;
+                            decision: found.decision;
+                        }
+                    }
+                }
+                Button {
+                    text: @tr("discovery.show-on-map");
+                    clicked => { root.show-on-map(found.device-id, found.map-x, found.map-y); }
+                }
+                Button {
+                    icon: @image-url("icons/close.svg");
+                    colorize-icon: true;
+                    accessible-label: @tr("details.close");
+                    clicked => { Bridge.select-found(-1); }
+                }
+            }
+            if Bridge.selected-card >= 0: CardEditor { }
+            if Bridge.selected-card < 0: DeviceForm { }
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            FoundFacts { found: found; }
+        }
+    }
+
+    if Bridge.selected-found >= 0 && !on-map: scroll := ScrollView {
         VerticalLayout {
             width: scroll.visible-width;
             alignment: start;
@@ -40,8 +89,19 @@ export component DiscoveryDetails inherits Rectangle {
             HorizontalLayout {
                 spacing: Theme.space-m;
                 padding-bottom: Theme.space-m;
-                DeviceIcon {
+                if addable: IconChooser {
+                    width: 52px;
+                    height: 52px;
                     icon: found.icon;
+                    icon-size: 36px;
+                    tint: found.unidentified ? Theme.unknown : Theme.accent;
+                    reset-text: @tr("edit.icon-from-role");
+                    can-reset: found.custom-icon;
+                    picked(icon) => { Bridge.set-found-icon(found.index, icon.id); }
+                    reset => { Bridge.reset-found-icon(found.index); }
+                }
+                if !addable: DeviceIcon {
+                    icon: found.icon.image;
                     width: 44px;
                     height: 44px;
                     colorize: found.unidentified ? Theme.unknown : Theme.accent;
@@ -50,7 +110,15 @@ export component DiscoveryDetails inherits Rectangle {
                     alignment: center;
                     spacing: Theme.space-xs;
                     horizontal-stretch: 1;
-                    Text {
+                    if addable: NameBox {
+                        name: found.name;
+                        placeholder: Labels.found-name("");
+                        font-size: Theme.font-title;
+                        font-weight: 600;
+                        field-label: @tr("details.name");
+                        commit(text) => { Bridge.rename-found(found.index, text); }
+                    }
+                    if !addable: Text {
                         text: Labels.found-name(found.name);
                         font-size: Theme.font-title;
                         font-weight: 600;
@@ -76,16 +144,6 @@ export component DiscoveryDetails inherits Rectangle {
                 }
             }
 
-            DetailField { label: @tr("details.ip"); value: found.ip; }
-            if found.mac != "": DetailField { label: @tr("details.mac"); value: found.mac; }
-            if found.duplicate-of != "": DetailField {
-                label: @tr("discovery.same-mac-as");
-                value: Labels.device-name(found.duplicate-of);
-            }
-            if found.hostname != "": DetailField { label: @tr("details.hostname"); value: found.hostname; }
-            if found.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: found.manufacturer; }
-            if found.model != "": DetailField { label: @tr("details.model"); value: found.model; }
-            DetailField { label: @tr("details.type"); value: Labels.kind(found.kind); }
             DetailField {
                 label: @tr("details.role");
                 value: addable ? "" : found.role;
@@ -99,17 +157,21 @@ export component DiscoveryDetails inherits Rectangle {
                     selected => { Bridge.set-found-role(found.index, self.current-index); }
                 }
             }
-            DetailField {
-                label: @tr("discovery.found-by");
-                HorizontalLayout {
-                    padding-top: 7px;
-                    alignment: start;
-                    spacing: Theme.space-xs;
-                    for method in found.methods: Chip { text: Labels.method(method); }
+            if addable: DetailField {
+                label: @tr("details.notes");
+                TextEdit {
+                    // Typing replaces the binding, so take another host's notes by hand.
+                    property <int> host: found.index;
+                    changed host => { self.text = found.notes; }
+                    height: 96px;
+                    wrap: word-wrap;
+                    placeholder-text: @tr("details.notes-placeholder");
+                    text: found.notes;
+                    edited(text) => { Bridge.edit-found-notes(found.index, text); }
                 }
             }
-            DetailField { label: @tr("discovery.confidence"); value: @tr("discovery.percent", found.confidence); }
-            if found.services != "": DetailField { label: @tr("details.open-ports"); value: found.services; }
+            if !addable && found.notes != "": DetailField { label: @tr("details.notes"); value: found.notes; }
+            FoundFacts { found: found; }
 
             HorizontalLayout {
                 alignment: start;
@@ -125,10 +187,6 @@ export component DiscoveryDetails inherits Rectangle {
                 if addable && found.decision == FoundDecision.pending: Button {
                     text: @tr("discovery.ignore");
                     clicked => { Bridge.ignore-found(found.index); }
-                }
-                if found.device-id >= 0: Button {
-                    text: @tr("discovery.show-on-map");
-                    clicked => { root.show-on-map(found.device-id, found.map-x, found.map-y); }
                 }
             }
         }

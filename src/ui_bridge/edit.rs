@@ -1,4 +1,5 @@
-//! Editing the network from the edit page and the details panel's edit mode: the selected
+//! Editing the network from the edit page, the details panel's edit mode and the discovery
+//! details (for a found host on the map): the selected
 //! device, its network cards and their open ports, the role list and the group list. Each area
 //! handles its own `Bridge` callbacks.
 

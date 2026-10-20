@@ -18,7 +18,8 @@ server or separately installed inference program is allowed, even if invoked inv
 prompt. Its publisher's [Q8_0 GGUF artifact](https://huggingface.co/Qwen/Qwen3-0.6B-GGUF)
 is Apache-2.0 and about **639 MB**. It has a non-thinking mode; use a bounded short context
 and output, not the model's maximum reasoning settings. This is an available pretrained model,
-not a proven network identifier. The size may exceed the user's eventual meaning of “small”.
+not a proven network identifier. It fits the user's subsequently confirmed allowance of
+roughly 700 MB of weights if useful on a normal CPU; installed size and RAM are separate.
 
 For the Rust-tools preference, evaluate the existing **Candle 0.11.0 quantized Qwen3 adapter**
 against that artifact first; this reuses a model implementation rather than building a model.
@@ -44,6 +45,13 @@ KV cache, compute buffers and the GUI. Select a CPU thread limit and load on dem
 installed size, cold start, inference latency and peak memory on baseline Windows/Linux/macOS
 machines before choosing a default. No such measurements were made during this review.
 
+Bounded follow-up finding: the publisher still lists the Qwen Q8_0 artifact at 639 MB, and
+the released Candle adapter exists. Those checks establish availability, not compatibility
+between that exact artifact, tokenizer/template and CPU runtime, or useful device accuracy.
+Keep selection open until Q16/Q16a establish resource and error budgets; further model hunting
+does not resolve those product decisions. Q16c settles the weight allowance only. The smaller
+alternatives remain candidates.
+
 ## A small integration contract, not an AI platform
 
 1. Send a bounded structured snapshot of existing evidence: hostname, observed service/protocol
@@ -59,6 +67,11 @@ machines before choosing a default. No such measurements were made during this r
    may refresh the guess; that is inference, not training, self-learning or a weight download.
 5. Apply through ordinary reconciliation and the user's settings, with retained previous values
    and undo. Keep current manual Add, Ignore, review and manual editing available without AI.
+
+An inference result also carries its document generation, evidence revision and model version.
+Recheck the current field policy when applying it: a result started before Open, Forget, an
+evidence change or a policy change must not restore stale values or apply superseded consent.
+Discarding stale inference is safer than running it again automatically without an agreed policy.
 
 For the user's example, record the actual facts independently: hostname `DESKTOP-13123` and
 open TCP 3389; a confirmed RDP protocol response is stronger than the port number alone.

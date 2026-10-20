@@ -10,7 +10,7 @@ Prefer current std/Slint facilities before new dependencies; enable only require
 MSRV means declared minimum Rust version, not proof all selected transitive dependencies build.
 All chosen runtime dependencies must execute in process and ship with the app. External
 programs, services, scanner/model runners and localhost backends are excluded. Native Open,
-Save and Save As are required; JSON snapshots are the revised proposed default rather than a
+Save and Save As are required; versioned JSON snapshots are now selected (Q22b), rather than a
 private database-only inventory.
 
 ## Recommended foundation
@@ -38,7 +38,7 @@ bound admission and call duration rather than assuming task cancellation kills n
 
 ## Document format and conditional SQLite alternative
 
-The proposed initial native format is versioned JSON, not simultaneous SQLite plus JSON
+The agreed initial native format is versioned JSON, not simultaneous SQLite plus JSON
 authorities. File limits, supported-version migration, portable icon resources and revisioned
 save acknowledgement belong to [the document contract](backend-architecture.md#native-documents-open-save-and-save-as).
 Keep format handling separate from app preferences and derivative recovery snapshots.
@@ -49,6 +49,12 @@ needed: MIT/Apache-2.0, MSRV 1.63 in its
 [Persist](https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist)
 does not sync contents/directory automatically. Use one vetted save route with deliberate
 flush/replacement/error handling, not both save crates.
+
+The atomic-write-file 0.3.1 [limitations](https://docs.rs/atomic-write-file/0.3.1/atomic_write_file/)
+are material: non-Unix permissions/ownership and existing ACLs are not preserved, and a symlink
+is replaced rather than its target updated. Qualify the chosen save route's access metadata,
+link/reparse behaviour and failure handling on all three platforms before selecting it.
+Atomic content replacement alone does not establish the required document-access policy.
 
 **rusqlite 0.40.2** becomes conditional on approved historical queries/scale or a deliberate
 SQLite-native file format. One worker-owned connection and direct SQL suffice without an ORM
@@ -90,7 +96,7 @@ catalogues are approved; generated IDs do not discover device identity.
 
 | Candidate | Recommendation and comparison | Limits requiring qualification |
 | --- | --- | --- |
-| **surge-ping 0.9.x** | Evaluate for async ICMP rather than constructing packets; MIT and Tokio-based | [Published docs](https://docs.rs/crate/surge-ping/latest) describe Linux datagram then raw fallback. Search/version caches disagreed between 0.9.0 and 0.9.1 during review; re-resolve exact release/MSRV before selection. Raw permission behaviour is not uniform across OSes. Native Windows ICMP is a separate alternative, not automatic safe Rust glue. |
+| **surge-ping 0.9.1** | Evaluate for async ICMP rather than constructing packets; MIT and Tokio-based | [Published release](https://docs.rs/crate/surge-ping/0.9.1) resolves the earlier version ambiguity. MSRV and platform qualification remain open; do not infer them from a stale main-branch manifest. Reuse one [Client](https://docs.rs/surge-ping/0.9.1/surge_ping/struct.Client.html), rather than the per-call-client `ping()` shortcut. Linux datagram policy and raw fallback permissions differ by OS; no unprivileged Windows support is established. Native Windows ICMP is a separate alternative. |
 | **Safe neighbour-table wrapper** | Selection remains open. OS neighbour caches are useful before choosing raw ARP/capture | [crossnet 0.1.1](https://docs.rs/crate/crossnet/latest) explicitly describes itself as early-stage; [net-lattice](https://github.com/F000NKKK/net-lattice) has broad inspection/mutation scope and evolving APIs. Neither was qualified here as a small proven cross-platform dependency. Older `netneighbours`/`ll-neighbors` search results are not maintenance proof. Do not invent a safe wrapper or bypass `unsafe_code = deny`. |
 | **pnet 0.35.0 / pcap** | Not the baseline; external capture-driver paths are excluded | [pnet](https://docs.rs/pnet/0.35.0/pnet/) is low-level; [Windows requirements](https://github.com/libpnet/libpnet) introduce WinPcap/Npcap installation, which conflicts with the hard boundary. Ordinary TCP/UDP discovery does not need capture. Only a compliant in-process/native OS path could be considered later. |
 | **snmp2 0.5.2** | Conditional read-only SNMP inventory/topology; Tokio and SNMPv3 options avoid implementing BER/USM | MIT/Apache-2.0, MSRV 1.90 in [docs](https://docs.rs/snmp2/latest/snmp2/). Disable MIB tooling requiring Net-SNMP programs/services; any native library must be packaged and in process. Its SHA2 wording conflicts with [RFC 7860](https://datatracker.ietf.org/doc/html/rfc7860); verify algorithms/interoperability and no silent weak fallback. |

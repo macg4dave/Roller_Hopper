@@ -1,11 +1,31 @@
 # Backend review
 
-Reviewed 20 October 2026 against source at `f2a9eee` and the working tree. This is a
+Reviewed 20 October 2026 against source at `0d5637e` and the initially clean working tree. This is a
 documentation-only assessment under [the review brief](chatgpt_document_promt.md).
-No application code, configuration or agent rules were changed. No application, network scan,
+This review changed no application code, configuration or agent rules. No application, network scan,
 test suite or quality gate was run; behaviour below is established by reading source, not by
-runtime or visual acceptance. Existing changes to the prompt and deleted mockup image were
-left untouched.
+runtime or visual acceptance. Unrelated source/UI edits appeared during the follow-up and
+were left untouched; the assessment refers to the baseline, not acceptance of that concurrent
+work.
+
+## Bounded follow-up review
+
+The user requested a maximum of approximately two minutes investigating each idea before
+recording its finding and moving on. This follow-up reuses the seven existing planning
+documents; it does not restart the architecture exercise or treat further research as approval.
+Each topic below records its conclusion and remaining uncertainty. An unresolved candidate
+stays unresolved when its time box ends.
+
+| Topic | Recorded finding | Follow-through |
+| --- | --- | --- |
+| Existing plan and scope | The current documents already cover the requested assessment, architecture, discovery, crates, questions, opportunities and conditional roadmap. Their recorded user answers remain the baseline; this follow-up grants no implementation approval. | Extend the relevant document rather than create another review or backlog. |
+| Model validation | Constructor validation alone cannot protect future imported/collected data: mutable device/card access can also bypass address invariants. | Use the same validated command path for collector, import and manual mutations; see [architecture](backend-architecture.md). No prototype code changed. |
+| Discovery admission | A simulated result retains every card of a device although only one matches the target; adding it connects the first card. | Preserve the matched endpoint and revalidate conflicts on admission. |
+| Imported topology | Interactive plugging rejects cycles, but construction/import has no equivalent check. A rootless cycle has no layout entry point. | Validate ownership and display-tree invariants before replacing a document. |
+| Slint and cancellation | Event-loop closures require `Send`; current state uses `Rc<RefCell<AppState>>`. A full result queue must not prevent Stop. | Keep state on the UI thread, drain bounded batches, and give cancellation an independent signal. |
+| macOS and mDNS | Terminal permission behaviour differs from packaged launch; mDNS subscription loss ends collection. | Require packaged permission evidence and truthful partial outcomes; see [discovery](backend-discovery.md). |
+| Saving | Atomic replacement alone does not preserve all access metadata. | Keep the save library provisional until permissions and failure semantics are qualified. |
+| Protocol and model candidates | Published surge-ping 0.9.1 resolves the old version ambiguity; an available model/adapter does not prove compatibility or accuracy. | Record exact candidates and remaining qualification in [crates](backend-crates.md) and [AI opportunities](backend-opportunities.md). |
 
 ## Reading order and decision status
 
@@ -30,6 +50,12 @@ model selection and operational limits remain questions.
 servers, localhost services, external executables or separately installed helper programs.
 Dependencies must be in-process libraries shipped with the app. Users must be able to produce
 save files and open them again; native Open, Save and Save As are first-release requirements.
+This follow-up also confirmed selected TCP ranges plus named UDP protocols, pause allowing
+in-flight results while launching no new probes, and versioned JSON with explicit saves.
+The first-release target is home/small-office networks of roughly 250 devices, up to roughly
+700 MB of AI weights if useful on a normal CPU, and the existing inferred tree with managed
+topology deferred. These settle Q4a/Q6a/Q22b/Q7a/Q16c/Q14, not the remaining workload, lifecycle,
+runtime-resource or accuracy questions.
 
 Everything described as a recommendation is provisional. The current
 [product guide](agents/product.md) still authorises a frontend prototype only. These documents
@@ -79,7 +105,7 @@ The source contains no production socket probing, discovery adapters, durable in
 | Services are keyed only by `u16` port | TCP and UDP, probe outcomes and user descriptions need separate meaning |
 | All inventory and edits reset at restart; there is no document/file workflow | Add user-owned native save/open documents; do not confuse a private app cache with a saved file |
 | Status/relative last-seen are device-wide; empty values also mean not collected | Need endpoint evidence, absolute observation time, freshness and typed missing/error states |
-| One upstream per card; cycles rejected; manual links can also become `Known`/“detected” | Retain the tree as a display projection; distinguish observed, inferred and user-asserted relationships |
+| One upstream per card; interactive plugging rejects cycles; manual links can also become `Known`/“detected” | Retain the tree as a display projection; validate imported trees and distinguish observed, inferred and user-asserted relationships |
 | Target list comes from mapped-card prefixes | Empty inventory cannot bootstrap; known map subnets are neither local routing facts nor permission to scan |
 | Stop becomes `Finished`; no failed/cancelled/partial terminal state; discovery result selection/actions use list indices | Need truthful run outcomes, stable result selection and rejection of stale events |
 | Every update and motion tick reconstructs view vectors | Batch worker results; measure before adding indexes, caches or a new graph/layout engine |
@@ -93,6 +119,13 @@ Further static findings, recorded without source repairs:
   is a source-derived finding, not a reproduced GUI defect.
 - `Network::new` trusts its inputs. Arbitrary persisted/imported observations need validation
   beyond the consistency of today's fixture.
+- `Found::detect` selects a matching card but retains the whole fixture device; `Discovery::add`
+  copies it, while `insert_device` connects its first card without rechecking address conflicts.
+  Off-target cards and intervening edits therefore matter at admission. Evidence:
+  [found.rs](../src/model/discovery/found.rs), [discovery.rs](../src/model/discovery.rs),
+  [children.rs](../src/model/network/children.rs). This is a static finding, not a reproduced bug.
+- [Layout](../src/model/layout.rs) starts from cards without an uplink. A rootless imported
+  cycle would have no positions; its depth guards do not repair invalid topology.
 - Reset layout also restores the saved connections; Forget recursively removes guests and
   promises their return on restart. Persistence changes the implications of both controls.
 - The product guide's read-only details/separate edit description differs from current inline

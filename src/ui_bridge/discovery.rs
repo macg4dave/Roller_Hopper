@@ -1,16 +1,16 @@
-//! The discovery page: a simulated scan, stepped on by a timer, and adding the hosts it finds to
-//! the map. The run itself is [`crate::model::Discovery`]; [`super::view`] sends it to the UI.
+//! The discovery page: a simulated scan, stepped on by a timer, and editing the hosts it finds
+//! and adding them to the map. The run itself is [`crate::model::Discovery`]; [`super::view`] sends it to the UI.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use ipnet::Ipv4Net;
-use slint::{ComponentHandle, Timer, TimerMode, Weak};
+use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
-use super::{AppState, convert, handler, update};
+use super::{AppState, Selection, convert, handler, update};
 use crate::mock_data;
-use crate::model::{FoundFilter, Phase};
+use crate::model::{Found, FoundFilter, Phase};
 use crate::ui::{self, AppWindow, Bridge};
 
 /// One step of a run, so a whole run takes about six seconds.
@@ -49,16 +49,28 @@ impl AppState {
         }
     }
 
-    /// Adds a found host to the map and lays it out; the map is out of sight meanwhile.
+    /// Shows a found host in the details. One on the map is selected there too, so the details
+    /// edit the device on the map.
+    fn select_found(&mut self, index: Option<usize>) {
+        self.discovery.selected = index;
+        let found = index.and_then(|i| self.discovery.found().get(i));
+        if let Some(id) = found.and_then(Found::on_map) {
+            self.selected = Some(Selection::Device(id));
+        }
+    }
+
+    /// Adds a found host to the map and lays it out; the map is out of sight meanwhile. It is
+    /// selected, so the details go on editing it on the map.
     fn add_found(&mut self, index: usize) {
-        if self.discovery.add(index, &mut self.network).is_some() {
+        if let Some(id) = self.discovery.add(index, &mut self.network) {
+            self.selected = Some(Selection::Device(id));
             self.lay_out_at_rest();
         }
     }
 
     fn set_found_role(&mut self, index: usize, role: usize) {
         if let Some(role) = self.role(role) {
-            self.discovery.set_role(index, role);
+            self.discovery.edit(index, |d| d.role = role);
         }
     }
 
@@ -115,12 +127,31 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         st.discovery.filter = filter_from_ui(filter);
     }));
     bridge.on_select_found(handler(ui, state, |st, index| {
-        st.discovery.selected = usize::try_from(index).ok();
+        st.select_found(usize::try_from(index).ok());
     }));
     let set_role = handler(ui, state, |st, (index, role)| {
         st.set_found_role(convert::index(index), convert::index(role));
     });
     bridge.on_set_found_role(move |index, role| set_role((index, role)));
+    let rename = handler(ui, state, |st, (index, name): (i32, SharedString)| {
+        st.discovery
+            .edit(convert::index(index), |d| d.name = name.into());
+    });
+    bridge.on_rename_found(move |index, name| rename((index, name)));
+    let edit_notes = handler(ui, state, |st, (index, notes): (i32, SharedString)| {
+        st.discovery
+            .edit(convert::index(index), |d| d.notes = notes.into());
+    });
+    bridge.on_edit_found_notes(move |index, notes| edit_notes((index, notes)));
+    let set_icon = handler(ui, state, |st, (index, icon): (i32, SharedString)| {
+        let icon = convert::icon_from_ui(&icon);
+        st.discovery
+            .edit(convert::index(index), |d| d.icon = Some(icon));
+    });
+    bridge.on_set_found_icon(move |index, icon| set_icon((index, icon)));
+    bridge.on_reset_found_icon(handler(ui, state, |st, index| {
+        st.discovery.edit(convert::index(index), |d| d.icon = None);
+    }));
     bridge.on_add_found(handler(ui, state, |st, index| {
         st.add_found(convert::index(index));
     }));
@@ -203,5 +234,21 @@ mod tests {
         let device = state.network.device(id).unwrap();
         assert_eq!(device.role, crate::model::Role::Other);
         assert!(state.positions.contains_key(&device.cards[0].id));
+        assert_eq!(state.selected, Some(Selection::Device(id)), "edited on");
+    }
+
+    #[test]
+    fn a_found_host_on_the_map_selects_its_device_and_one_off_it_keeps_the_selection() {
+        let mut state = AppState::new(mock_data::network());
+        finished(&mut state);
+        let found = state.discovery.found();
+        let at = |name| found.iter().position(|f| f.device.name == name);
+        let (nas, laptop) = (at("NAS"), at("Guest Laptop"));
+        let nas_id = found[nas.unwrap()].on_map().unwrap();
+        state.select_found(nas);
+        assert_eq!(state.selected, Some(Selection::Device(nas_id)));
+        state.select_found(laptop);
+        assert_eq!(state.discovery.selected, laptop);
+        assert_eq!(state.selected, Some(Selection::Device(nas_id)));
     }
 }

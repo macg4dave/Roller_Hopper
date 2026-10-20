@@ -11,6 +11,12 @@ broad port coverage and the agreed offline CPU AI behaviour. Phases below are in
 boundaries, not permission to quietly drop a confirmed requirement from that release.
 It also includes user-owned Open/Save/Save As documents. Every runtime component is in process;
 no external scanner/model executables, servers or separately installed helper services.
+The follow-up confirmed selected TCP ranges plus named UDP protocols, versioned JSON with
+explicit saves, and pause allowing bounded in-flight probes to finish. Remaining questions
+still gate architecture approval; those answers are not implementation authorisation.
+First-release acceptance targets home/small-office networks of roughly 250 devices. Up to
+roughly 700 MB of AI weights is acceptable if useful on a normal CPU; RAM, latency and accuracy
+still need agreed limits and evidence. Keep the inferred tree; managed topology comes later.
 
 | Phase | Intended outcome after approval | Entry dependency | Evidence required before proceeding |
 | --- | --- | --- | --- |
@@ -49,12 +55,16 @@ pressure, migration and policy logic. Live scans, multicast, credentials, privil
 and Slint MCP interaction require separately authorised sessions and selected targets. None
 was run for this review.
 
-Acceptance should include: empty-inventory bootstrap; local and routed devices without MACs;
-changed/reused IPs and overlapping network contexts; optional methods denied; slow/absent
+Acceptance should include: validated imports including rootless cycles and cross-record
+conflicts; nonblocking UI commands and Stop under a full queue; empty-inventory bootstrap;
+local and routed devices without MACs; changed/reused IPs and overlapping network contexts;
+optional methods denied; slow/absent
 responses; pause/stop/restart and close during collection; edits during enrichment; no loss of
 manual choices; repeat discovery without duplicate devices; save failure and recovery; and
 offline inference with automatic policy off/on. Use the agreed scale on each OS, not just the
 mock fixture. Do not treat a timer reaching 100% as a terminal success.
+Check macOS permissions in a normally launched package, mDNS monitor/disconnect outcomes, and
+save-file access metadata; source gates and Terminal runs do not establish those behaviours.
 
 Deferred IPv6, physical-topology depth beyond named first-release needs, history/documentation
 exports and other enhancements remain in [opportunities](backend-opportunities.md). No work

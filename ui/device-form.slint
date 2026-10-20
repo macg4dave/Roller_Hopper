@@ -8,8 +8,8 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 
 // The selected device's editable fields: icon, name, role, its network cards and guests with
-// adding more, notes, and forgetting it. Used on the edit page and in the details panel's edit
-// mode.
+// adding more, notes, and forgetting it. Used on the edit page, in the details panel's edit
+// mode and in the discovery details for a host on the map.
 export component DeviceForm inherits VerticalLayout {
     // Forgetting asks first; a new selection drops the question.
     property <bool> confirm-forget;

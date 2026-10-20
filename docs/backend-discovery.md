@@ -27,7 +27,8 @@ does not prove that a requested destination uses the chosen adapter.
 service enrichment, and explicitly selected broad port coverage. Support the requested broad
 scan without making all 65,535 ports on every host the default. TCP-connect probing can cover
 the full selected TCP range; UDP needs protocol-aware queries and different outcome semantics.
-Whether broad coverage includes UDP is Q4, not an assumption.
+The user selected TCP ranges plus named UDP discovery protocols (Q4a), rather than a blanket
+UDP sweep. Exact range/exclusion rules and workload bounds remain Q4/Q7.
 
 ## Combine sources without overstating them
 
@@ -51,6 +52,14 @@ Protocol grounding: [Windows neighbour-table API](https://learn.microsoft.com/en
 [DNS-SD](https://www.rfc-editor.org/rfc/rfc6763.html),
 [LLDP implementation documentation](https://github.com/lldpd/lldpd), and
 [Bridge MIB](https://www.rfc-editor.org/rfc/rfc4188.html).
+
+For managed topology, a forwarding-database entry shows learned reachability through a bridge
+port, not necessarily a direct cable. Retain switch, FDB/VLAN context, timestamp and entry state;
+map bridge-port numbers through `dot1dBasePortIfIndex` before matching interface records.
+An FDB ID is not automatically a VLAN ID, and port zero/aged entries cannot prove adjacency.
+Keep this evidence distinct from LLDP neighbours and manual links.
+[Q-BRIDGE MIB](https://datatracker.ietf.org/doc/html/rfc4363),
+[Bridge MIB mapping](https://datatracker.ietf.org/doc/html/rfc4188)
 
 Collectors emit independent observations, not complete fabricated `Device`s. Validate scope,
 addresses, lengths and identifiers, then reconcile the same endpoint's evidence across
@@ -79,6 +88,19 @@ the native [Windows ICMP API](https://learn.microsoft.com/en-us/windows/win32/ap
 has different mechanics from raw ICMP sockets. Ordinary discovery should remain usable with
 unavailable optional capabilities, reporting exactly what was skipped.
 
+On macOS 15+, local-network privacy also applies to ordinary sockets. Terminal-launched and
+root processes receive different treatment from a normally launched app, so `cargo run` is
+not packaged-GUI permission evidence. Future acceptance needs the signed app launched normally,
+with fresh permission state, denial and subsequent grant; no such session was run here.
+[Apple TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
+
+For mdns-sd 0.21.6, successful construction is not socket readiness: lazy multicast failures
+arrive through `monitor()`. Consume monitor and result events off the UI thread. A full browse
+channel terminates the subscription; treat unexpected disconnect as lost/partial coverage,
+not successful completion. Do not wait indefinitely for a `SearchStopped` event or retry
+without bounds. [Daemon API](https://docs.rs/mdns-sd/latest/mdns_sd/struct.ServiceDaemon.html),
+[release changes](https://raw.githubusercontent.com/keepsimple1/mdns-sd/v0.21.6/CHANGELOG.md)
+
 The project denies unsafe code. Native `windows`/`windows-sys` bindings do **not** automatically
 provide a safe application-level neighbour/ICMP wrapper. Prefer a maintained safe dependency;
 the current neighbour-wrapper shortlist is not yet qualified. Do not weaken lints or conceal
@@ -96,10 +118,11 @@ failed. The terminal result also records partial coverage and per-method issues;
 run with a failed optional collector must say so. Preparation failures send no probes.
 
 Pause should stop launching new work while allowing in-flight operations to finish under
-their timeouts; final in-flight results may appear while paused. Resume only starts remaining
-work. Stop cancels scheduling, signals active operations, drains/abandons them safely, retains
-valid partial observations and reports cancellation acknowledgement. These semantics need Q6
-agreement; a token alone cannot interrupt every blocking/native call.
+their timeouts; final in-flight results may appear while paused. The user confirmed these
+pause semantics in Q6a. Resume only starts remaining work. Stop cancels scheduling, signals
+active operations, drains/abandons them safely, retains valid partial observations and reports
+cancellation acknowledgement. Navigation/close/restart policy still needs Q6 agreement;
+a token alone cannot interrupt every blocking/native call.
 
 Measure elapsed time using a monotonic clock; persist wall-clock start/end separately.
 Report per-stage completed/eligible work and coverage. A variable-length enrichment stage can

@@ -1,0 +1,35 @@
+import { FoundView } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+import { Chip } from "components/chip.slint";
+import { DetailField } from "components/detail-field.slint";
+
+// What a discovery run found out about a host: read-only, under its editor in the discovery
+// details.
+export component FoundFacts inherits VerticalLayout {
+    in property <FoundView> found;
+
+    spacing: Theme.space-xs;
+
+    DetailField { label: @tr("details.ip"); value: found.ip; }
+    if found.mac != "": DetailField { label: @tr("details.mac"); value: found.mac; }
+    if found.duplicate-of != "": DetailField {
+        label: @tr("discovery.same-mac-as");
+        value: Labels.device-name(found.duplicate-of);
+    }
+    if found.hostname != "": DetailField { label: @tr("details.hostname"); value: found.hostname; }
+    if found.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: found.manufacturer; }
+    if found.model != "": DetailField { label: @tr("details.model"); value: found.model; }
+    DetailField { label: @tr("details.type"); value: Labels.kind(found.kind); }
+    DetailField {
+        label: @tr("discovery.found-by");
+        HorizontalLayout {
+            padding-top: 7px;
+            alignment: start;
+            spacing: Theme.space-xs;
+            for method in found.methods: Chip { text: Labels.method(method); }
+        }
+    }
+    DetailField { label: @tr("discovery.confidence"); value: @tr("discovery.percent", found.confidence); }
+    if found.services != "": DetailField { label: @tr("details.open-ports"); value: found.services; }
+}

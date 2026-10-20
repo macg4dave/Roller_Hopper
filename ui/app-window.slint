@@ -39,7 +39,11 @@ export component AppWindow inherits Window {
 
     VerticalLayout {
         Header {
-            scan => { page = Page.discovery; }
+            // The selection may have moved on the map meanwhile: back on the found host's device.
+            scan => {
+                page = Page.discovery;
+                Bridge.select-found(Bridge.selected-found);
+            }
         }
 
         Rectangle {
