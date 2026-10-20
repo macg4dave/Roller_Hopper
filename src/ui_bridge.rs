@@ -481,14 +481,15 @@ mod tests {
     fn a_role_is_put_in_a_group_by_dropdown_choice() {
         let mut state = AppState::new(mock_data::network());
         let printer = index_of(&state, &Role::Printer);
-        let second = state.group(1);
-        assert!(second.is_some());
-        state.set_role_group(printer, 2);
-        assert_eq!(state.network.role_group(&Role::Printer), second);
+        let third = state.group(2);
+        assert!(third.is_some());
+        assert_ne!(state.network.role_group(&Role::Printer), third);
+        state.set_role_group(printer, 3);
+        assert_eq!(state.network.role_group(&Role::Printer), third);
         state.set_role_group(printer, 999);
         assert_eq!(
             state.network.role_group(&Role::Printer),
-            second,
+            third,
             "out of range"
         );
         state.set_role_group(printer, 0);
@@ -507,7 +508,7 @@ mod tests {
                 .network
                 .groups()
                 .iter()
-                .all(|(_, n)| n != "Infrastructure")
+                .all(|(_, n)| n != "Network core")
         );
     }
 

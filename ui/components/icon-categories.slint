@@ -1,0 +1,79 @@
+import { Button } from "std-widgets.slint";
+import { IconGroup } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// The icon picker's categories as tabs, a few at a time. The arrows slide to the next or
+// previous few in one quick move.
+export component IconCategories inherits HorizontalLayout {
+    in property <[IconGroup]> groups;
+    in-out property <int> current;
+    property <int> per-page: 3;
+    property <int> pages: max(1, Math.ceil(groups.length / per-page));
+    // The arrows move the page on their own; choosing a category brings its page back.
+    property <int> page: Math.floor(current / per-page);
+    changed current => { page = Math.floor(current / per-page); }
+
+    spacing: Theme.space-xs;
+
+    Button {
+        icon: @image-url("../icons/chevron-left.svg");
+        colorize-icon: true;
+        accessible-label: @tr("icons.previous");
+        enabled: page > 0;
+        clicked => { page -= 1; }
+    }
+
+    window := Rectangle {
+        horizontal-stretch: 1;
+        clip: true;
+
+        Rectangle {
+            x: -page * window.width;
+            width: pages * window.width;
+            animate x { duration: 200ms; easing: ease-in-out; }
+
+            for group[i] in groups: Rectangle {
+                x: i * window.width / per-page;
+                width: window.width / per-page;
+                border-radius: Theme.radius;
+                property <bool> chosen: i == current;
+                background: touch.has-hover ? Theme.hover : transparent;
+                accessible-role: button;
+                accessible-label: name.text;
+                accessible-checkable: true;
+                accessible-checked: chosen;
+                accessible-action-default => { current = i; }
+
+                touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { current = i; }
+                }
+                name := Text {
+                    // Icons straight in the folder, not in a subfolder.
+                    text: group.heading != "" ? group.heading : @tr("icons.unsorted");
+                    width: parent.width - 2 * Theme.space-xs;
+                    font-size: Theme.font-body;
+                    font-weight: chosen ? 600 : 400;
+                    color: chosen ? Theme.accent : Theme.text;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Rectangle {
+                    y: parent.height - self.height;
+                    width: parent.width - 2 * Theme.space-s;
+                    height: 2px;
+                    background: chosen ? Theme.accent : transparent;
+                }
+            }
+        }
+    }
+
+    Button {
+        icon: @image-url("../icons/chevron-right.svg");
+        colorize-icon: true;
+        accessible-label: @tr("icons.next");
+        enabled: page < pages - 1;
+        clicked => { page += 1; }
+    }
+}

@@ -332,8 +332,9 @@ mod tests {
             .find(|d| d.role == Role::Printer)
             .cloned()
             .unwrap();
-        let office = network.add_group("Office").unwrap();
+        let office = network.add_group("Print room").unwrap();
         network.set_group_colour(office, Some(GroupColour::Orange));
+        network.set_role_group(&Role::Printer, None);
         assert_eq!(network.colour(&printer), None, "role in no group");
         network.set_role_group(&Role::Printer, Some(office));
         assert_eq!(network.colour(&printer), Some(GroupColour::Orange));

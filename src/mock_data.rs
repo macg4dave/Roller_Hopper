@@ -3,8 +3,8 @@
 use std::net::Ipv4Addr;
 
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Network, Role,
-    Services, Status,
+    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, LastSeen, MacAddr,
+    Network, Role, Services, Status,
 };
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
@@ -329,11 +329,48 @@ pub(crate) fn network() -> Network {
             device.role = role;
         }
     }
-    // Example groups, as if the user had made them; every role starts in none.
-    for name in ["Infrastructure", "Office", "Home", "Media"] {
-        network.add_group(name);
-    }
+    add_groups(&mut network);
     network
+}
+
+/// Example groups, as if the user had made them. They follow how devices connect, so the lines
+/// from the router, the switch and the access point each show in their own colour.
+fn add_groups(network: &mut Network) {
+    let tv = Role::Custom("TV".into());
+    let console = Role::Custom("Games console".into());
+    let groups = [
+        ("Network core", GroupColour::Purple, vec![Role::Router]),
+        (
+            "Wired",
+            GroupColour::Blue,
+            vec![
+                Role::Switch,
+                Role::Desktop,
+                Role::Server,
+                Role::Nas,
+                Role::Printer,
+            ],
+        ),
+        (
+            "Wi-Fi",
+            GroupColour::Green,
+            vec![Role::AccessPoint, Role::Laptop, Role::Phone],
+        ),
+        (
+            "Smart home",
+            GroupColour::Orange,
+            vec![Role::Camera, Role::Iot, tv, console],
+        ),
+    ];
+    for (name, colour, roles) in groups {
+        let Some(group) = network.add_group(name) else {
+            continue;
+        };
+        network.set_group_colour(group, Some(colour));
+        for role in &roles {
+            network.set_role_group(role, Some(group));
+        }
+    }
 }
 
 /// Pretends a scan ran: responsive devices are seen now, silent ones age, and one device flips
@@ -391,6 +428,16 @@ mod tests {
             1,
             "a single root"
         );
+    }
+
+    #[test]
+    fn the_router_switch_and_access_point_each_have_their_own_colour() {
+        let network = network();
+        let colour = |id| network.device(DeviceId(id)).and_then(|d| network.colour(d));
+        let parents = [colour(1), colour(2), colour(3)];
+        assert!(parents.iter().all(Option::is_some), "{parents:?}");
+        let distinct: HashSet<_> = parents.iter().collect();
+        assert_eq!(distinct.len(), 3, "{parents:?}");
     }
 
     #[test]

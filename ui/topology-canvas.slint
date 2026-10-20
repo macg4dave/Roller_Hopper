@@ -104,22 +104,17 @@ export component TopologyCanvas inherits Rectangle {
         transform-origin: { x: 0, y: 0 };
         transform-scale: zoom;
 
-        // Connection lines: one path per style.
-        for style in [
-            { commands: Bridge.lines.known, color: Theme.line, visible: true },
-            { commands: Bridge.lines.inferred, color: Theme.line, visible: MapSettings.show-inferred },
-            { commands: Bridge.lines.selected-known, color: Theme.accent, visible: true },
-            { commands: Bridge.lines.selected-inferred, color: Theme.accent, visible: MapSettings.show-inferred },
-        ]: Path {
+        // Connection lines: one path per colour and style.
+        for set in Bridge.lines: Path {
             width: parent.width;
             height: parent.height;
             viewbox-x: Bridge.bounds.x;
             viewbox-y: Bridge.bounds.y;
             viewbox-width: Bridge.bounds.width;
             viewbox-height: Bridge.bounds.height;
-            commands: style.commands;
-            visible: style.visible;
-            stroke: style.color;
+            commands: set.commands;
+            visible: !set.inferred || MapSettings.show-inferred;
+            stroke: set.selected ? Theme.accent : Theme.group-colour(set.colour, Theme.line);
             // Keep lines thin on screen at any zoom.
             stroke-width: Theme.line-width / zoom;
         }

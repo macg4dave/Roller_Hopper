@@ -234,31 +234,45 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
         .collect()
 }
 
-/// SVG path commands for every connection, grouped by line style.
+/// How a line is drawn: its parent's group colour, dashed or not, highlighted or not.
+type LineStyle = (Option<GroupColour>, ConnectionKind, bool);
+
+/// SVG path commands for every connection, one set per line style, highlighted sets last.
 pub(super) fn lines(
     network: &Network,
     positions: &Positions,
     selected: Option<DeviceId>,
-) -> ui::MapLines {
+) -> Vec<ui::LineSet> {
     let at = |id| positions.get(&id).copied().unwrap_or_default();
-    let (mut known, mut inferred) = (Vec::new(), Vec::new());
-    let (mut selected_known, mut selected_inferred) = (Vec::new(), Vec::new());
+    let mut sets: Vec<(LineStyle, Vec<String>)> = Vec::new();
     for link in network.connections() {
         let points = route(at(link.upstream), at(link.downstream));
         let highlighted = selected.is_some_and(|id| id == link.upstream || id == link.downstream);
-        match (link.kind, highlighted) {
-            (ConnectionKind::Known, false) => known.push(solid(&points)),
-            (ConnectionKind::Known, true) => selected_known.push(solid(&points)),
-            (ConnectionKind::Inferred, false) => inferred.push(dashed(&points)),
-            (ConnectionKind::Inferred, true) => selected_inferred.push(dashed(&points)),
+        // A line takes the group colour of the device it hangs from, unless it is highlighted.
+        let parent = network.device(link.upstream);
+        let colour = parent
+            .filter(|_| !highlighted)
+            .and_then(|d| network.colour(d));
+        let path = match link.kind {
+            ConnectionKind::Known => solid(&points),
+            ConnectionKind::Inferred => dashed(&points),
+        };
+        let style = (colour, link.kind, highlighted);
+        match sets.iter_mut().find(|(s, _)| *s == style) {
+            Some((_, paths)) => paths.push(path),
+            None => sets.push((style, vec![path])),
         }
     }
-    ui::MapLines {
-        known: known.join(" ").into(),
-        inferred: inferred.join(" ").into(),
-        selected_known: selected_known.join(" ").into(),
-        selected_inferred: selected_inferred.join(" ").into(),
-    }
+    sets.sort_by_key(|((_, _, highlighted), _)| *highlighted);
+    let sets = sets
+        .into_iter()
+        .map(|((group, kind, highlighted), paths)| ui::LineSet {
+            commands: paths.join(" ").into(),
+            colour: colour(group),
+            inferred: kind == ConnectionKind::Inferred,
+            selected: highlighted,
+        });
+    sets.collect()
 }
 
 /// The map area holding every node and its labels.
@@ -357,22 +371,50 @@ mod tests {
         );
     }
 
+    /// Whether some line set has the given look.
+    fn has(sets: &[ui::LineSet], colour: ui::GroupColour, inferred: bool, selected: bool) -> bool {
+        sets.iter()
+            .any(|s| (s.colour, s.inferred, s.selected) == (colour, inferred, selected))
+    }
+
     #[test]
-    fn selection_moves_its_links_into_the_highlighted_styles() {
+    fn selection_highlights_its_links_and_draws_them_last() {
         let network = crate::mock_data::network();
         let positions = crate::model::tree_layout(&network);
         let plain = lines(&network, &positions, None);
-        assert!(plain.selected_known.is_empty() && plain.selected_inferred.is_empty());
+        assert!(plain.iter().all(|s| !s.selected));
 
         let access_point = DeviceId(3);
         let highlighted = lines(&network, &positions, Some(access_point));
-        assert!(
-            !highlighted.selected_known.is_empty(),
-            "uplink to the router"
-        );
-        assert!(
-            !highlighted.selected_inferred.is_empty(),
-            "wireless clients"
-        );
+        let none = ui::GroupColour::None;
+        assert!(has(&highlighted, none, false, true), "uplink to the router");
+        assert!(has(&highlighted, none, true, true), "wireless clients");
+        let first_highlighted = highlighted.iter().position(|s| s.selected);
+        let last_plain = highlighted.iter().rposition(|s| !s.selected);
+        assert!(last_plain < first_highlighted);
+    }
+
+    #[test]
+    fn lines_take_the_colour_of_the_device_they_hang_from() {
+        let mut network = crate::mock_data::network();
+        let positions = crate::model::tree_layout(&network);
+        // A colour of its own, so other groups' lines cannot be mistaken for the router's.
+        let group = network.add_group("Gateway").unwrap();
+        network.set_group_colour(group, Some(GroupColour::Red));
+        network.set_role_group(&Role::Router, Some(group));
+
+        let sets = lines(&network, &positions, None);
+        let red = sets
+            .iter()
+            .find(|s| s.colour == ui::GroupColour::Red && !s.inferred);
+        let router_links = network
+            .connections()
+            .iter()
+            .filter(|c| c.upstream == DeviceId(1));
+        let expected = router_links
+            .filter(|c| c.kind == ConnectionKind::Known)
+            .count();
+        let drawn = red.map(|s| s.commands.matches('M').count());
+        assert_eq!(drawn, Some(expected), "the router's links, and only those");
     }
 }

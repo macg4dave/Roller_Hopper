@@ -28,7 +28,8 @@ pub(super) fn folder() -> PathBuf {
 /// The icons found in the folder, loaded and ready to show.
 #[derive(Default)]
 pub(super) struct Icons {
-    /// Headings (empty for the folder itself) and their icons, in the order shown.
+    /// Headings (empty for the folder itself) and their icons, in the order shown. Only
+    /// headings with at least one icon are kept, so a group's index is its place in the picker.
     groups: Vec<(String, Vec<Icon>)>,
     images: HashMap<Icon, Image>,
 }
@@ -45,8 +46,9 @@ impl Icons {
                     images.insert(icon.clone(), image);
                     Some(icon)
                 });
-                (heading, icons.collect())
+                (heading, icons.collect::<Vec<_>>())
             })
+            .filter(|(_, icons)| !icons.is_empty())
             .collect();
         Self { groups, images }
     }
@@ -57,17 +59,21 @@ impl Icons {
     }
 
     pub(super) fn choice(&self, icon: &Icon) -> ui::IconChoice {
+        let group = self
+            .groups
+            .iter()
+            .position(|(_, icons)| icons.contains(icon));
         ui::IconChoice {
             id: icon.0.as_str().into(),
             label: label(icon).into(),
             image: self.image(icon),
+            group: group.and_then(|g| i32::try_from(g).ok()).unwrap_or(-1),
         }
     }
 
     /// Every icon for the picker, under its heading.
     pub(super) fn groups(&self) -> Vec<ui::IconGroup> {
-        let groups = self.groups.iter().filter(|(_, icons)| !icons.is_empty());
-        let groups = groups.map(|(heading, icons)| {
+        let groups = self.groups.iter().map(|(heading, icons)| {
             let choices: Vec<_> = icons.iter().map(|icon| self.choice(icon)).collect();
             ui::IconGroup {
                 heading: SharedString::from(heading.as_str()),
@@ -146,7 +152,8 @@ mod tests {
         fn file(&self, path: &str) {
             let path = self.0.join(path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(path, "<svg/>").unwrap();
+            let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2h20"/></svg>"#;
+            fs::write(path, svg).unwrap();
         }
     }
 
@@ -184,6 +191,19 @@ mod tests {
                 ("Network", vec!["Network/Router"]),
             ]
         );
+    }
+
+    #[test]
+    fn an_icon_knows_which_category_it_is_in() {
+        let scratch = Scratch::new("icons-groups");
+        scratch.file("Network/Router.svg");
+        fs::create_dir_all(scratch.0.join("Empty")).unwrap();
+        scratch.file("Zoo/Lion.svg");
+        let icons = Icons::load(&scratch.0);
+        let headings: Vec<_> = icons.groups.iter().map(|(h, _)| h.as_str()).collect();
+        assert_eq!(headings, ["Network", "Zoo"], "no category without icons");
+        assert_eq!(icons.choice(&Icon::new("Zoo/Lion")).group, 1);
+        assert_eq!(icons.choice(&Icon::new("Gone/Missing")).group, -1);
     }
 
     #[test]

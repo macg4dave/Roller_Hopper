@@ -278,6 +278,17 @@ msgstr "Change icon"
 msgid "icons.title"
 msgstr "Choose an icon"
 
+# The arrows beside the picker's category tabs, which show a few categories at a time.
+msgid "icons.previous"
+msgstr "Previous categories"
+
+msgid "icons.next"
+msgstr "Next categories"
+
+# The category for icons placed straight in the icons folder rather than in a subfolder.
+msgid "icons.unsorted"
+msgstr "Unsorted"
+
 # Shown in the picker when the icon folder has no usable SVG files.
 msgid "icons.none"
 msgstr "No icons found. Add SVG files to the icons folder."

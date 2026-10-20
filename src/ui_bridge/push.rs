@@ -34,7 +34,10 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     }
     push_roles(&bridge, &labels, state);
 
-    bridge.set_lines(convert::lines(network, &state.positions, state.selected));
+    let lines = convert::lines(network, &state.positions, state.selected);
+    if let Some(model) = sync(&bridge.get_lines(), lines) {
+        bridge.set_lines(model);
+    }
     bridge.set_bounds(convert::bounds(&state.positions));
     bridge.set_filter(convert::filter_to_ui(state.filter));
     bridge.set_count_all(count(network, StatusFilter::All));

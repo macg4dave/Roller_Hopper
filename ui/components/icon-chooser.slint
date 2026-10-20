@@ -2,10 +2,11 @@ import { Button, ScrollView } from "std-widgets.slint";
 import { Bridge, IconChoice } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
+import { IconCategories } from "icon-categories.slint";
 import { IconPicker } from "icon-picker.slint";
 
 // An icon with a small pencil on it; clicking opens every icon in the icon folder to choose
-// from. Reports the choice through `picked` and leaves applying it to the owner. The caller sets
+// from, a category at a time. Reports the choice through `picked` and leaves applying it to the owner. The caller sets
 // the size.
 export component IconChooser inherits Rectangle {
     in property <IconChoice> icon;
@@ -19,6 +20,8 @@ export component IconChooser inherits Rectangle {
     callback picked(IconChoice);
     callback reset();
     property <length> badge: 16px;
+    // The category shown in the picker: an index in Bridge.icons.
+    property <int> category;
 
     border-radius: Theme.radius;
     border-width: 1px;
@@ -28,9 +31,11 @@ export component IconChooser inherits Rectangle {
     accessible-label: @tr("icons.change");
     accessible-action-default => { open(); }
 
-    // Icons dropped into the folder since it was last read appear in the picker.
+    // Icons dropped into the folder since it was last read appear in the picker, which opens on
+    // the current icon's category.
     function open() {
         Bridge.refresh-icons();
+        category = max(0, root.icon.group);
         popup.show();
     }
 
@@ -83,26 +88,17 @@ export component IconChooser inherits Rectangle {
             padding: Theme.space-m;
             spacing: Theme.space-s;
 
-            Text {
-                text: @tr("icons.title");
-                font-size: Theme.font-heading;
-                font-weight: 600;
-                color: Theme.text;
-            }
-            scroll := ScrollView {
-                vertical-stretch: 1;
-                IconPicker {
-                    width: scroll.visible-width;
-                    selected: root.has-icon ? root.icon.id : "";
-                    picked(icon) => {
-                        root.picked(icon);
-                        popup.close();
-                    }
+            HorizontalLayout {
+                spacing: Theme.space-s;
+                Text {
+                    text: @tr("icons.title");
+                    font-size: Theme.font-heading;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
                 }
-            }
-            if reset-text != "": HorizontalLayout {
-                alignment: start;
-                Button {
+                if reset-text != "": Button {
                     text: reset-text;
                     enabled: can-reset;
                     clicked => {
@@ -110,6 +106,34 @@ export component IconChooser inherits Rectangle {
                         popup.close();
                     }
                 }
+            }
+            if Bridge.icons.length == 0: Text {
+                text: @tr("icons.none");
+                font-size: Theme.font-body;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+            scroll := ScrollView {
+                // Each category starts at its top.
+                property <int> shown: root.category;
+                changed shown => { self.content-y = 0; }
+                vertical-stretch: 1;
+                // A plain layout, so the scroll area takes the grid's height and can scroll.
+                VerticalLayout {
+                    width: scroll.visible-width;
+                    IconPicker {
+                        icons: Bridge.icons[category].icons;
+                        selected: root.has-icon ? root.icon.id : "";
+                        picked(icon) => {
+                            root.picked(icon);
+                            popup.close();
+                        }
+                    }
+                }
+            }
+            if Bridge.icons.length > 1: IconCategories {
+                groups: Bridge.icons;
+                current <=> category;
             }
         }
     }

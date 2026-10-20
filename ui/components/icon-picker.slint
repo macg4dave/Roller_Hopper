@@ -1,11 +1,11 @@
-import { Bridge, IconChoice } from "../bridge.slint";
+import { IconChoice } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 
-// Every icon in the icon folder, under its subfolder's heading and named under each icon; the
-// grid wraps to the width it is given. Reports the choice through `picked` and leaves applying
-// it to the owner.
-export component IconPicker inherits VerticalLayout {
+// A grid of icons to choose from, each named underneath; it wraps to the width it is given.
+// Reports the choice through `picked` and leaves applying it to the owner.
+export component IconPicker inherits Rectangle {
+    in property <[IconChoice]> icons;
     // The id of the current choice; empty when none of the icons is the current choice.
     in property <string> selected;
     callback picked(IconChoice);
@@ -13,69 +13,48 @@ export component IconPicker inherits VerticalLayout {
     property <length> tile-height: 64px;
     property <int> columns: max(1, Math.floor(root.width / tile-width));
 
-    spacing: Theme.space-m;
+    height: Math.ceil(icons.length / columns) * tile-height;
 
-    if Bridge.icons.length == 0: Text {
-        text: @tr("icons.none");
-        font-size: Theme.font-body;
-        color: Theme.text-muted;
-        wrap: word-wrap;
-    }
+    for icon[i] in icons: Rectangle {
+        x: Math.mod(i, columns) * tile-width;
+        y: Math.floor(i / columns) * tile-height;
+        width: tile-width;
+        height: tile-height;
+        border-radius: Theme.radius;
+        property <bool> chosen: icon.id == selected;
+        background: chosen ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+        border-width: chosen ? 1px : 0;
+        border-color: Theme.accent;
+        accessible-role: button;
+        accessible-label: icon.label;
+        accessible-checkable: true;
+        accessible-checked: chosen;
+        accessible-action-default => { root.picked(icon); }
 
-    for group in Bridge.icons: VerticalLayout {
-        spacing: Theme.space-xs;
-
-        if group.heading != "": Text {
-            text: group.heading;
-            font-size: Theme.font-small;
-            font-weight: 600;
-            color: Theme.text-muted;
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.picked(icon); }
         }
-        Rectangle {
-            height: Math.ceil(group.icons.length / columns) * tile-height;
 
-            for icon[i] in group.icons: Rectangle {
-                x: Math.mod(i, columns) * tile-width;
-                y: Math.floor(i / columns) * tile-height;
-                width: tile-width;
-                height: tile-height;
-                border-radius: Theme.radius;
-                property <bool> chosen: icon.id == selected;
-                background: chosen ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
-                border-width: chosen ? 1px : 0;
-                border-color: Theme.accent;
-                accessible-role: button;
-                accessible-label: icon.label;
-                accessible-checkable: true;
-                accessible-checked: chosen;
-                accessible-action-default => { root.picked(icon); }
-
-                touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { root.picked(icon); }
+        VerticalLayout {
+            padding: Theme.space-xs;
+            spacing: Theme.space-xs;
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                DeviceIcon {
+                    icon: icon.image;
+                    width: 24px;
+                    height: 24px;
+                    colorize: chosen ? Theme.accent : Theme.icon;
                 }
-
-                VerticalLayout {
-                    padding: Theme.space-xs;
-                    spacing: Theme.space-xs;
-                    alignment: center;
-                    HorizontalLayout {
-                        alignment: center;
-                        DeviceIcon {
-                            icon: icon.image;
-                            width: 24px;
-                            height: 24px;
-                            colorize: chosen ? Theme.accent : Theme.icon;
-                        }
-                    }
-                    Text {
-                        text: icon.label;
-                        font-size: Theme.font-small;
-                        color: chosen ? Theme.accent : Theme.text;
-                        horizontal-alignment: center;
-                        overflow: elide;
-                    }
-                }
+            }
+            Text {
+                text: icon.label;
+                font-size: Theme.font-small;
+                color: chosen ? Theme.accent : Theme.text;
+                horizontal-alignment: center;
+                overflow: elide;
             }
         }
     }
