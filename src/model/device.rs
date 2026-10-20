@@ -148,6 +148,16 @@ pub(crate) enum GuestKind {
     Container,
 }
 
+impl GuestKind {
+    /// The icon a guest of this kind is added with: one of the icons that ship with the app.
+    pub(crate) fn icon(self) -> Icon {
+        Icon::new(match self {
+            Self::VirtualMachine => "Computers/Virtual machine",
+            Self::Container => "Computers/Container",
+        })
+    }
+}
+
 /// A device that runs on another one, which may itself be a guest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Guest {

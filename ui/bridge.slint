@@ -297,9 +297,11 @@ export global Bridge {
     callback edit-card(CardField, string) -> bool;
     // Plugs the selected card into the card at an index in upstream-choices; 0 for none.
     callback plug-card(int);
-    // A virtual machine or container on the selected device, with a name and its first card's
-    // address as typed. Refused (false) when the name is blank or the address is refused.
-    callback add-guest(GuestKind, string, string) -> bool;
+    // Adds a blank device with one blank card, and selects it: a guest of this kind on the
+    // selected device, or with `none` a device of its own.
+    callback add-device(GuestKind);
+    // What the selected guest runs as.
+    callback set-guest-kind(GuestKind);
     // The role list. Roles are identified by their index in role-list.
     callback add-role(string, string);
     callback rename-role(int, string);

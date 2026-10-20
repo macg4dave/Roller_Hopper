@@ -1,0 +1,53 @@
+import { Button } from "std-widgets.slint";
+import { Bridge, GuestKind } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+
+// The edit page's Add button: a new device of its own, or a new virtual machine on the selected
+// device. Either is added blank and selected, so it can be filled in.
+export component AddMenu inherits HorizontalLayout {
+    alignment: start;
+
+    button := Button {
+        text: @tr("edit.add");
+        icon: @image-url("icons/plus.svg");
+        colorize-icon: true;
+        clicked => { popup.show(); }
+    }
+
+    popup := PopupWindow {
+        y: button.height + Theme.space-xs;
+        width: 240px;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: Theme.radius;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #0000001f;
+
+            VerticalLayout {
+                padding: Theme.space-s;
+                spacing: Theme.space-xs;
+                Button {
+                    text: @tr("edit.add-device");
+                    clicked => {
+                        Bridge.add-device(GuestKind.none);
+                        popup.close();
+                    }
+                }
+                // A virtual machine needs a device to run on.
+                Button {
+                    text: Bridge.selected-id < 0 ? @tr("edit.add-guest") : @tr("edit.add-guest-on", Labels.device-name(Bridge.details.name));
+                    enabled: Bridge.selected-id >= 0;
+                    clicked => {
+                        Bridge.add-device(GuestKind.virtual-machine);
+                        popup.close();
+                    }
+                }
+            }
+        }
+    }
+}

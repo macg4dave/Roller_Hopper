@@ -23,13 +23,9 @@ const FLAKY_DEVICE: DeviceId = DeviceId(13);
 /// Minutes added to "last seen" of devices that do not answer a simulated scan.
 const SCAN_INTERVAL_MINUTES: u32 = 30;
 
-/// The custom role the sample virtual machines share.
+/// The custom roles the sample virtual machines and containers share, each with its kind's icon.
 const VIRTUAL_MACHINE: &str = "Virtual machine";
-/// The icon the virtual machine role was given, from the icon folder.
-const VIRTUAL_MACHINE_ICON: &str = "Computers/Virtual machine";
-/// The custom role the sample containers share, and its icon.
 const CONTAINER: &str = "Container";
-const CONTAINER_ICON: &str = "Computers/Container";
 
 /// A sample device. Its first network card has the same id as the device, so the links below
 /// read as links between devices (or the router's first card).
@@ -574,9 +570,9 @@ pub(crate) fn network() -> Network {
         (
             &[17, 18, 19, 20, 21],
             VIRTUAL_MACHINE,
-            Icon::new(VIRTUAL_MACHINE_ICON),
+            GuestKind::VirtualMachine.icon(),
         ),
-        (&[24, 25], CONTAINER, Icon::new(CONTAINER_ICON)),
+        (&[24, 25], CONTAINER, GuestKind::Container.icon()),
     ];
     for (ids, name, icon) in custom {
         let Some(role) = network.add_custom_role(name, icon) else {

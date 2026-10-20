@@ -1,12 +1,9 @@
-//! The virtual machines and containers a device hosts, and forgetting a device with them.
-
-use ipnet::Ipv4Net;
+//! Adding devices, the virtual machines and containers a device hosts, and forgetting a device
+//! with them.
 
 use super::Network;
 use crate::model::card::{CardId, NetworkCard};
-use crate::model::device::{
-    Device, DeviceId, DeviceKind, Guest, GuestKind, LastSeen, Role, Status,
-};
+use crate::model::device::{Device, DeviceId, DeviceKind, Guest, LastSeen, Role, Status};
 
 /// `devices` in the same order, but with each guest moved straight after its host and the
 /// host's earlier guests.
@@ -51,52 +48,46 @@ impl Network {
         hosts.take(self.devices.len()).count()
     }
 
-    /// Adds a virtual machine or container named `name` to `host`, with one network card at
-    /// `address` plugged into the host's first card, and returns it. Nothing about it was
-    /// detected. Refused when the host is missing, the name is blank or the address is in use.
-    pub(crate) fn add_guest(
-        &mut self,
-        host: DeviceId,
-        kind: GuestKind,
-        name: &str,
-        address: Ipv4Net,
-    ) -> Option<DeviceId> {
-        let name = name.trim();
-        let host_card = self
-            .device(host)
-            .and_then(|d| d.primary_card())
-            .map(|c| c.id);
-        let refused = host_card.is_none() || self.address_taken(address.addr(), None);
-        if refused || name.is_empty() {
-            return None;
-        }
+    /// Adds a blank device with one blank network card, and returns it. Nothing about it was
+    /// detected, so the user fills it in. A `guest` comes after its host's other guests, shown
+    /// with its kind's icon and its card plugged into the host's first card; refused when the
+    /// host is missing. Any other device comes last, plugged in nowhere.
+    pub(crate) fn add_device(&mut self, guest: Option<Guest>) -> Option<DeviceId> {
+        let (at, host_card) = match guest {
+            Some(Guest { host, .. }) => {
+                let host_card = self.device(host)?.primary_card()?.id;
+                let last = self
+                    .devices
+                    .iter()
+                    .rposition(|d| self.runs_within(d.id, host));
+                (
+                    last.map_or(self.devices.len(), |at| at + 1),
+                    Some(host_card),
+                )
+            }
+            None => (self.devices.len(), None),
+        };
         let card = self.next_card_id();
         let id = DeviceId(self.devices.iter().map(|d| d.id.0).max().unwrap_or(0) + 1);
-        let guest = Device {
+        let device = Device {
             id,
-            name: name.to_owned(),
+            name: String::new(),
             kind: DeviceKind::Unknown,
             role: Role::Other,
-            icon: None,
+            icon: guest.map(|g| g.kind.icon()),
             status: Status::Unknown,
-            cards: vec![NetworkCard {
-                address: Some(address),
-                ..NetworkCard::blank(card)
-            }],
-            guest: Some(Guest { host, kind }),
+            cards: vec![NetworkCard::blank(card)],
+            guest,
             manufacturer: None,
             model: None,
             hostname: None,
             last_seen: LastSeen::default(),
             notes: String::new(),
         };
-        let last = self
-            .devices
-            .iter()
-            .rposition(|d| self.runs_within(d.id, host));
-        let at = last.map_or(self.devices.len(), |at| at + 1);
-        self.devices.insert(at, guest);
-        self.plug(card, host_card, true);
+        self.devices.insert(at, device);
+        if host_card.is_some() {
+            self.plug(card, host_card, true);
+        }
         Some(id)
     }
 
@@ -121,16 +112,13 @@ impl Network {
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::device::GuestKind;
 
     const SWITCH: DeviceId = DeviceId(2);
     const PC: DeviceId = DeviceId(5);
     const LINUX_SERVER: DeviceId = DeviceId(6);
     const DOCKER_HOST: DeviceId = DeviceId(19);
     const LAB_ROUTER: DeviceId = DeviceId(22);
-
-    fn net(text: &str) -> Ipv4Net {
-        text.parse().unwrap()
-    }
 
     #[test]
     fn forgetting_a_device_drops_it_and_its_links() {
@@ -180,21 +168,25 @@ mod tests {
     }
 
     #[test]
-    fn a_guest_is_added_under_its_host_after_the_hosts_other_guests() {
+    fn a_guest_is_added_blank_under_its_host_after_the_hosts_other_guests() {
         let mut network = mock_data::network();
-        let free = net("172.17.0.9/16");
-        let taken = network.device(PC).unwrap().cards[0].address.unwrap();
-        let vm = GuestKind::VirtualMachine;
-        assert_eq!(network.add_guest(DOCKER_HOST, vm, " ", free), None);
-        assert_eq!(network.add_guest(DOCKER_HOST, vm, "Web", taken), None);
-        assert_eq!(network.add_guest(DeviceId(999), vm, "Web", free), None);
+        let nowhere = Guest {
+            host: DeviceId(999),
+            kind: GuestKind::VirtualMachine,
+        };
+        assert_eq!(network.add_device(Some(nowhere)), None);
 
         let web = network
-            .add_guest(DOCKER_HOST, GuestKind::Container, " Web ", free)
+            .add_device(Some(Guest {
+                host: DOCKER_HOST,
+                kind: GuestKind::Container,
+            }))
             .unwrap();
         let added = network.device(web).unwrap();
-        assert_eq!(added.name, "Web");
+        assert_eq!(added.name, "");
         assert_eq!(added.guest.map(|g| g.kind), Some(GuestKind::Container));
+        assert_eq!(added.icon, Some(GuestKind::Container.icon()));
+        assert_eq!(added.cards, [NetworkCard::blank(added.cards[0].id)]);
         assert_eq!(
             network
                 .device(web)
@@ -215,6 +207,20 @@ mod tests {
         );
         let next = ids.get(at + 1).copied();
         assert!(next.is_none_or(|next| !network.runs_within(next, DOCKER_HOST)));
+    }
+
+    #[test]
+    fn a_device_of_its_own_is_added_blank_last_and_plugged_in_nowhere() {
+        let mut network = mock_data::network();
+        let pc_card = network.device(PC).unwrap().cards[0].id;
+        let pc_uplink = network.uplink(pc_card);
+        let id = network.add_device(None).unwrap();
+        let added = network.devices().last().unwrap();
+        assert_eq!(added.id, id);
+        assert_eq!((added.guest, added.icon.as_ref()), (None, None));
+        assert!(network.uplink(added.cards[0].id).is_none());
+        assert_eq!(network.uplink(pc_card), pc_uplink, "others stay put");
+        assert_ne!(network.add_device(None), Some(id), "a fresh id each time");
     }
 
     #[test]

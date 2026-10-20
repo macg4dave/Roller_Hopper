@@ -1,8 +1,8 @@
 //! Network cards in the UI. A card is a child of its device: a row under it in the lists, and a
 //! node on the map drawn with the device's icon and name. This module builds their views and
 //! handles editing the selected card (its IPv4 settings, where it is plugged in, removing it),
-//! adding cards, and listing and adding the virtual machines and containers on the selected
-//! device.
+//! adding cards, listing the virtual machines and containers on the selected device, and
+//! adding devices and guests.
 
 use std::cell::RefCell;
 use std::net::Ipv4Addr;
@@ -14,7 +14,7 @@ use slint::{ComponentHandle, SharedString};
 use super::icons::Icons;
 use super::{AppState, Selection, convert, handler, update};
 use crate::model::{
-    CardId, ConnectionKind, Device, DeviceId, GuestKind, Icon, MacAddr, Network, NetworkCard,
+    CardId, ConnectionKind, Device, DeviceId, Guest, GuestKind, Icon, MacAddr, Network, NetworkCard,
 };
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
@@ -261,24 +261,39 @@ impl AppState {
         }
     }
 
-    /// Adds a guest named `name` to the selected device, with its first card at `address` as
-    /// typed. False if refused, so the UI can keep what was typed.
-    fn add_guest(&mut self, kind: GuestKind, name: &str, address: &str) -> bool {
-        let (Some(host), Some(address)) = (self.selected_device(), convert::address(address))
-        else {
-            return false;
+    /// Adds a blank device and selects it, so it can be filled in, as a new card is: a guest of
+    /// `kind` on the selected device, or with no kind a device of its own.
+    fn add_device(&mut self, kind: Option<GuestKind>) {
+        let guest = match kind {
+            None => None,
+            Some(kind) => match self.selected_device() {
+                Some(host) => Some(Guest { host, kind }),
+                None => return,
+            },
         };
-        let added = self.network.add_guest(host, kind, name, address).is_some();
-        if added {
+        if let Some(id) = self.network.add_device(guest) {
+            self.selected = Some(Selection::Device(id));
             self.lay_out_at_rest();
         }
-        added
+    }
+
+    /// Changes what the selected guest runs as. Its icon follows, unless one was picked for it.
+    fn set_guest_kind(&mut self, kind: GuestKind) {
+        self.edit_selected(|device| {
+            let Some(guest) = &mut device.guest else {
+                return;
+            };
+            if device.icon == Some(guest.kind.icon()) {
+                device.icon = Some(kind.icon());
+            }
+            guest.kind = kind;
+        });
     }
 }
 
-/// Adding, editing, plugging in and removing network cards, and adding guests to the selected
-/// device. A guest is then a device of its own: edited, moved among its host's guests and
-/// forgotten like any other.
+/// Adding, editing, plugging in and removing network cards, and adding devices and guests of
+/// the selected device. A guest is then a device of its own: edited, moved among its host's
+/// guests and forgotten like any other.
 pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let add_card = handler(ui, state, |st, ()| st.add_card());
@@ -302,17 +317,14 @@ pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>)
     bridge.on_plug_card(handler(ui, state, |st, choice| {
         st.plug_card(convert::index(choice));
     }));
-    let (guest_ui, guest_state) = (ui.as_weak(), Rc::clone(state));
-    bridge.on_add_guest(move |kind, name, address| {
-        let Some(kind) = convert::guest_kind_from_ui(kind) else {
-            return false;
-        };
-        let mut added = false;
-        update(&guest_ui, &guest_state, |st| {
-            added = st.add_guest(kind, &name, &address);
-        });
-        added
-    });
+    bridge.on_add_device(handler(ui, state, |st, kind| {
+        st.add_device(convert::guest_kind_from_ui(kind));
+    }));
+    bridge.on_set_guest_kind(handler(ui, state, |st, kind| {
+        if let Some(kind) = convert::guest_kind_from_ui(kind) {
+            st.set_guest_kind(kind);
+        }
+    }));
 }
 
 #[cfg(test)]
@@ -458,30 +470,56 @@ mod tests {
     }
 
     #[test]
-    fn a_guest_is_added_to_the_selection_and_placed_under_it() {
+    fn a_virtual_machine_is_added_to_the_selection_selected_and_placed_under_it() {
         let mut state = AppState::new(mock_data::network());
-        let kind = GuestKind::Container;
-        assert!(
-            !state.add_guest(kind, "Web", "172.17.0.9/16"),
-            "nothing selected"
-        );
-        state.selected = Some(Selection::Device(DOCKER_HOST));
-        assert!(!state.add_guest(kind, "Web", "172.17.0"));
-        assert!(!state.add_guest(kind, "  ", "172.17.0.9/16"));
-        assert!(state.add_guest(kind, "Web", "172.17.0.9/16"));
+        let before = state.network.clone();
+        state.add_device(Some(GuestKind::VirtualMachine));
+        assert_eq!(state.network, before, "nothing selected to run on");
 
-        let web = state
-            .network
-            .devices()
-            .iter()
-            .find(|d| d.name == "Web")
-            .unwrap()
-            .id;
-        assert_eq!(state.network.host(web), Some(DOCKER_HOST));
-        let web = state.network.device(web).unwrap().cards[0].id;
+        state.selected = Some(Selection::Card(CardId(DOCKER_HOST.0)));
+        state.add_device(Some(GuestKind::VirtualMachine));
+        let vm = state.selected_device().unwrap();
+        assert_eq!(state.selected, Some(Selection::Device(vm)), "selected");
+        assert_eq!(state.network.host(vm), Some(DOCKER_HOST));
+        let vm = state.network.device(vm).unwrap().cards[0].id;
         let host = CardId(DOCKER_HOST.0);
-        assert!(state.positions[&web].y > state.positions[&host].y);
+        assert!(state.positions[&vm].y > state.positions[&host].y);
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
+    }
+
+    #[test]
+    fn a_device_of_its_own_is_added_and_selected_with_or_without_a_selection() {
+        let mut state = AppState::new(mock_data::network());
+        state.add_device(None);
+        let added = state.selected_device().unwrap();
+        assert_eq!(state.network.host(added), None);
+        let card = state.network.device(added).unwrap().cards[0].id;
+        assert!(state.positions.contains_key(&card), "on the map");
+    }
+
+    #[test]
+    fn a_guest_runs_as_another_kind_and_its_icon_follows_unless_picked() {
+        let mut state = AppState::new(mock_data::network());
+        state.selected = Some(Selection::Device(DOCKER_HOST));
+        state.add_device(Some(GuestKind::VirtualMachine));
+        let guest = state.selected_device().unwrap();
+        let of = |st: &AppState| {
+            let d = st.network.device(guest).unwrap();
+            (d.guest.map(|g| g.kind), d.icon.clone())
+        };
+        state.set_guest_kind(GuestKind::Container);
+        let container = Some(GuestKind::Container);
+        assert_eq!(of(&state), (container, Some(GuestKind::Container.icon())));
+
+        let fish = Icon::new("My icons/Fish tank");
+        state.edit_selected(|d| d.icon = Some(fish.clone()));
+        state.set_guest_kind(GuestKind::VirtualMachine);
+        let vm = Some(GuestKind::VirtualMachine);
+        assert_eq!(of(&state), (vm, Some(fish)), "picked icon kept");
+
+        state.selected = Some(Selection::Device(PC));
+        state.set_guest_kind(GuestKind::Container);
+        assert_eq!(state.network.device(PC).unwrap().guest, None, "not a guest");
     }
 
     #[test]

@@ -3,19 +3,26 @@ import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
 import { Splitter } from "components/splitter.slint";
+import { AddMenu } from "add-menu.slint";
 import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
 
-// Edit page, left side: every device with its network cards nested under it on the left; the
-// selected device's editable fields on the right, or the selected card's.
+// Edit page, left side: every device with its network cards nested under it on the left, under
+// the Add button; the selected device's editable fields on the right, or the selected card's.
 export component DeviceEditor inherits HorizontalLayout {
     in-out property <length> list-width;
 
-    list := ListView {
+    list := VerticalLayout {
         preferred-width: root.list-width;
         min-width: Theme.panel-min-width;
         horizontal-stretch: 0;
-        for device in Bridge.rows: DeviceRow { device: device; }
+        spacing: Theme.space-s;
+
+        AddMenu { }
+        ListView {
+            vertical-stretch: 1;
+            for device in Bridge.rows: DeviceRow { device: device; }
+        }
     }
 
     Splitter {

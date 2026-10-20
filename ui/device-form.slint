@@ -1,11 +1,10 @@
 import { Button, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
-import { Bridge } from "bridge.slint";
+import { Bridge, GuestKind } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { ChildRow } from "components/child-row.slint";
 import { DetailField } from "components/detail-field.slint";
 import { IconChooser } from "components/icon-chooser.slint";
-import { GuestEditor } from "guest-editor.slint";
 
 // The selected device's editable fields: icon, name, role, its network cards and guests with
 // adding more, notes, and forgetting it. Used on the edit page and in the details panel's edit
@@ -81,8 +80,19 @@ export component DeviceForm inherits VerticalLayout {
             selected => { Bridge.choose-role(self.current-index); }
         }
     }
-    // Cards and guests are each edited on their own, opened from their row; a new card is
-    // selected to be filled in.
+    // A guest can be a virtual machine or a container; a new one starts as a virtual machine.
+    if Bridge.details.guest != GuestKind.none: DetailField {
+        label: @tr("edit.guest-kind");
+        ComboBox {
+            // In GuestKind order, after none.
+            model: [Labels.guest-kind(GuestKind.virtual-machine), Labels.guest-kind(GuestKind.container)];
+            current-index: Bridge.details.guest == GuestKind.container ? 1 : 0;
+            accessible-label: @tr("edit.guest-kind");
+            selected => { Bridge.set-guest-kind(self.current-index == 1 ? GuestKind.container : GuestKind.virtual-machine); }
+        }
+    }
+    // Cards and guests are each edited on their own, opened from their row. A new one is blank
+    // and selected, so it can be filled in.
     DetailField {
         label: @tr("edit.cards");
         VerticalLayout {
@@ -118,7 +128,15 @@ export component DeviceForm inherits VerticalLayout {
                 picked(icon) => { Bridge.set-icon(guest.id, icon.id); }
                 clicked => { Bridge.select(guest.id); }
             }
-            GuestEditor { }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: @tr("edit.guest-add");
+                    icon: @image-url("icons/plus.svg");
+                    colorize-icon: true;
+                    clicked => { Bridge.add-device(GuestKind.virtual-machine); }
+                }
+            }
         }
     }
     DetailField {

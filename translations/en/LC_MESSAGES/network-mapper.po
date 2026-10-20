@@ -246,17 +246,24 @@ msgstr "Forget"
 msgid "edit.cancel"
 msgstr "Cancel"
 
-msgid "edit.confirm-add"
+# The button above the device list, and its menu. What it adds starts blank and is selected,
+# so it can be filled in. A virtual machine runs on the selected device, named by {}.
+msgid "edit.add"
 msgstr "Add"
+
+msgid "edit.add-device"
+msgstr "Device"
+
+msgid "edit.add-guest"
+msgstr "Virtual machine"
+
+msgid "edit.add-guest-on"
+msgstr "Virtual machine on {}"
 
 # The network cards of the device being edited, each opened from its row to edit it. A new card
 # starts blank and is selected, so its IP address and the rest can be filled in.
 msgid "edit.cards"
 msgstr "Network cards"
-
-# The address of a new virtual machine's or container's network card.
-msgid "edit.card-address"
-msgstr "IP address, e.g. 10.0.0.5/24"
 
 # First in the dropdown of what a network card is plugged into.
 msgid "edit.card-no-link"
@@ -303,11 +310,13 @@ msgstr "{} · {}"
 msgid "edit.guest-back"
 msgstr "Back to the host"
 
+# Whether the guest being edited is a virtual machine or a container.
 msgid "edit.guest-kind"
-msgstr "Type"
+msgstr "Runs as"
 
+# Adds a blank virtual machine to the device being edited, and opens it.
 msgid "edit.guest-add"
-msgstr "Add virtual machine or container"
+msgstr "Add virtual machine"
 
 # The open ports of the device being edited.
 msgid "edit.port-number"
