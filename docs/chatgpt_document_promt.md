@@ -32,6 +32,7 @@ The goal is to develop a clear, well-researched technical plan before connecting
 - Identification may go **as deep as the user selects and the adopted tools support**. Expose the scope and limitations honestly; raise any necessary platform-specific exception for approval under the cross-platform direction above.
 - **There is no Forget or Reset feature in the intended product.** Do not invent forget, reset, rediscovery-suppression or history-purge workflows.
 - **Save everything:** preserve all application/project data and restorable state, including the complete device/interface hierarchy, relationships, edits, scan settings/results, retained history/logs, AI settings/suggestions and view/layout settings. Do not silently choose a reduced save subset. Raise any special handling needed for credentials or external assets explicitly during planning.
+- **Save the map's structure and placement:** preserve stable icon/card identities, display parentage, root/sibling/tier ordering, committed map-space coordinates and restorable view settings. Custom display trees are separate from network connections; rearranging them must not assert connectivity. In future free positioning, moving a parent moves its whole displayed branch. Reuse the existing placement behaviour where suitable. See [map persistence and UI assessment](backend-map-persistence.md); keeping Slint is the current research recommendation, not permission to change code.
 
 ### 1. Review the Entire Project
 

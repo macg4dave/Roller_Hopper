@@ -11,6 +11,9 @@ broad port coverage and the agreed offline CPU AI behaviour. Phases below are in
 boundaries, not permission to quietly drop a confirmed requirement from that release.
 It also includes user-owned Open/Save/Save As documents. Every runtime component is in process;
 no external scanner/model executables, servers or separately installed helper services.
+The [map persistence contract](backend-map-persistence.md) also preserves display trees,
+ordered arrangement and committed positions independently of network connections. Future
+free positioning moves displayed branches together; placement/routing choices remain open.
 The follow-up confirmed selected TCP ranges plus named UDP protocols, versioned JSON with
 explicit saves, and pause allowing bounded in-flight probes to finish. Remaining questions
 still gate architecture approval; those answers are not implementation authorisation.

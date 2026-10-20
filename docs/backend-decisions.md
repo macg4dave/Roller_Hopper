@@ -35,6 +35,9 @@ The questions already asked in the conversation have been incorporated here.
 | Q17 | Identification as deep as the user wants and the adopted tools support | User-selected depth may include active identification supported by the tools; do not cap the design at passive evidence. Keep method scope and capability limits explicit; platform exceptions still require Q25 approval. |
 | Q15a | There is no Forget or Reset feature | Do not design either workflow, rediscovery suppression, reset actions or history purge around those names. Both are removed from open product questions; this documentation task changes no existing code. |
 | Q22a | Save everything | Persist all application/project data and restorable state, including hierarchy, interfaces, relationships, manual data, scan settings/results, retained history/logs, AI state and view/layout settings. No reduced save subset; raise sensitive-data and external-asset representation explicitly. |
+| Q26 | Save icon positions and relationships; support future custom positioning/trees | Persist display structure, ordered arrangement and committed map-space positions as part of the native document. Preserve the current placement behaviour where suitable; see [map persistence](backend-map-persistence.md). |
+| Q26a | Custom tree organisation is separate from network connections | Display reparenting changes presentation only. Keep device ownership, network evidence and display parentage distinct; current drop handling couples them and is not the future contract. |
+| Q26b | Moving a parent moves its displayed branch together | In free positioning, translate all displayed descendants with their parent, retaining relative offsets, as one committed edit. Do not traverse network links or device ownership to decide what moves. |
 
 For Q9, the user is unsure of conflict resolution and asked for a way to alert them. The
 proposed answer is an inline, persistent comparison warning with source/time and explicit
@@ -68,6 +71,7 @@ in groups; implementation should not start by guessing the answers.
 | Q12 | How long should address history, raw evidence and run logs survive? Must local data/backups be encrypted? Who may access them on shared machines? Sets storage/security requirements. | Per-user local data, no raw packets, bounded diagnostic evidence; choose retention before schema approval. Encryption is not provided merely by SQLite. |
 | Q13 | With separate recovery agreed in Q13a, how often should it write, how many copies survive and how should two writers/failed saves behave? Determines recovery and conflict handling. | Dirty indicator and Save/Discard/Cancel on replacement/close; one writer per file; bounded, labelled recovery that never silently overwrites the saved document. |
 | Q19 | Should one save file hold several named network contexts? Is merging independently edited files needed, or just opening/saving each? Affects identity scope and whether UUIDs are justified. | Each document can hold distinct network contexts; Open replaces the active document after handling unsaved edits. File merging is separate unapproved scope. |
+| Q26c | How should automatic/free placement switching, new-node placement and routing work, and how should display branches differ visually from network relationships? | Preserve user positions on Open/refresh; require an explicit action before rearrangement. Keep organisational links recognisably separate. See the narrower [remaining map decisions](backend-map-persistence.md#remaining-map-decisions). |
 
 ### Embedded AI and acceptance
 

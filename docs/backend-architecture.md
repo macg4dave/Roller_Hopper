@@ -162,12 +162,15 @@ hostname, port/protocol evidence and OS/type suggestion separately. Neither the 
 open port alone verifies Windows. The current model has no OS-family field; adding truthful
 inference/review presentation is an intentional future capability, not an existing feature.
 
-Retain all supported relationship evidence, but project a deterministic, acyclic tree into
-today's map. The user confirmed retaining this inferred view and deferring managed topology
-(Q14). Prefer explicit manual display choices, then supported adjacency, then labelled
-inference; retain unrepresented/conflicting edges rather than silently dropping their meaning.
-An inferred gateway link means plausible reachability, not a physical cable. Do not add a graph
-crate or replace the layout until approved physical-topology requirements need it.
+Retain all supported relationship evidence and use a deterministic, acyclic display tree for
+the map. The user confirmed retaining the inferred view and deferring managed topology (Q14),
+then confirmed that custom display organisation is separate from network connections (Q26a).
+Generate an initial display tree from supported adjacency/labelled inference, but preserve
+explicit manual display parentage thereafter. Display reparenting never asserts connectivity.
+Retain unrepresented/conflicting network edges rather than silently dropping their meaning;
+an inferred gateway link means plausible reachability, not a physical cable. Reuse the current
+layout where suitable; no graph crate or framework rewrite is justified just by persistence.
+See [map structure, placement and Slint assessment](backend-map-persistence.md).
 
 ## Native documents: Open, Save and Save As
 
@@ -187,6 +190,14 @@ and model references must be explicit rather than silently dropping those catego
 Live Slint handles, sockets and running tasks are runtime resources; persist their meaningful
 state, not process objects, and never resume traffic on Open. Previously online devices
 reopen as last-known observations, not freshly verified reachability. AI policy still follows Q10b.
+
+Map saving includes display parentage, ordered roots/tiers/siblings, committed icon-centre
+coordinates in map units and restorable viewport settings, separate from network evidence and
+device/interface ownership. A parent move in free positioning moves its displayed descendants
+together (Q26b). Save the committed document revision, not temporary drag/animation positions;
+rebuild paths and animation at rest on Open without immediately overwriting saved placement.
+The [map contract](backend-map-persistence.md#proposed-saved-map-contract) defines authority and
+the remaining placement/routing choices; current drop handling does not yet meet that contract.
 
 Choose a stable native extension; the extension is not validation. Open reads into a
 candidate document, bounds file size/record counts/strings, validates schema and cross-record
