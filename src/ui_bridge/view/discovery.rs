@@ -1,5 +1,5 @@
 //! Sends the discovery run to the UI: its progress and options, the found hosts the filter lets
-//! through, the selected one's details, and the log.
+//! through, each with its network cards, the selected one's details, and the log.
 
 use slint::{ModelRc, SharedString, VecModel};
 
@@ -37,10 +37,16 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         count_duplicates: count(FoundFilter::Duplicates),
     });
 
-    let found = discovery.found().iter().enumerate();
-    let shown = found.filter(|(_, f)| discovery.filter.admits(f));
-    let rows = shown.map(|(index, f)| found_view(state, labels, index, f));
-    if let Some(model) = sync(&bridge.get_found(), rows.collect()) {
+    let shown = discovery.shown().into_iter().filter_map(|(index, depth)| {
+        let found = discovery.found().get(index)?;
+        let row = ui::FoundView {
+            depth: int(depth),
+            ..found_view(state, labels, index, found)
+        };
+        let cards = card_rows(state, &row, found);
+        Some(std::iter::once(row).chain(cards))
+    });
+    if let Some(model) = sync(&bridge.get_found(), shown.flatten().collect()) {
         bridge.set_found(model);
     }
     let selected = discovery
@@ -93,6 +99,8 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
     let methods: Vec<_> = found.methods.iter().map(|&m| method(m)).collect();
     ui::FoundView {
         index: int(index),
+        card_index: -1,
+        seen: true,
         device_id: on_map.map_or(-1, convert::ui_id),
         map_x: at.x,
         map_y: at.y,
@@ -118,7 +126,27 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         finding: finding(found.finding),
         duplicate_of: text(duplicate_of),
         decision: decision(found.decision),
+        // Of a card's row; see `card_rows`.
+        ..ui::FoundView::default()
     }
+}
+
+/// The row of each of `found`'s cards, made from `row`, the row of the host: all its cards, as
+/// in the device list, with whether the run saw each.
+fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::FoundView> {
+    let cards = &found.device.cards;
+    let rows = cards.iter().enumerate().map(|(at, card)| ui::FoundView {
+        card_index: int(at),
+        card_name: card.name.trim().into(),
+        card_icon: state.icons.choice(&card.icon),
+        seen: found.seen(card),
+        last: at + 1 == cards.len(),
+        ip: convert::ip(card),
+        mac: convert::mac(card),
+        services: card.services.to_string().into(),
+        ..row.clone()
+    });
+    rows.collect()
 }
 
 fn log_view(state: &AppState, entry: &LogEntry) -> ui::LogView {

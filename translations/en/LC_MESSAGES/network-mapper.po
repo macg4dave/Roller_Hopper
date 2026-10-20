@@ -709,6 +709,10 @@ msgstr "Confidence"
 msgid "discovery.percent"
 msgstr "{}%"
 
+# By a found host's network card that is not on the subnet scanned.
+msgid "discovery.not-seen"
+msgstr "Not seen"
+
 msgid "discovery.empty.idle"
 msgstr "Pick a network and start a scan to look for devices."
 

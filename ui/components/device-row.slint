@@ -2,6 +2,7 @@ import { Bridge, DeviceStatus, DeviceView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
+import { GuideLine } from "guide-line.slint";
 import { StatusDot } from "status-dot.slint";
 
 // One entry in a device list. A device heads a group: a chevron folds its network cards away,
@@ -47,19 +48,12 @@ export component DeviceRow inherits Rectangle {
     }
 
     // The group's guide line: down from the device's icon to this card, with a tick across.
-    if card: Rectangle {
+    if card: GuideLine {
         x: device-icon-x + icon-width / 2;
         y: 0;
-        width: 1px;
-        height: device.last ? root.height / 2 : root.height;
-        background: Theme.border-strong;
-    }
-    if card: Rectangle {
-        x: device-icon-x + icon-width / 2;
-        y: root.height / 2;
         width: step - icon-width / 2 - Theme.space-xs;
-        height: 1px;
-        background: Theme.border-strong;
+        height: root.height;
+        last: device.last;
     }
 
     // A device drags its first card, so it moves on the map as its first card does.

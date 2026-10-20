@@ -3,7 +3,8 @@ import { Bridge, DiscoveryPhase, FoundFilter } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { FoundColumns, FoundRow } from "components/found-row.slint";
 
-// The hosts the discovery run found, with filters for the ones worth a look.
+// The hosts the discovery run found, each with its network cards, with filters for the ones
+// worth a look.
 export component DiscoveryResults inherits VerticalLayout {
     spacing: Theme.space-s;
 
@@ -72,9 +73,6 @@ export component DiscoveryResults inherits VerticalLayout {
 
     if Bridge.found.length > 0: ListView {
         vertical-stretch: 1;
-        for found[i] in Bridge.found: FoundRow {
-            found: found;
-            index: i;
-        }
+        for found in Bridge.found: FoundRow { found: found; }
     }
 }

@@ -3,6 +3,7 @@ import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { Chip, FlagChip } from "chip.slint";
 import { DeviceIcon } from "device-icon.slint";
+import { GuideLine } from "guide-line.slint";
 
 // Column sizes shared by the rows and the heading above them, so the columns line up. The name
 // takes the rest of the width.
@@ -15,49 +16,71 @@ export global FoundColumns {
     out property <length> confidence: 44px;
 }
 
-// One host in the discovery results: click to see its details. An ignored host is faded.
+// One row of the discovery results. As in the device list, a host heads a group, with each of
+// its network cards after it on a guide line down from its icon, and a guest follows its host,
+// indented under it. A card the run did not see, off the subnet scanned, is greyed. Clicking
+// any row shows the host in the details. An ignored host is faded with its cards.
 export component FoundRow inherits Rectangle {
     in property <FoundView> found;
-    // Its place in the shown list, for the stripes.
-    in property <int> index;
 
-    property <bool> selected: found.index == Bridge.selected-found;
+    property <bool> card: found.card-index >= 0;
+    property <bool> selected: !card && found.index == Bridge.selected-found;
+    property <length> step: FoundColumns.icon + Theme.space-m;
+    // Where the host's icon sits; a card's guide line runs down from its centre.
+    property <length> host-icon-x: Theme.space-s + found.depth * step;
+    property <color> text-colour: card && !found.seen ? Theme.text-muted : Theme.text;
 
-    height: Theme.found-row-height;
+    height: card ? Theme.found-card-row-height : Theme.found-row-height;
     border-radius: Theme.radius;
-    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : Math.mod(index, 2) == 1 ? Theme.stripe : transparent;
+    background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
     opacity: found.decision == FoundDecision.ignored ? 0.55 : 1;
     accessible-role: list-item;
-    accessible-label: Labels.found-name(found.name);
+    accessible-label: card ? @tr("card.of", Labels.found-name(found.name), Labels.card-name(found.card-name, found.card-index)) : Labels.found-name(found.name);
     accessible-item-selected: selected;
+
+    // A thin rule above each group.
+    if !card: Rectangle {
+        y: 0;
+        height: 1px;
+        width: root.width - Theme.scrollbar-width;
+        background: Theme.border;
+    }
+    if card: GuideLine {
+        x: host-icon-x + FoundColumns.icon / 2;
+        y: 0;
+        width: step - FoundColumns.icon / 2 - Theme.space-xs;
+        height: root.height;
+        last: found.last;
+    }
 
     touch := TouchArea {
         clicked => { Bridge.select-found(found.index); }
     }
 
     HorizontalLayout {
-        padding-left: Theme.space-s;
+        padding-left: card ? host-icon-x + step : host-icon-x;
         padding-right: Theme.space-s + Theme.scrollbar-width;
         spacing: Theme.space-m;
 
+        // A card shows its own icon, which says what kind of connection it is.
         DeviceIcon {
-            icon: found.icon.image;
-            width: FoundColumns.icon;
-            colorize: found.unidentified ? Theme.unknown : Theme.icon;
+            icon: card ? found.card-icon.image : found.icon.image;
+            width: card ? 16px : FoundColumns.icon;
+            colorize: card ? Theme.icon-faded : found.unidentified ? Theme.unknown : Theme.icon;
         }
         HorizontalLayout {
             horizontal-stretch: 1;
             spacing: Theme.space-s;
             Text {
-                text: Labels.found-name(found.name);
-                color: found.name == "" ? Theme.text-muted : Theme.text;
-                font-size: Theme.font-body;
+                text: card ? Labels.card-name(found.card-name, found.card-index) : Labels.found-name(found.name);
+                color: !card && found.name == "" ? Theme.text-muted : text-colour;
+                font-size: card ? Theme.font-small : Theme.font-body;
                 vertical-alignment: center;
                 overflow: elide;
                 horizontal-stretch: 1;
                 min-width: 60px;
             }
-            VerticalLayout {
+            if !card: VerticalLayout {
                 alignment: center;
                 FlagChip {
                     finding: found.finding;
@@ -68,16 +91,17 @@ export component FoundRow inherits Rectangle {
         for cell in [
             { text: found.ip, width: FoundColumns.ip },
             { text: found.mac, width: FoundColumns.mac },
-            { text: found.role, width: FoundColumns.role },
+            { text: card ? "" : found.role, width: FoundColumns.role },
         ]: Text {
             text: cell.text;
             width: cell.width;
-            color: Theme.text;
-            font-size: Theme.font-body;
+            color: text-colour;
+            font-size: card ? Theme.font-small : Theme.font-body;
             vertical-alignment: center;
             overflow: elide;
         }
-        HorizontalLayout {
+        // How the host was found; for a card, only whether the run saw it.
+        if !card: HorizontalLayout {
             width: FoundColumns.methods;
             alignment: start;
             spacing: Theme.space-xs;
@@ -86,8 +110,16 @@ export component FoundRow inherits Rectangle {
                 Chip { text: Labels.method(method); }
             }
         }
+        if card: Text {
+            text: found.seen ? "" : @tr("discovery.not-seen");
+            width: FoundColumns.methods;
+            color: Theme.text-muted;
+            font-size: Theme.font-small;
+            vertical-alignment: center;
+            overflow: elide;
+        }
         Text {
-            text: @tr("discovery.percent", found.confidence);
+            text: card ? "" : @tr("discovery.percent", found.confidence);
             width: FoundColumns.confidence;
             color: found.confidence < 60 ? Theme.warning : Theme.text;
             font-size: Theme.font-body;

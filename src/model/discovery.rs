@@ -127,6 +127,42 @@ impl Discovery {
         self.found().iter().filter(|f| filter.admits(f)).count()
     }
 
+    /// The found hosts the filter lets through, by their place in [`Self::found`], each with how
+    /// many of them it runs within: as in the device list, a guest follows its host, indented
+    /// under it, and stands on its own when its host is not shown.
+    pub(crate) fn shown(&self) -> Vec<(usize, usize)> {
+        let found = self.found();
+        let admitted: Vec<usize> = found
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| self.filter.admits(f))
+            .map(|(index, _)| index)
+            .collect();
+        let host = |index: usize| {
+            let host = found.get(index)?.device.guest?.host;
+            let mut hosts = admitted.iter().copied();
+            hosts.find(|&at| found.get(at).and_then(Found::on_map) == Some(host))
+        };
+        let tops = admitted
+            .iter()
+            .rev()
+            .filter(|&&index| host(index).is_none());
+        let mut pending: Vec<(usize, usize)> = tops.map(|&index| (index, 0)).collect();
+        let mut shown = Vec::with_capacity(admitted.len());
+        while let Some((index, depth)) = pending.pop() {
+            shown.push((index, depth));
+            let guests = admitted.iter().rev().filter(|&&g| host(g) == Some(index));
+            pending.extend(guests.map(|&g| (g, depth + 1)));
+        }
+        // Guests in a loop of hosts reach no top; they stand on their own at the end.
+        let looped: Vec<usize> = admitted
+            .into_iter()
+            .filter(|&index| shown.iter().all(|&(at, _)| at != index))
+            .collect();
+        shown.extend(looped.into_iter().map(|index| (index, 0)));
+        shown
+    }
+
     /// Starts a run over `target`, in which the hosts of `answers` on it answer.
     pub(crate) fn start(&mut self, target: Ipv4Net, answers: Vec<Answer>, network: &Network) {
         let options = self.options;
@@ -437,6 +473,62 @@ mod tests {
         assert_eq!(discovery.found()[index].decision, Decision::Ignored);
         assert_eq!(network, before);
         assert!(discovery.add(index, &mut network).is_some());
+    }
+
+    #[test]
+    fn a_host_keeps_all_its_cards_and_only_those_on_the_subnet_are_seen() {
+        let docker_seen = |discovery: &Discovery| {
+            let (_, docker) = named(discovery, "Docker Host");
+            let cards = docker.device.cards.iter();
+            cards.map(|c| docker.seen(c)).collect::<Vec<_>>()
+        };
+        let (mut home, _) = started(ScanOptions::default());
+        run_to_end(&mut home);
+        assert_eq!(
+            docker_seen(&home),
+            [true, false],
+            "its lab card is on another subnet"
+        );
+
+        let network = mock_data::network();
+        let mut lab = Discovery::default();
+        lab.start(
+            "10.0.0.0/24".parse().unwrap(),
+            mock_data::answers(&network),
+            &network,
+        );
+        run_to_end(&mut lab);
+        assert_eq!(docker_seen(&lab), [false, true]);
+    }
+
+    #[test]
+    fn guests_follow_their_host_in_the_results_unless_it_is_filtered_out() {
+        let (mut discovery, _) = started(ScanOptions::default());
+        run_to_end(&mut discovery);
+        let shown = discovery.shown();
+        assert_eq!(shown.len(), discovery.found().len(), "each host once");
+        let place = |name| {
+            let (index, _) = named(&discovery, name);
+            let at = shown.iter().position(|&(i, _)| i == index).unwrap();
+            (at, shown[at].1)
+        };
+        let (server, server_depth) = place("Linux Server");
+        let (docker, docker_depth) = place("Docker Host");
+        assert_eq!((server_depth, docker_depth), (0, 1));
+        assert!(server < docker, "a guest after its host");
+        let guests = shown.iter().skip(server + 1);
+        assert!(
+            guests.take_while(|&&(_, d)| d > 0).count() > 1,
+            "the server's guests, and theirs, straight after it"
+        );
+
+        discovery.filter = FoundFilter::Unidentified;
+        let unidentified = discovery.shown();
+        assert_eq!(
+            unidentified.len(),
+            discovery.count(FoundFilter::Unidentified)
+        );
+        assert!(unidentified.iter().all(|&(_, depth)| depth == 0));
     }
 
     #[test]

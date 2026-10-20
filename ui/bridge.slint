@@ -233,9 +233,21 @@ export struct DiscoveryView {
     count-duplicates: int,
 }
 
-/// A host the run found. `index` is its place among all found hosts, which the callbacks take.
+/// A host the run found, or in the results one of its network cards, which follow it as in the
+/// device list; the details show the host itself. `index` is the host's place among all found
+/// hosts, which the callbacks take, for a card too.
 export struct FoundView {
     index: int,
+    // For a card: its place among its host's cards from 0, its name, empty when it has none, and
+    // its own icon; whether the run saw it (it is on the subnet scanned); and whether it is the
+    // host's last card, where the group's guide line ends. card-index is -1 for the host itself.
+    card-index: int,
+    card-name: string,
+    card-icon: IconChoice,
+    seen: bool,
+    last: bool,
+    // How many of the hosts shown it runs within: a guest follows its host, indented under it.
+    depth: int,
     // The device on the map it is (known, or added since), -1 for none; and where that
     // device's first card sits on the map.
     device-id: int,
@@ -243,6 +255,7 @@ export struct FoundView {
     map-y: float,
     // Empty when nothing told its name.
     name: string,
+    // Of the card it answered at, or of the card itself.
     ip: string,
     mac: string,
     hostname: string,
@@ -256,7 +269,8 @@ export struct FoundView {
     // The icon was picked for this host rather than coming from its role.
     custom-icon: bool,
     notes: string,
-    // Its open ports, as shown (empty when none).
+    // The open ports of the card it answered at, or of the card itself, as shown (empty when
+    // none).
     services: string,
     methods: [DiscoveryMethod],
     // In per cent.

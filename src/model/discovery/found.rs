@@ -6,7 +6,7 @@ use std::net::Ipv4Addr;
 use ipnet::Ipv4Net;
 
 use super::{LogEvent, ScanOptions};
-use crate::model::card::MacAddr;
+use crate::model::card::{MacAddr, NetworkCard};
 use crate::model::device::{Device, DeviceId, DeviceKind};
 use crate::model::network::Network;
 use crate::model::services::Services;
@@ -83,8 +83,11 @@ impl FoundFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Found {
-    /// As detected, with only what the scan's options could find out.
+    /// As detected, with only what the scan's options could find out, and all its cards.
     pub(crate) device: Device,
+    /// The subnet the run found it on; its cards elsewhere were not seen.
+    pub(crate) subnet: Ipv4Net,
+    /// The address it answered at, and that card's MAC address.
     pub(crate) ip: Ipv4Addr,
     pub(crate) mac: Option<MacAddr>,
     pub(crate) methods: Vec<Method>,
@@ -127,11 +130,18 @@ impl Found {
             finding: finding(network, ip, mac),
             decision: Decision::Pending,
             device,
+            subnet: target,
             ip,
             mac,
             methods,
             confidence,
         })
+    }
+
+    /// Whether the run saw `card`, one of its device's: it is on the subnet scanned.
+    pub(crate) fn seen(&self, card: &NetworkCard) -> bool {
+        card.address
+            .is_some_and(|a| self.subnet.contains(&a.addr()))
     }
 
     /// Nothing told what it is.
