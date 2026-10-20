@@ -1,7 +1,7 @@
 import { Button, LineEdit, ListView } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
-import { NameEdit } from "components/name-edit.slint";
+import { NameBox } from "components/name-box.slint";
 import { ColourPicker } from "components/colour-picker.slint";
 import { LineStylePicker } from "components/line-style-picker.slint";
 
@@ -39,9 +39,9 @@ export component GroupEditor inherits VerticalLayout {
                 VerticalLayout {
                     alignment: center;
                     width: 180px;
-                    NameEdit {
+                    NameBox {
                         name: group.name;
-                        accessible-label: @tr("groups.name");
+                        field-label: @tr("groups.name");
                         commit(text) => { Bridge.rename-group(i, text); }
                     }
                 }

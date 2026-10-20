@@ -4,6 +4,7 @@ import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { IconChooser } from "components/icon-chooser.slint";
+import { NameBox } from "components/name-box.slint";
 import { NameEdit } from "components/name-edit.slint";
 import { PortEditor } from "port-editor.slint";
 
@@ -38,8 +39,8 @@ component CardSetting inherits VerticalLayout {
     }
 }
 
-// Edit page, right side, while a network card is selected: its name and IPv4 settings, what it
-// is plugged into, its open ports, and removing it. A card is a child of its device, which it
+// Edit page, right side, while a network card is selected: its name (edited in its heading) and
+// IPv4 settings, what it is plugged into, its open ports, and removing it. A card is a child of its device, which it
 // leads back to.
 export component CardEditor inherits VerticalLayout {
     alignment: start;
@@ -72,12 +73,13 @@ export component CardEditor inherits VerticalLayout {
         VerticalLayout {
             alignment: center;
             spacing: Theme.space-xs;
-            Text {
-                text: Labels.card-name(Bridge.card.name, Bridge.card.index);
+            NameBox {
+                name: Bridge.card.name;
+                placeholder: Labels.card-name("", Bridge.card.index);
                 font-size: Theme.font-title;
                 font-weight: 600;
-                color: Theme.text;
-                overflow: elide;
+                field-label: @tr("details.name");
+                commit(text) => { Bridge.edit-card(CardField.name, text); }
             }
             Text {
                 text: @tr("edit.card-of", Labels.device-name(Bridge.details.name));
@@ -88,14 +90,6 @@ export component CardEditor inherits VerticalLayout {
         }
     }
 
-    DetailField {
-        label: @tr("details.name");
-        CardSetting {
-            field: CardField.name;
-            value: Bridge.card.name;
-            label: @tr("details.name");
-        }
-    }
     DetailField {
         label: @tr("details.ip");
         CardSetting {

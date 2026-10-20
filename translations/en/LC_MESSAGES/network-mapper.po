@@ -235,11 +235,6 @@ msgstr "Back to map"
 msgid "edit.choose-device"
 msgstr "Choose a device to edit it."
 
-# Read out for the device's name at the top of its editor, which is clicked to rename it; {}
-# is the name.
-msgid "edit.rename"
-msgstr "Rename {}"
-
 msgid "edit.icon-from-role"
 msgstr "Use the role's icon"
 

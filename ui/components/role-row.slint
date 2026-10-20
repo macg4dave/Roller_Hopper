@@ -2,7 +2,7 @@ import { Button, ComboBox } from "std-widgets.slint";
 import { Bridge, RoleView } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 import { IconChooser } from "icon-chooser.slint";
-import { NameEdit } from "name-edit.slint";
+import { NameBox } from "name-box.slint";
 
 // Column sizes shared by the rows and the heading above them, so the columns line up.
 export global RoleColumns {
@@ -45,9 +45,9 @@ export component RoleRow inherits Rectangle {
         VerticalLayout {
             alignment: center;
             width: RoleColumns.name;
-            NameEdit {
+            NameBox {
                 name: role.name;
-                accessible-label: @tr("roles.name");
+                field-label: @tr("roles.name");
                 commit(text) => { Bridge.rename-role(index, text); }
             }
         }

@@ -5,19 +5,16 @@ import { Theme } from "theme.slint";
 import { ChildRow } from "components/child-row.slint";
 import { DetailField } from "components/detail-field.slint";
 import { IconChooser } from "components/icon-chooser.slint";
-import { TitleEdit } from "components/title-edit.slint";
+import { NameBox } from "components/name-box.slint";
 
 // The selected device's editable fields: icon, name, role, its network cards and guests with
 // adding more, notes, and forgetting it. Used on the edit page and in the details panel's edit
 // mode.
 export component DeviceForm inherits VerticalLayout {
-    // Forgetting asks first; a new selection drops the question, and a half-typed name.
+    // Forgetting asks first; a new selection drops the question.
     property <bool> confirm-forget;
     property <int> selected-id: Bridge.selected-id;
-    changed selected-id => {
-        confirm-forget = false;
-        title.cancel();
-    }
+    changed selected-id => { confirm-forget = false; }
 
     alignment: start;
     spacing: Theme.space-xs;
@@ -54,10 +51,12 @@ export component DeviceForm inherits VerticalLayout {
         VerticalLayout {
             alignment: center;
             spacing: Theme.space-xs;
-            // The name is edited here, by clicking it.
-            title := TitleEdit {
+            NameBox {
                 name: Bridge.details.name;
-                shown: Labels.device-name(Bridge.details.name);
+                placeholder: Labels.device-name("");
+                font-size: Theme.font-title;
+                font-weight: 600;
+                field-label: @tr("details.name");
                 commit(text) => { Bridge.rename(text); }
             }
             if Bridge.cards.length > 0: Text {

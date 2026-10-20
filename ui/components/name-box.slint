@@ -1,0 +1,88 @@
+import { Theme } from "../theme.slint";
+
+// A name edited in place. It sits in a light grey box, which shows it can be changed; clicking
+// puts the cursor into the name where it is, so nothing moves while it is typed. Enter or
+// clicking away keeps the change and Escape drops it. Afterwards the box shows whatever name
+// the owner ended up with, which is unchanged if the new name was refused.
+export component NameBox inherits Rectangle {
+    in property <string> name;
+    // Shown, faded, in place of a blank name.
+    in property <string> placeholder;
+    in property <length> font-size: Theme.font-body;
+    in property <int> font-weight: 400;
+    // What a screen reader calls the field.
+    in property <string> field-label;
+    callback commit(string);
+    // The gap between the box and the name, kept while a long name scrolls.
+    property <length> inset: Theme.space-s;
+
+    min-height: root.font-size + 2 * Theme.space-s + 4px;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent : Theme.border;
+    background: input.has-focus ? Theme.surface : Theme.background;
+    clip: true;
+
+    // Committing assigns the text, which ends its binding, so follow later names by hand.
+    changed name => { input.text = root.name; }
+
+    function apply() {
+        if input.text != root.name {
+            root.commit(input.text);
+        }
+        input.text = root.name;
+        input.x = root.inset;
+    }
+
+    // Around the name, so a click anywhere in the box starts typing.
+    TouchArea {
+        mouse-cursor: text;
+        clicked => { input.focus(); }
+    }
+
+    input := TextInput {
+        x: root.inset;
+        width: max(root.width - 2 * root.inset, self.preferred-width);
+        height: root.height;
+        text: root.name;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        color: Theme.text;
+        vertical-alignment: center;
+        single-line: true;
+        accessible-label: root.field-label;
+        accepted => { self.clear-focus(); }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                self.text = root.name;
+                self.clear-focus();
+                return accept;
+            }
+            reject
+        }
+        changed has-focus => {
+            if !self.has-focus {
+                root.apply();
+            }
+        }
+        // Keeps the cursor in view in a name longer than the box.
+        cursor-position-changed(position) => {
+            if position.x + self.x < root.inset {
+                self.x = root.inset - position.x;
+            } else if position.x + self.x > root.width - root.inset - self.text-cursor-width {
+                self.x = root.width - root.inset - position.x - self.text-cursor-width;
+            }
+        }
+    }
+
+    if input.text == "" && !input.has-focus: Text {
+        x: root.inset;
+        width: root.width - 2 * root.inset;
+        text: root.placeholder;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
