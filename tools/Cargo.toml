@@ -16,6 +16,10 @@ serde_json = { version = "1.0.154", default-features = false, features = ["std"]
 mistralrs = { version = "0.8.1", optional = true }
 tokio = { version = "1.49.0", default-features = false, features = ["rt-multi-thread"], optional = true }
 
+[target.'cfg(windows)'.dependencies]
+# Finds MSVC's cl.exe for nvcc, as the cc crate does.
+find-msvc-tools = "0.1.15"
+
 [features]
 ai = ["dep:mistralrs", "dep:tokio"]
 

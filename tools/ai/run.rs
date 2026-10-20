@@ -61,11 +61,17 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
             .map(|n| n.to_string_lossy().into_owned());
         for case in &cases {
             let mut record = ask(&model, case, &prompt, &schema, args.max_tokens).await?;
-            record["model"] = json!(name);
+            if let Some(fields) = record.as_object_mut() {
+                fields.insert("model".into(), json!(name));
+            }
             writeln!(output, "{record}")?;
             output.flush()?;
+            let seconds = record
+                .get("seconds")
+                .and_then(Value::as_f64)
+                .unwrap_or_default();
             let mut progress = io::stderr().lock();
-            writeln!(progress, "{} done in {:.1}s", case.id, record["seconds"])?;
+            writeln!(progress, "{} done in {seconds:.1}s", case.id)?;
         }
         Ok(())
     })

@@ -15,11 +15,13 @@ cargo tool <area> <command> --help
 | Development checks | [checks/](checks/README.md) | `checks gate`, `checks agent-command` |
 | Runtime icon library | [icons/](icons/README.md) | `icons audit` |
 | Model evaluation | [ai/](ai/README.md) | `ai run` (feature `ai`), `ai score` |
+| CUDA builds | [cuda/](cuda/README.md) | `cuda cargo` |
 
 ```text
 tools/
   ai/        cli.rs, cases.rs, run.rs, score.rs, prompt.md, schema.json, cases.json, README.md
   checks/    cli.rs, gate.rs, agent_command.rs, README.md
+  cuda/      cli.rs, cargo.rs, README.md
   text/      cli.rs, edit.rs, normalize_eol.rs, replace_text.rs, README.md
   icons/     cli.rs, audit.rs, README.md
   src/       main.rs: shared CLI dispatch only
@@ -31,7 +33,7 @@ Use installed utilities directly for established tasks, such as `rg` for text se
 custom text commands supply checked mechanical edits. Dependencies and build output remain
 separate from the product; the tools do not import product code. `clap` supplies CLI parsing
 and help; `walkdir` supplies icon traversal; `mistralrs` (optional `ai` feature) runs local
-models for evaluation.
+models for evaluation; `find-msvc-tools` (Windows) finds MSVC's compiler for CUDA builds.
 
 The previous `repo` command group is replaced by `checks` and `text`. See each area's README
 for examples, write behaviour and limitations.

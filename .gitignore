@@ -1,5 +1,7 @@
 /target
 /tools/target/
+# The CUDA toolkit `cargo tool cuda` builds with: NVIDIA redistributables, about 2 GB.
+/cuda-toolkit/
 *.pdb
 .vscode/*
 !.vscode/extensions.json

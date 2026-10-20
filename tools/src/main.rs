@@ -4,6 +4,8 @@
 mod ai;
 #[path = "../checks/cli.rs"]
 mod checks;
+#[path = "../cuda/cli.rs"]
+mod cuda;
 #[path = "../icons/cli.rs"]
 mod icons;
 #[path = "../text/cli.rs"]
@@ -43,6 +45,11 @@ enum Area {
         #[command(subcommand)]
         command: ai::Command,
     },
+    /// Build and test the app's `cuda` feature with the repository's CUDA toolkit.
+    Cuda {
+        #[command(subcommand)]
+        command: cuda::Command,
+    },
 }
 
 fn main() -> io::Result<()> {
@@ -54,5 +61,6 @@ fn main() -> io::Result<()> {
         Area::Text { command } => text::run(command, root),
         Area::Icons { command } => icons::run(command, root),
         Area::Ai { command } => ai::run(command, root),
+        Area::Cuda { command } => cuda::run(command, root),
     }
 }

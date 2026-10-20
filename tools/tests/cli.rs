@@ -88,7 +88,14 @@ fn gate_plan_keeps_required_order_and_scope() -> io::Result<()> {
         );
         let tools_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let tools_label = format!("[{}]", tools_manifest.display());
-        assert_eq!(stdout.contains(&tools_label), scope != "app");
+        // Windows paths ignore case, and the command hook may build the tool through a
+        // lower-case drive letter while Cargo builds this test with an upper-case one.
+        let shown = if cfg!(windows) {
+            stdout.to_lowercase().contains(&tools_label.to_lowercase())
+        } else {
+            stdout.contains(&tools_label)
+        };
+        assert_eq!(shown, scope != "app");
     }
     Ok(())
 }

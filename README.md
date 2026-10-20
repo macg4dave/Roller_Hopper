@@ -24,30 +24,22 @@ RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run --release
 
 ### AI on the GPU (NVIDIA, Windows)
 
-The `cuda` feature runs the model on an NVIDIA graphics card (Qwen3-0.6B: about 9 s an
-answer on an RTX 5060). Building it needs the CUDA toolkit and Visual Studio's C++ tools; on
-the development PC the toolkit is unpacked, not installed, in
-`%APPDATA%\Network Mapper\dev\cuda-13.3.1` (NVIDIA's redistributable archives: `cuda_nvcc`,
-`cuda_crt`, `libnvvm`, `cccl`, `cuda_cudart`, `cuda_nvrtc`, `libcublas`, `libcurand`). Set:
+The `cuda` feature runs the model on an NVIDIA graphics card. It builds against the CUDA
+13.2 toolkit unpacked in the repository's `cuda-toolkit/` folder (ignored by git; how to fill
+it is in [tools/cuda](tools/cuda/README.md)), with Visual Studio's C++ tools and an NVIDIA
+driver. Run Cargo through the repository command, which sets the build settings, puts the
+toolkit on `PATH` for that run and copies the CUDA DLLs beside the app and its tests:
 
 ```sh
-CUDA_PATH="<toolkit folder>"                  # cudarc links against its libraries
-CUDARC_CUDA_VERSION=13030                     # CUDA 13.3
-CUDA_COMPUTE_CAP=120                          # the card's compute capability (nvidia-smi)
-NVCC_CCBIN="<MSVC>\bin\Hostx64\x64"           # the folder holding cl.exe
-NVCC_APPEND_FLAGS="-Xcompiler /Zc:preprocessor -Xcompiler /MD"
+cargo tool cuda cargo run --release --features cuda
+cargo tool cuda cargo test --release --features cuda -- --ignored llama sampling_settings
+cargo tool cuda cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-then `cargo build --release --features cuda`. CUDA 13's headers need MSVC's conforming
-preprocessor, and `/MD` matches Skia's C runtime. The CUDA kernel builds inside mistral.rs
-(its `candle-kernels` and `mistralrs-quant` crates) do not notice a changed flag, so after
-changing one run `cargo clean --release -p candle-kernels -p mistralrs-quant`. The
-program loads `cublas64_13.dll`, `cublasLt64_13.dll`, `cudart64_13.dll`, `curand64_10.dll`,
-`nvrtc64_130_0.dll` and `nvrtc-builtins64_133.dll` at start-up: copy them from the toolkit's
-`bin\x64` beside the executable (and beside the test binaries in `deps\` for `cargo test`).
-The gate's `cargo clippy --all-features` builds this feature too, so it needs the same
-settings. mistral.rs 0.8.1 also needs `nvcc` on `PATH` and a CUDA toolkit no newer than 13.2,
-so the 13.3 toolkit above does not build it yet (backlog BLK-012).
+The first build compiles mistral.rs's CUDA kernels and takes about 12 minutes. Those kernel
+builds do not notice a changed setting, so after changing one run
+`cargo clean --release -p candle-kernels -p mistralrs-quant`. A plain `cargo clippy
+--all-features`, as the gate runs it, fails without these settings (backlog BLK-011).
 
 ## Icons
 

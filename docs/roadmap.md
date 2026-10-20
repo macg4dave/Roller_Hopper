@@ -658,7 +658,6 @@ Goal: one qualified model useful inside the existing discovery and details workf
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
 | BE-0082 | Load the model installed by Install AI with mistral.rs (tokenizer and template from its GGUF), output held to the schema by its JSON-schema constraint as the evaluation tool does, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
-| BE-0108 | Make the `cuda` build reproducible: one repository command that finds the toolkit and MSVC, sets the build settings (README "AI on the GPU") and puts the runtime DLLs beside the app and test binaries, replacing the manual steps; resolves BLK-011. | BE-0082 |
 | BE-0109 | Harden Install AI: check free space before starting, resume a broken download, fail a stalled read, remove an installed model; test against a local server, not the internet. | BE-0082 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
 | BE-0084 | Show type/OS-family/description suggestions with evidence, reasons and labelled confidence; explicit accept/edit/reject; suggestions never become observations. | BE-0083 |
