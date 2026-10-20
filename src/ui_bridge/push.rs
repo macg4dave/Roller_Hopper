@@ -13,28 +13,40 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     let labels = ui.global::<Labels<'_>>();
     let (network, icons) = (&state.network, &state.icons);
     let on_map = state.motion.shown();
-    let at = |id| on_map.get(&id).copied().unwrap_or_default();
+    // Rows carry the settled spot, which changes only when the layout does, so the labels are
+    // not redone on every frame of motion; where each device is drawn goes in `places`.
+    let settled = |id| state.positions.get(&id).copied().unwrap_or_default();
     let view = |d: &Device| {
         let role = convert::role_label(&labels, network, &d.role);
-        convert::device_view(network, icons, d, role, at(d.id))
+        convert::device_view(network, icons, d, role, settled(d.id))
     };
 
-    let trunks = state.trunks();
     let nodes = network.devices().iter().map(|d| {
         let shown = state.filter.admits(d.status) && d.matches(&state.query);
-        let root = trunks
-            .iter()
-            .find(|(id, _)| *id == d.id)
-            .map(|(_, [_, root])| root);
         ui::DeviceView {
             dimmed: !shown,
-            has_root: root.is_some(),
-            root_y: root.map_or(0.0, |r| r.y),
             ..view(d)
         }
     });
     if let Some(model) = sync(&bridge.get_devices(), nodes.collect()) {
         bridge.set_devices(model);
+    }
+    let trunks = state.trunks();
+    let places = network.devices().iter().map(|d| {
+        let at = on_map.get(&d.id).copied().unwrap_or_default();
+        let root = trunks
+            .iter()
+            .find(|(id, _)| *id == d.id)
+            .map(|(_, [_, root])| root);
+        ui::NodePlace {
+            x: at.x,
+            y: at.y,
+            has_root: root.is_some(),
+            root_y: root.map_or(0.0, |r| r.y),
+        }
+    });
+    if let Some(model) = sync(&bridge.get_places(), places.collect()) {
+        bridge.set_places(model);
     }
     let list = network.filtered(state.filter, &state.query);
     if let Some(model) = sync(&bridge.get_list(), list.map(view).collect()) {

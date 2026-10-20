@@ -94,12 +94,6 @@ msgstr "Hostnames"
 msgid "view.status"
 msgstr "Status dots"
 
-msgid "legend.known"
-msgstr "Known link"
-
-msgid "legend.inferred"
-msgstr "Inferred link"
-
 # Details panel
 msgid "details.empty"
 msgstr "Select a device on the map or in the list to see its details."

@@ -1,0 +1,50 @@
+import { ScrollView } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { LineSample } from "components/line-sample.slint";
+
+// The map's key: each group's name in its colour beside its line style, scrolling once there
+// are more than a few. Hidden when there are no groups.
+export component MapKey inherits Rectangle {
+    property <length> row-height: 20px;
+    property <int> rows-shown: 6;
+
+    visible: Bridge.groups.length > 0;
+    width: 180px;
+    height: min(Bridge.groups.length, rows-shown) * row-height + 2 * Theme.space-xs;
+    background: Theme.surface;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius;
+
+    scroll := ScrollView {
+        VerticalLayout {
+            width: scroll.visible-width;
+            padding-top: Theme.space-xs;
+            padding-bottom: Theme.space-xs;
+            padding-left: Theme.space-s;
+            padding-right: Theme.space-s;
+            for group in Bridge.groups: HorizontalLayout {
+                height: row-height;
+                spacing: Theme.space-s;
+                VerticalLayout {
+                    alignment: center;
+                    LineSample {
+                        sample: Bridge.line-styles[group.line-style];
+                        colour: group.colour;
+                    }
+                }
+                Text {
+                    // Group names are the user's own words, shown as typed.
+                    text: group.name;
+                    font-size: Theme.font-small;
+                    font-weight: 600;
+                    color: Theme.group-colour(group.colour, Theme.text);
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+}

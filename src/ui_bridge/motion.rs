@@ -26,6 +26,10 @@ const SAG: f32 = 0.3;
 const FLICK: f32 = 260.0;
 /// Nearer than this to its spot, and slower than this per second, a thing has settled.
 const REST: f32 = 0.1;
+/// How far the devices on each side of a dragged device move aside to make room for it, nearest
+/// first, in map units; those further along stay put. Like icons in a dock, by order rather than
+/// distance, as devices with wide branches stand far apart.
+pub(super) const PARTING: [f32; 3] = [36.0, 18.0, 8.0];
 
 #[derive(Debug, Clone, Copy)]
 struct Spring {

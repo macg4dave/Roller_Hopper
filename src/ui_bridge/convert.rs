@@ -135,7 +135,7 @@ pub(super) fn colour_from_ui(colour: ui::GroupColour) -> Option<GroupColour> {
     }
 }
 
-/// A device as drawn at `at`; the caller dims it when the search or filter hides it.
+/// A device whose settled spot is `at`; the caller dims it when the search or filter hides it.
 pub(super) fn device_view(
     network: &Network,
     icons: &Icons,
@@ -156,8 +156,6 @@ pub(super) fn device_view(
         status: status(device.status),
         x: at.x,
         y: at.y,
-        has_root: false,
-        root_y: 0.0,
         dimmed: false,
     }
 }

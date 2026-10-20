@@ -19,8 +19,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, Connection, Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role,
-    Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
+    Arrangement, Connection, Device, DeviceId, GroupId, Icon, Level, Network, Point, Positions,
+    Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -246,9 +246,50 @@ impl AppState {
     fn step_motion(&mut self) -> bool {
         let dt = FRAME.as_secs_f32();
         let strand = self.strand();
-        self.motion.step(&self.positions, dt);
+        let targets = self.making_room(strand.as_ref());
+        self.motion.step(&targets, dt);
         self.motion.step_strand(strand.as_ref(), dt);
-        self.motion.settled(&self.positions)
+        self.motion.settled(&targets)
+    }
+
+    /// Where the motion takes each device: its spot in the layout, except that while a dragged
+    /// device is over a row it would join, the devices in that row move aside to make room
+    /// for it, each with what hangs behind it. Only the motion sees this; dropping lays out anew.
+    fn making_room(&self, snap: Option<&Snap>) -> Positions {
+        let mut targets = self.positions.clone();
+        let (Some(dragged), Some(snap)) = (self.dragging, snap) else {
+            return targets;
+        };
+        let (Level::Tier(index), Some(&pointer)) = (snap.slot.level, self.positions.get(&dragged))
+        else {
+            return targets;
+        };
+        let tiers = self
+            .arrangement
+            .tiers_without(&self.network, snap.upstream, dragged);
+        let Some(row) = tiers.get(index) else {
+            return targets;
+        };
+        // The row's devices on each side of the pointer, nearest first.
+        let mut beside: Vec<(DeviceId, f32)> = row
+            .devices()
+            .filter_map(|id| Some((id, self.positions.get(&id)?.x - pointer.x)))
+            .collect();
+        beside.sort_by(|a, b| a.1.abs().total_cmp(&b.1.abs()));
+        let (left, right): (Vec<_>, Vec<_>) = beside.into_iter().partition(|&(_, dx)| dx < 0.0);
+        let away = |side: Vec<(DeviceId, f32)>, sign: f32| {
+            let parted = side.into_iter().zip(motion::PARTING);
+            parted.map(move |((id, _), shift)| (id, sign * shift))
+        };
+        for (neighbour, shift) in away(left, -1.0).chain(away(right, 1.0)) {
+            let branch = targets.iter_mut().filter(|&(&id, _)| {
+                self.network.is_within(id, neighbour) && !self.network.is_within(id, dragged)
+            });
+            for (_, at) in branch {
+                at.x += shift;
+            }
+        }
+        targets
     }
 
     fn finish_scan(&mut self) {
@@ -683,6 +724,44 @@ mod tests {
         assert_eq!(state.selected, None);
         assert!(state.network.device(DeviceId(10)).is_none());
         assert!(!state.positions.contains_key(&DeviceId(10)));
+    }
+
+    #[test]
+    fn a_row_makes_room_for_a_device_dragged_over_it_and_closes_after() {
+        let mut state = AppState::new(mock_data::network());
+        let (switch, access_point, nas, pc) = (DeviceId(2), DeviceId(3), DeviceId(4), DeviceId(5));
+        let laid_out = state.positions.clone();
+        let between = Point {
+            x: f32::midpoint(laid_out[&switch].x, laid_out[&access_point].x),
+            y: laid_out[&switch].y,
+        };
+        state.drag_to(nas, between);
+        for _ in 0..60 {
+            state.step_motion();
+        }
+        let moved = |st: &AppState, id| st.motion.shown()[&id].x - laid_out[&id].x;
+        assert!(moved(&state, switch) < -1.0, "the switch moves left");
+        assert!(moved(&state, access_point) > 1.0, "the access point right");
+        assert!(
+            (moved(&state, pc) - moved(&state, switch)).abs() < 0.5,
+            "with what hangs behind it"
+        );
+        assert_eq!(
+            state.motion.shown()[&nas],
+            between,
+            "the dragged one stays put"
+        );
+
+        // Far from every line, the row closes up again.
+        state.drag_to(
+            nas,
+            Point {
+                x: -5000.0,
+                y: -5000.0,
+            },
+        );
+        assert!((0..600).any(|_| state.step_motion()));
+        assert!(moved(&state, switch).abs() < f32::EPSILON);
     }
 
     #[test]

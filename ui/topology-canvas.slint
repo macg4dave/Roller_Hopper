@@ -1,6 +1,7 @@
 import { Button } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
+import { MapKey } from "map-key.slint";
 import { ViewOptions } from "view-options.slint";
 import { JoinBlob } from "components/join-blob.slint";
 import { MapNode } from "components/map-node.slint";
@@ -122,10 +123,10 @@ export component TopologyCanvas inherits Rectangle {
         }
 
         // Root circles at the foot of each trunk, drawn like the device's lines.
-        for device in Bridge.devices: Rectangle {
-            visible: device.has-root;
-            x: (device.x - Bridge.bounds.x) * 1px - self.width / 2;
-            y: (device.root-y - Bridge.bounds.y) * 1px - self.height / 2;
+        for device[i] in Bridge.devices: Rectangle {
+            visible: Bridge.places[i].has-root;
+            x: (Bridge.places[i].x - Bridge.bounds.x) * 1px - self.width / 2;
+            y: (Bridge.places[i].root-y - Bridge.bounds.y) * 1px - self.height / 2;
             width: Theme.root-size;
             height: self.width;
             border-radius: self.width / 2;
@@ -153,59 +154,27 @@ export component TopologyCanvas inherits Rectangle {
             origin-y: Bridge.bounds.y;
         }
 
-        for device in Bridge.devices: MapNode {
+        // Positions come from Bridge.places, so moving a node leaves its labels untouched.
+        for device[i] in Bridge.devices: MapNode {
             device: device;
             zoom: zoom;
             selected: device.id == Bridge.selected-id;
-            x: (device.x - Bridge.bounds.x) * 1px - self.width / 2;
-            y: (device.y - Bridge.bounds.y) * 1px - (self.icon-size + 14px) / 2;
+            x: (Bridge.places[i].x - Bridge.bounds.x) * 1px - self.width / 2;
+            y: (Bridge.places[i].y - Bridge.bounds.y) * 1px - (self.icon-size + 14px) / 2;
             clicked => { Bridge.select(device.id); }
             // The pointer offset arrives already in map units, as the node sits inside the scale.
             dragged(dx, dy) => {
-                Bridge.move-device(device.id, device.x + dx / 1px, device.y + dy / 1px);
+                Bridge.move-device(device.id, Bridge.places[i].x + dx / 1px, Bridge.places[i].y + dy / 1px);
                 auto-fit = false;
             }
             released => { Bridge.drop-device(); }
         }
     }
 
-    // Legend for known and inferred links; line styles belong to groups and are not listed.
-    Rectangle {
+    // The key: each group and its lines.
+    MapKey {
         x: Theme.space-l;
         y: root.height - self.height - Theme.space-l;
-        width: legend.preferred-width;
-        height: legend.preferred-height;
-        background: Theme.surface;
-        border-color: Theme.border;
-        border-width: 1px;
-        border-radius: Theme.radius;
-
-        legend := HorizontalLayout {
-            padding: Theme.space-s;
-            spacing: Theme.space-s;
-            for entry in [
-                { label: @tr("legend.known"), opacity: 1 },
-                { label: @tr("legend.inferred"), opacity: Theme.inferred-opacity },
-            ]: HorizontalLayout {
-                spacing: Theme.space-xs;
-                Path {
-                    width: 24px;
-                    height: 10px;
-                    viewbox-width: 24;
-                    viewbox-height: 10;
-                    commands: "M 0 5 L 24 5";
-                    opacity: entry.opacity;
-                    stroke: Theme.line;
-                    stroke-width: Theme.line-width;
-                }
-                Text {
-                    text: entry.label;
-                    font-size: Theme.font-small;
-                    color: Theme.text-muted;
-                    vertical-alignment: center;
-                }
-            }
-        }
     }
 
     // What the devices are labelled with.

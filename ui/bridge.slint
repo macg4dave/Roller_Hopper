@@ -45,13 +45,22 @@ export struct DeviceView {
     // The colour of the role's group.
     colour: GroupColour,
     status: DeviceStatus,
+    // Its settled spot in the layout, which the list centres the map on. Where it is drawn
+    // while it moves is in Bridge.places.
+    x: float,
+    y: float,
+    // Hidden by the current search or filter: faded on the map.
+    dimmed: bool,
+}
+
+/// Where a device in Bridge.devices is drawn on the map right now, at the same index. Kept apart
+/// from DeviceView so a moving device does not redo its labels every frame.
+export struct NodePlace {
     x: float,
     y: float,
     // The root circle at the foot of its trunk, straight below it; none while it is dragged.
     has-root: bool,
     root-y: float,
-    // Hidden by the current search or filter: faded on the map.
-    dimmed: bool,
 }
 
 /// Read-only details of the selected device. Empty strings are not shown.
@@ -139,6 +148,7 @@ export struct MapBounds {
 
 export global Bridge {
     in property <[DeviceView]> devices;
+    in property <[NodePlace]> places;
     in property <[DeviceView]> list;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;

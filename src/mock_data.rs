@@ -3,8 +3,8 @@
 use std::net::Ipv4Addr;
 
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, LastSeen, LineStyle,
-    MacAddr, Network, Role, Services, Status,
+    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LastSeen,
+    LineStyle, MacAddr, Network, Role, Services, Status,
 };
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
@@ -15,6 +15,8 @@ const SCAN_INTERVAL_MINUTES: u32 = 30;
 
 /// The custom role the sample virtual machines share.
 const VIRTUAL_MACHINE: &str = "Virtual machine";
+/// The icon the virtual machine role was given, from the icon folder.
+const VIRTUAL_MACHINE_ICON: &str = "Computers/Virtual machine";
 
 struct Spec {
     id: u32,
@@ -395,12 +397,16 @@ pub(crate) fn network() -> Network {
     // Custom roles as if the user had added them: no standard role has the TV or console icon,
     // and a virtual machine is told apart from the host it runs on.
     let custom: [(&[u32], _, _); 3] = [
-        (&[10], "TV", DeviceKind::Tv),
-        (&[11], "Games console", DeviceKind::Console),
-        (&[17, 18, 19, 20, 21], VIRTUAL_MACHINE, DeviceKind::Server),
+        (&[10], "TV", DeviceKind::Tv.icon()),
+        (&[11], "Games console", DeviceKind::Console.icon()),
+        (
+            &[17, 18, 19, 20, 21],
+            VIRTUAL_MACHINE,
+            Icon::new(VIRTUAL_MACHINE_ICON),
+        ),
     ];
-    for (ids, name, kind) in custom {
-        let Some(role) = network.add_custom_role(name, kind.icon()) else {
+    for (ids, name, icon) in custom {
+        let Some(role) = network.add_custom_role(name, icon) else {
             continue;
         };
         for &id in ids {
@@ -536,6 +542,14 @@ mod tests {
     fn virtual_machines_share_a_role_and_hang_off_their_host() {
         let network = network();
         let role = Role::Custom(VIRTUAL_MACHINE.into());
+        let icon = network
+            .role_icon(&role)
+            .map(|i| format!("icons/{}.svg", i.0));
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(
+            icon.is_some_and(|file| folder.join(file).is_file()),
+            "their icon ships with the app"
+        );
         let vms: Vec<_> = network
             .devices()
             .iter()

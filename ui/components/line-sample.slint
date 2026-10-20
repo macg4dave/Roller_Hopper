@@ -1,0 +1,16 @@
+import { GroupColour, LineSet } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// A preview of one line style (from Bridge.line-styles), in a group's colour.
+export component LineSample inherits Path {
+    in property <LineSet> sample;
+    in property <GroupColour> colour;
+
+    width: 48px;
+    height: 12px;
+    viewbox-width: 48;
+    viewbox-height: 12;
+    commands: sample.commands;
+    stroke: Theme.group-colour(colour, Theme.icon);
+    stroke-width: sample.thick ? Theme.line-width-thick : Theme.line-width;
+}
