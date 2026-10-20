@@ -16,8 +16,12 @@ const MAX_COLUMNS: usize = 2;
 /// Lines stop short of the icon above a node and leave below the labels of its parent.
 const LINE_TOP_GAP: f32 = 28.0;
 const LINE_BOTTOM_GAP: f32 = 66.0;
-/// How near a line a dragged device's own line must end for it to join that line.
+/// How near a line a dragged device's own line must end for it to join that line, above or
+/// below it. Rows are close together, so this stays small.
 const SNAP_DISTANCE: f32 = 48.0;
+/// The same reach to either side, larger as columns are far apart: a device brought up beside
+/// a vertical line joins it well before it covers it.
+const SNAP_REACH_SIDEWAYS: f32 = 110.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) struct Point {
@@ -69,13 +73,16 @@ pub(crate) fn route(upstream: Point, downstream: Point) -> [Point; 4] {
 }
 
 /// Where a dragged device would join the map if dropped now.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Snap {
     /// The device whose line it would join.
     pub(crate) upstream: DeviceId,
     /// The device on that line it would go just before, as it was dropped between it and the one
     /// before; `None` to go last.
     pub(crate) before: Option<DeviceId>,
+    /// A short line showing the join: from the nearest point of the line it would join to the
+    /// top of its icon.
+    pub(crate) line: [Point; 2],
 }
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: the nearest of the lines
@@ -108,18 +115,21 @@ pub(crate) fn snap_target(
                     let [a, b, c, d] = route(origin, p);
                     [(a, b), (b, c), (c, d)]
                 });
-            let near = segments.fold(distance(end, first_line, first_line), |near, (a, b)| {
-                near.min(distance(end, a, b))
-            });
-            Some((id, near))
+            let joins = segments
+                .map(|(a, b)| nearest(end, a, b))
+                .min_by(|a, b| distance(end, *a).total_cmp(&distance(end, *b)))
+                .filter(|&p| distance(end, p) < distance(end, first_line))
+                .unwrap_or(first_line);
+            Some((id, joins))
         })
-        .filter(|&(_, near)| near <= SNAP_DISTANCE)
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(upstream, _)| Snap {
+        .filter(|&(_, joins)| distance(end, joins) <= SNAP_DISTANCE)
+        .min_by(|a, b| distance(end, a.1).total_cmp(&distance(end, b.1)))
+        .map(|(upstream, joins)| Snap {
             upstream,
             // They are laid out in reading order, so the first one after `at` follows it.
             before: others_behind(network, upstream, dragged)
                 .find(|other| positions.get(other).is_some_and(|&p| reads_after(p, at))),
+            line: [joins, end],
         })
 }
 
@@ -142,11 +152,19 @@ fn reads_after(p: Point, at: Point) -> bool {
     rows_below > half_row || (rows_below.abs() <= half_row && p.x > at.x)
 }
 
-/// Distance from `point` to the horizontal or vertical segment from `start` to `end`.
-fn distance(point: Point, start: Point, end: Point) -> f32 {
-    let nearest_x = point.x.clamp(start.x.min(end.x), start.x.max(end.x));
-    let nearest_y = point.y.clamp(start.y.min(end.y), start.y.max(end.y));
-    (point.x - nearest_x).hypot(point.y - nearest_y)
+/// The point of the horizontal or vertical segment from `start` to `end` nearest to `point`.
+fn nearest(point: Point, start: Point, end: Point) -> Point {
+    Point {
+        x: point.x.clamp(start.x.min(end.x), start.x.max(end.x)),
+        y: point.y.clamp(start.y.min(end.y), start.y.max(end.y)),
+    }
+}
+
+/// How far apart two points are for snapping, with distances to the side counting for less
+/// (see [`SNAP_REACH_SIDEWAYS`]). The nearest point on a horizontal or vertical segment is the
+/// same under this measure as under the usual one.
+fn distance(a: Point, b: Point) -> f32 {
+    ((a.x - b.x) * SNAP_DISTANCE / SNAP_REACH_SIDEWAYS).hypot(a.y - b.y)
 }
 
 struct Tree<'a> {
@@ -235,6 +253,7 @@ fn units(count: usize) -> f32 {
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::{Connection, ConnectionKind};
 
     #[test]
     fn every_device_gets_its_own_spot() {
@@ -271,15 +290,15 @@ mod tests {
             x: f32::midpoint(positions[&switch].x, positions[&access_point].x),
             y: positions[&switch].y,
         };
-        let target = snap_target(&network, &positions, pc, between);
-        let before = Some(access_point);
+        let target = snap_target(&network, &positions, pc, between).unwrap();
         assert_eq!(
-            target,
-            Some(Snap {
-                upstream: router,
-                before
-            })
+            (target.upstream, target.before),
+            (router, Some(access_point))
         );
+        // It joins the line straight above it, not back at the router.
+        let [joins, end] = target.line;
+        assert_eq!((joins.x, end.x), (between.x, between.x));
+        assert!(joins.y < end.y && end.y < between.y);
         let far = Point {
             x: -1000.0,
             y: -1000.0,
@@ -297,12 +316,13 @@ mod tests {
             x: positions[&leaf].x,
             y: positions[&leaf].y + LINE_BOTTOM_GAP + LINE_TOP_GAP,
         };
-        let target = snap_target(&network, &positions, pc, below);
-        let first = Snap {
-            upstream: leaf,
-            before: None,
+        let target = snap_target(&network, &positions, pc, below).unwrap();
+        assert_eq!((target.upstream, target.before), (leaf, None));
+        let spot = Point {
+            x: below.x,
+            y: positions[&leaf].y + LINE_BOTTOM_GAP,
         };
-        assert_eq!(target, Some(first));
+        assert_eq!(target.line, [spot, spot]);
     }
 
     #[test]
@@ -321,6 +341,38 @@ mod tests {
                 "{c:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_line_reaches_further_to_the_side_than_up_or_down() {
+        // A device with one other stacked below it, and a third being dragged.
+        let (top, below, dragged) = (DeviceId(1), DeviceId(2), DeviceId(3));
+        let devices = mock_data::network().devices().get(..3).unwrap().to_vec();
+        let link = Connection {
+            upstream: top,
+            downstream: below,
+            kind: ConnectionKind::Known,
+        };
+        let network = Network::new(devices, vec![link]);
+        let mut positions = tree_layout(&network);
+        positions.remove(&dragged);
+        let line_x = positions[&below].x;
+        assert!((positions[&top].x - line_x).abs() < f32::EPSILON, "stacked");
+
+        let beside = Point {
+            x: line_x + 100.0,
+            y: positions[&below].y,
+        };
+        let joined = snap_target(&network, &positions, dragged, beside);
+        assert_eq!(joined.map(|s| s.upstream), Some(top));
+        let as_far_above = Point {
+            x: line_x,
+            y: positions[&top].y - 100.0,
+        };
+        assert_eq!(
+            snap_target(&network, &positions, dragged, as_far_above),
+            None
+        );
     }
 
     #[test]

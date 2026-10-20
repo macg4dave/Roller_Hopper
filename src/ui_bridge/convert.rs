@@ -309,6 +309,16 @@ pub(super) fn bounds(positions: &Positions) -> ui::MapBounds {
 }
 
 /// A polyline as SVG path commands.
+/// The line a dragged device would join by, highlighted, so it is drawn on top.
+pub(super) fn preview_line(points: &[Point]) -> ui::LineSet {
+    ui::LineSet {
+        commands: solid(points).into(),
+        colour: colour(None),
+        inferred: false,
+        selected: true,
+    }
+}
+
 fn solid(points: &[Point]) -> String {
     let commands = points.iter().enumerate().map(|(i, p)| {
         let command = if i == 0 { 'M' } else { 'L' };

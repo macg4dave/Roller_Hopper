@@ -151,16 +151,18 @@ impl AppState {
         snap_target(&self.network, &self.positions, id, at)
     }
 
-    /// The connections to draw: while a device is dragged, those it would leave if dropped now.
+    /// The connections to draw: all but the dragged device's uplink, which [`Self::preview`]
+    /// stands in for.
     fn links(&self) -> Vec<Connection> {
-        let Some(id) = self.dragging else {
-            return self.network.connections().to_vec();
-        };
-        // A what-if copy, so the preview is exactly what dropping would do.
-        let mut preview = self.network.clone();
-        let snap = self.snap(id);
-        preview.connect(id, snap.map(|s| s.upstream), snap.and_then(|s| s.before));
-        preview.connections().to_vec()
+        let mut links = self.network.connections().to_vec();
+        links.retain(|c| Some(c.downstream) != self.dragging);
+        links
+    }
+
+    /// While a device is dragged near a line, the short line showing where it would join.
+    fn preview(&self) -> Option<[Point; 2]> {
+        let snap = self.dragging.and_then(|id| self.snap(id))?;
+        Some(snap.line)
     }
 
     /// Ends a drag: the device joins the line it was dropped on, or stands alone, and the map
@@ -584,8 +586,11 @@ mod tests {
         };
         state.positions.insert(pc, between);
         state.dragging = Some(pc);
-        let preview = state.links().into_iter().filter(|c| c.downstream == pc);
-        assert_eq!(preview.map(|c| c.upstream).collect::<Vec<_>>(), [router]);
+        assert!(
+            state.links().iter().all(|c| c.downstream != pc),
+            "old line hidden"
+        );
+        assert!(state.preview().is_some());
 
         state.drop_dragged();
         assert_eq!(state.dragging, None);
@@ -608,6 +613,7 @@ mod tests {
         );
         state.dragging = Some(pc);
         assert!(state.links().iter().all(|c| c.downstream != pc));
+        assert_eq!(state.preview(), None);
         state.drop_dragged();
         assert!(state.network.uplink(pc).is_none());
     }
