@@ -16,18 +16,27 @@ Each guide is short. Read the ones your task touches **before** editing; when un
 
 | Guide | Read when |
 | --- | --- |
-| [docs/agents/workflow.md](docs/agents/workflow.md) | Always — delete → combine → add, and agent conduct |
+| [docs/agents/workflow.md](docs/agents/workflow.md) | Always — delete → combine → add, planning from the roadmap and backlog, agent conduct |
 | [docs/agents/collaboration.md](docs/agents/collaboration.md) | Always — working alongside other agents (Claude, Codex) |
 | [docs/agents/product.md](docs/agents/product.md) | Any feature or UI work — product brief, scope limits, definition of done |
 | [docs/agents/rust.md](docs/agents/rust.md) | Writing or reviewing Rust code, build scripts or dependencies |
 | [docs/agents/slint.md](docs/agents/slint.md) | UI, UI text or translation work, or code that connects the model to the UI |
 | [docs/agents/tooling.md](docs/agents/tooling.md) | Always — choose existing tooling before automation; no disposable task scripts |
 
+## Planning
+
+The [roadmap](docs/roadmap.md) says what to do next; the [backlog](docs/.backlog.md) holds
+blockers and bigger needs found along the way. Both are living documents that every task keeps
+current ([workflow.md](docs/agents/workflow.md#planning-roadmap-and-backlog)).
+
 ## Architecture
 
 - Keep the network model free of UI code: it MUST NOT depend on Slint. That separation is what
-  lets a real backend replace the mock data later — no extra abstraction is needed beyond it.
+  lets real scanning, files and AI feed the same model the UI already shows — no extra
+  abstraction is needed beyond it.
 - Rust owns the data and the logic; the UI presents it. One thin bridge converts between them.
+  Background work hands owned results back to that one Rust-owned project; there is no second
+  copy of the inventory.
 - Change the layout only through delete → combine ([workflow.md](docs/agents/workflow.md)), and
   keep [README.md](README.md) in step when you do.
 
@@ -65,6 +74,7 @@ Deleted:   what was removed and why
 Combined:  what was merged or extended instead of duplicated
 Added:     each new file / type / dependency, with a one-line justification
 Gate:      fmt ✓/✗ · clippy ✓/✗ · test ✓/✗ (n passed) · build ✓/✗
+Plan:      roadmap/backlog changes: tasks removed or added, blockers found or resolved
 Notes:     decisions made, limitations, follow-ups noticed but not done
 Next:      only if unfinished — what remains, and where
 ```

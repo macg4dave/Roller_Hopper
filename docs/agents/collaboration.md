@@ -29,7 +29,11 @@ before starting any task. Part of the agent rules indexed in [AGENTS.md](../../A
   git worktree add ../<repository>-<agent>-<topic> -b <agent>/<topic>
   ```
 
-  Branch names start with the agent (`claude/…`, `codex/…`) so ownership is obvious.
+  Branch names start with the agent (`claude/…`, `codex/…`) so ownership is obvious; for
+  roadmap work, the topic starts with the task ID (`claude/be-0013-owned-metadata`) so two
+  agents do not take the same task. Check `git branch -a` for that ID first.
+- Roadmap and backlog edits from parallel branches collide easily: change only the rows your
+  task affects.
 - `cargo fmt --all` rewrites every file. Run it only when the working tree holds nothing but your
   own changes; otherwise format just your files with `rustfmt <path>`. The gate's
   `cargo fmt --all --check` never writes, so it is always safe.

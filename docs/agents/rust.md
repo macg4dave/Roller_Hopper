@@ -73,7 +73,7 @@ Write tests generously, because they make changes safe. But they serve the app; 
 built around them.
 
 - Unit-test model logic in a `#[cfg(test)] mod tests` next to the code: filtering, search,
-  editing name/role/notes, adding a custom role, and mock data consistency (unique IDs, IPs and
+  editing name/role/notes, adding a custom role, and sample data consistency (unique IDs, IPs and
   MACs; every connection references existing devices). Add or extend tests whenever you add or
   change testable logic.
 - Test behaviour, not implementation details. No tests that only restate a constant.
