@@ -1,7 +1,232 @@
 Evidence about one device:
 [
-  {"id": "E1", "source": "reverse DNS", "age": "2 min", "fact": "hostname \"DESKTOP-4F7K2QD.lan\""},
-  {"id": "E2", "source": "TCP scan", "age": "2 min", "fact": "open: 135, 139, 445, 3389"},
-  {"id": "E3", "source": "service probe", "age": "2 min", "fact": "TCP 3389 answered an RDP handshake"},
-  {"id": "E4", "source": "neighbour table", "age": "2 min", "fact": "MAC vendor \"Micro-Star INTL Co., Ltd.\""}
+  {
+    "id": "E1",
+    "source": "host discovery (ARP ping)",
+    "age": "1 min",
+    "fact": {"address": "192.168.1.20", "status": "up", "reason": "arp-response", "latency_ms": 0.42}
+  },
+  {
+    "id": "E2",
+    "source": "neighbour table",
+    "age": "1 min",
+    "fact": {"mac": "00:11:32:9A:4C:E1", "vendor": "Synology Incorporated"}
+  },
+  {
+    "id": "E3",
+    "source": "reverse DNS",
+    "age": "1 min",
+    "fact": {"ptr": "DiskStation.lan"}
+  },
+  {
+    "id": "E4",
+    "source": "TCP SYN scan",
+    "age": "1 min",
+    "fact": {
+      "scanned": "1000 most common ports",
+      "open": [22, 80, 111, 139, 443, 445, 548, 2049, 5000, 5001],
+      "closed": 990,
+      "filtered": 0
+    }
+  },
+  {
+    "id": "E5",
+    "source": "UDP scan",
+    "age": "1 min",
+    "fact": {
+      "scanned": [53, 67, 123, 137, 161, 1900, 5353],
+      "open": [137, 5353],
+      "open|filtered": [161, 1900],
+      "closed": [53, 67, 123]
+    }
+  },
+  {
+    "id": "E6",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "22/tcp", "state": "open", "reason": "syn-ack", "service": "ssh",
+      "product": "OpenSSH", "version": "8.2", "extrainfo": "protocol 2.0",
+      "cpe": ["cpe:/a:openbsd:openssh:8.2"],
+      "banner": "SSH-2.0-OpenSSH_8.2"
+    }
+  },
+  {
+    "id": "E7",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "80/tcp", "state": "open", "service": "http", "product": "nginx",
+      "scripts": {
+        "http-title": "Did not follow redirect to http://DiskStation.lan:5000/",
+        "http-server-header": "nginx"
+      }
+    }
+  },
+  {
+    "id": "E8",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "111/tcp", "state": "open", "service": "rpcbind", "version": "2-4",
+      "extrainfo": "RPC #100000",
+      "scripts": {
+        "rpcinfo": [
+          "100000 2,3,4 111/tcp rpcbind",
+          "100003 3,4 2049/tcp nfs",
+          "100005 1,2,3 892/tcp mountd",
+          "100021 1,3,4 4045/tcp nlockmgr"
+        ]
+      }
+    }
+  },
+  {
+    "id": "E9",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "139/tcp", "state": "open", "service": "netbios-ssn", "product": "Samba smbd",
+      "version": "4.6.2", "cpe": ["cpe:/a:samba:samba"]
+    }
+  },
+  {
+    "id": "E10",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "443/tcp", "state": "open", "service": "ssl/http", "product": "nginx",
+      "scripts": {
+        "http-title": "Synology DiskStation",
+        "ssl-cert": {
+          "subject": "commonName=synology/organizationName=Synology Inc./countryName=TW",
+          "issuer": "commonName=Synology Inc. CA/organizationName=Synology Inc./countryName=TW",
+          "not_before": "2024-03-02T09:14:51",
+          "not_after": "2026-03-02T09:14:51",
+          "key": "rsa 2048"
+        },
+        "tls-alpn": ["h2", "http/1.1"]
+      }
+    }
+  },
+  {
+    "id": "E11",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "445/tcp", "state": "open", "service": "microsoft-ds", "product": "Samba smbd",
+      "version": "4.6.2",
+      "scripts": {
+        "smb2-security-mode": {"3.1.1": "Message signing enabled but not required"},
+        "smb-protocols": ["2.0.2", "2.1", "3.0", "3.0.2", "3.1.1"]
+      }
+    }
+  },
+  {
+    "id": "E12",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "548/tcp", "state": "open", "service": "afp", "product": "Netatalk",
+      "version": "3.1.12",
+      "scripts": {
+        "afp-serverinfo": {
+          "server_name": "DiskStation",
+          "machine_type": "Netatalk3.1.12",
+          "afp_versions": ["AFP3.4", "AFP3.3", "AFP3.2", "AFP3.1", "AFPX03"],
+          "uams": ["DHX2", "DHCAST128"]
+        }
+      }
+    }
+  },
+  {
+    "id": "E13",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {"port": "2049/tcp", "state": "open", "service": "nfs", "version": "3-4", "extrainfo": "RPC #100003"}
+  },
+  {
+    "id": "E14",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "5000/tcp", "state": "open", "service": "http", "product": "nginx",
+      "scripts": {"http-title": "Synology DiskStation", "http-favicon": "Synology DSM"}
+    }
+  },
+  {
+    "id": "E15",
+    "source": "service detection",
+    "age": "1 min",
+    "fact": {
+      "port": "5001/tcp", "state": "open", "service": "ssl/http", "product": "nginx",
+      "scripts": {"http-title": "Synology DiskStation"}
+    }
+  },
+  {
+    "id": "E16",
+    "source": "SMB host script (smb-os-discovery)",
+    "age": "1 min",
+    "fact": {
+      "os": "Windows 6.1 (Samba 4.6.2)",
+      "computer_name": "diskstation",
+      "netbios_name": "DISKSTATION",
+      "workgroup": "WORKGROUP",
+      "system_time": "2026-10-20T10:42:07+01:00"
+    }
+  },
+  {
+    "id": "E17",
+    "source": "NetBIOS name query (nbstat)",
+    "age": "1 min",
+    "fact": {"netbios_name": "DISKSTATION", "user": "<unknown>", "mac": "<unknown>", "names": ["DISKSTATION<00>", "DISKSTATION<20>", "WORKGROUP<00>"]}
+  },
+  {
+    "id": "E18",
+    "source": "OS detection (TCP/IP fingerprint)",
+    "age": "1 min",
+    "fact": {
+      "matches": [
+        {"name": "Linux 4.15 - 5.19", "accuracy": 96, "vendor": "Linux", "family": "Linux", "generation": "4.X", "type": "general purpose"},
+        {"name": "Synology DiskStation Manager 7.1 (Linux 4.4)", "accuracy": 94, "vendor": "Synology", "family": "Linux", "type": "storage-misc"},
+        {"name": "OpenWrt 21.02 (Linux 5.4)", "accuracy": 91, "vendor": "Linux", "family": "Linux", "type": "WAP"}
+      ],
+      "uptime_days": 23.4,
+      "network_distance_hops": 1
+    }
+  },
+  {
+    "id": "E19",
+    "source": "mDNS",
+    "age": "3 min",
+    "fact": {
+      "name": "DiskStation.local",
+      "services": ["_smb._tcp", "_afpovertcp._tcp", "_adisk._tcp", "_http._tcp", "_device-info._tcp", "_nfs._tcp"],
+      "txt": {
+        "_http._tcp": "vendor=Synology model=DS920+ version_major=7 version_minor=2 version_build=72806 admin_port=5000 secure_admin_port=5001",
+        "_device-info._tcp": "model=Xserve",
+        "_adisk._tcp": "sys=waMa=0,adVF=0x100 dk0=adVN=TimeMachine,adVF=0x82"
+      }
+    }
+  },
+  {
+    "id": "E20",
+    "source": "SSDP",
+    "age": "4 min",
+    "fact": {
+      "server": "Synology/DSM/192.168.1.20",
+      "st": "upnp:rootdevice",
+      "location": "http://192.168.1.20:5000/ssdp/desc-DSM-eth0.xml",
+      "device_type": "urn:schemas-upnp-org:device:Basic:1",
+      "friendly_name": "DiskStation (DS920+)",
+      "manufacturer": "Synology",
+      "model_name": "DS920+",
+      "model_number": "DS920+ 7.2-72806"
+    }
+  },
+  {
+    "id": "E21",
+    "source": "traceroute",
+    "age": "1 min",
+    "fact": {"hops": [{"ttl": 1, "rtt_ms": 0.42, "address": "192.168.1.20"}]}
+  }
 ]

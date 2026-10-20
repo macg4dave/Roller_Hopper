@@ -1,0 +1,14 @@
+import { Theme } from "theme.slint";
+
+// The AI settings window's text styles: a section heading and a small explanatory note.
+export component SectionTitle inherits Text {
+    font-size: Theme.font-heading;
+    font-weight: 600;
+    color: Theme.text;
+}
+
+export component Note inherits Text {
+    font-size: Theme.font-small;
+    color: Theme.text-muted;
+    wrap: word-wrap;
+}

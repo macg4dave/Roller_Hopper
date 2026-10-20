@@ -89,8 +89,9 @@ Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
   data only". Settings holds a pointer to the View menu and opens the AI settings window:
-  install Qwen3-4B or Qwen3-0.6B, load one (CPU, or GPU in a `cuda` build), and Run it on
-  an editable prompt and sample file. Its output is shown raw, not checked against the
+  install Qwen3-4B, Qwen3-0.6B or SmolLM2-135M, load one (CPU, or GPU in a `cuda` build), and Run it on
+  an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings. The
+  settings and edited texts are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
 - The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
   depth and pace presets; method labels include SNMP, ONVIF and LLDP, which are not offered;

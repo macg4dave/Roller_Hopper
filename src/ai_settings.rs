@@ -2,6 +2,8 @@
 //! the one picked, and runs it on the prompt and evidence, so the window stays responsive
 //! through downloads of gigabytes and answers that take minutes.
 
+mod generation;
+
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,18 +13,34 @@ use slint::{
     CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel, Weak,
 };
 
-use crate::ai::{self, InstallError, Job, MODELS, Model, RunError, Worker, WorkerEvent};
-use crate::ui::{AiSettingsWindow, AppWindow, InstallOutcome, ModelState};
+use crate::ai::{
+    self, Answered, End, Generation, InstallError, Job, MODELS, Model, RunError, Worker,
+    WorkerEvent,
+};
+use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, InstallOutcome, ModelState};
 
 /// Opens the window from Settings, bringing back the same window each time.
 pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     let window = AiSettingsWindow::new()?;
     show_offers(&window);
-    window.set_prompt(ai::PROMPT.into());
-    window.set_input(ai::SAMPLE_EVIDENCE.into());
+    restore_texts(&window);
+    restore_generation(&window);
+    window.set_max_answer_tokens(i32::try_from(ai::MAX_ANSWER_TOKENS).unwrap_or(i32::MAX));
     // A CUDA build uses the GPU unless the user switches it off.
     window.set_gpu_built(ai::gpu_built());
     window.set_use_gpu(ai::gpu_built());
+    let restoring = window.as_weak();
+    window.on_restore_texts(move || {
+        if let Some(open) = restoring.upgrade() {
+            restore_texts(&open);
+        }
+    });
+    let resetting = window.as_weak();
+    window.on_restore_generation(move || {
+        if let Some(open) = resetting.upgrade() {
+            restore_generation(&open);
+        }
+    });
 
     let cancel = Arc::new(AtomicBool::new(false));
     let (weak, flag) = (window.as_weak(), Arc::clone(&cancel));
@@ -67,6 +85,7 @@ fn connect_worker(window: &AiSettingsWindow) {
     window.on_load(move |index| {
         if let Some(open) = loading.upgrade() {
             let model = installed_model(&open, index);
+            open.set_can_think(model.is_some_and(Model::thinks));
             let gpu = open.get_use_gpu();
             send(&open, &loader, Job::Load { model, gpu });
         }
@@ -81,12 +100,39 @@ fn connect_worker(window: &AiSettingsWindow) {
             send(&open, &mover, Job::Load { model, gpu });
         }
     });
+    let stopper = Rc::clone(&worker);
+    window.on_stop(move || stopper.stop());
     let running = window.as_weak();
     window.on_run(move |prompt, input| {
         if let Some(open) = running.upgrade() {
             let (system, user) = (prompt.into(), input.into());
-            send(&open, &worker, Job::Run { system, user });
+            let settings = generation::from_ui(&open.get_generation());
+            let job = Job::Run {
+                system,
+                user,
+                settings,
+            };
+            send(&open, &worker, job);
         }
+    });
+}
+
+fn restore_texts(window: &AiSettingsWindow) {
+    window.set_prompt(ai::PROMPT.into());
+    window.set_input(ai::SAMPLE_EVIDENCE.into());
+}
+
+fn restore_generation(window: &AiSettingsWindow) {
+    window.set_generation(generation::to_ui(&Generation::default()));
+}
+
+fn show_answered(window: &AiSettingsWindow, answered: Answered) {
+    window.set_answer_tokens(i32::try_from(answered.tokens).unwrap_or(i32::MAX));
+    window.set_answer_seconds(answered.elapsed.as_secs_f32());
+    window.set_answer_end(match answered.end {
+        End::Complete => AnswerEnd::Complete,
+        End::Limit => AnswerEnd::Limit,
+        End::Stopped => AnswerEnd::Stopped,
     });
 }
 
@@ -108,7 +154,11 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
     match event {
         WorkerEvent::Unloaded => window.set_state(ModelState::None),
         WorkerEvent::Loading => window.set_state(ModelState::Loading),
-        WorkerEvent::Ready | WorkerEvent::Finished(Ok(())) => window.set_state(ModelState::Ready),
+        WorkerEvent::Ready => window.set_state(ModelState::Ready),
+        WorkerEvent::Finished(Ok(answered)) => {
+            show_answered(window, answered);
+            window.set_state(ModelState::Ready);
+        }
         // Without a GPU the pick stays, so switching CUDA off loads it on the processor.
         WorkerEvent::LoadFailed(RunError::NoGpu) => window.set_state(ModelState::NoGpu),
         WorkerEvent::LoadFailed(e) => {
@@ -117,6 +167,7 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
         }
         WorkerEvent::Running => {
             window.set_output(SharedString::new());
+            window.set_answer_end(AnswerEnd::None);
             window.set_state(ModelState::Running);
         }
         WorkerEvent::Output(text) => window.set_output(text.into()),

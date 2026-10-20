@@ -1,0 +1,163 @@
+import { Button, Slider, SpinBox, Switch } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Note, SectionTitle } from "ai-text.slint";
+
+// How the model picks each word of an answer. Rust sets the defaults and keeps every value
+// within its limits.
+export struct GenerationSettings {
+    temperature: float,
+    top-p: float,
+    top-k: int,
+    repeat-penalty: float,
+    max-tokens: int,
+    seed: int,
+    think: bool,
+}
+
+// A labelled slider that shows its value to two decimal places.
+component SliderSetting inherits VerticalLayout {
+    in property <string> text;
+    in property <string> explanation;
+    in property <float> minimum;
+    in property <float> maximum;
+    in property <bool> enabled;
+    in-out property <float> value;
+
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        Text {
+            text: root.text;
+            color: Theme.text;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: Math.round(root.value * 100) / 100;
+            color: Theme.text-muted;
+        }
+    }
+    Slider {
+        minimum: root.minimum;
+        maximum: root.maximum;
+        step: 0.05;
+        value <=> root.value;
+        enabled: root.enabled;
+    }
+    Note { text: root.explanation; }
+}
+
+// A labelled whole-number field.
+component NumberSetting inherits VerticalLayout {
+    in property <string> text;
+    in property <string> explanation;
+    in property <int> minimum;
+    in property <int> maximum;
+    in property <int> step-size: 1;
+    in property <bool> enabled;
+    in-out property <int> value;
+
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        spacing: Theme.space-s;
+        Text {
+            text: root.text;
+            color: Theme.text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        SpinBox {
+            width: 130px;
+            minimum: root.minimum;
+            maximum: root.maximum;
+            step-size: root.step-size;
+            value <=> root.value;
+            enabled: root.enabled;
+        }
+    }
+    Note { text: root.explanation; }
+}
+
+export component GenerationPanel inherits VerticalLayout {
+    in-out property <GenerationSettings> settings;
+    // The most tokens an answer may have.
+    in property <int> max-answer-tokens;
+    // Whether the loaded model can reason before it answers.
+    in property <bool> can-think;
+    // False while an answer is being written.
+    in property <bool> enabled;
+
+    callback restore-defaults();
+
+    spacing: Theme.space-m;
+
+    SectionTitle { text: @tr("ai-settings.generation"); }
+    SliderSetting {
+        text: @tr("ai-settings.temperature");
+        explanation: @tr("ai-settings.temperature-explained");
+        minimum: 0;
+        maximum: 2;
+        value <=> root.settings.temperature;
+        enabled: root.enabled;
+    }
+    SliderSetting {
+        text: @tr("ai-settings.top-p");
+        explanation: @tr("ai-settings.top-p-explained");
+        minimum: 0.05;
+        maximum: 1;
+        value <=> root.settings.top-p;
+        enabled: root.enabled && root.settings.temperature > 0;
+    }
+    NumberSetting {
+        text: @tr("ai-settings.top-k");
+        explanation: @tr("ai-settings.top-k-explained");
+        minimum: 0;
+        maximum: 1000;
+        value <=> root.settings.top-k;
+        enabled: root.enabled && root.settings.temperature > 0;
+    }
+    SliderSetting {
+        text: @tr("ai-settings.repeat-penalty");
+        explanation: @tr("ai-settings.repeat-penalty-explained");
+        minimum: 1;
+        maximum: 2;
+        value <=> root.settings.repeat-penalty;
+        enabled: root.enabled;
+    }
+    NumberSetting {
+        text: @tr("ai-settings.max-tokens");
+        explanation: @tr("ai-settings.max-tokens-explained");
+        minimum: 1;
+        maximum: root.max-answer-tokens;
+        step-size: 100;
+        value <=> root.settings.max-tokens;
+        enabled: root.enabled;
+    }
+    NumberSetting {
+        text: @tr("ai-settings.seed");
+        explanation: @tr("ai-settings.seed-explained");
+        minimum: 0;
+        maximum: 999999;
+        value <=> root.settings.seed;
+        enabled: root.enabled && root.settings.temperature > 0;
+    }
+    VerticalLayout {
+        spacing: Theme.space-xs;
+        Switch {
+            text: @tr("ai-settings.think");
+            checked <=> root.settings.think;
+            enabled: root.enabled && root.can-think;
+        }
+        Note {
+            text: root.can-think ? @tr("ai-settings.think-explained") : @tr("ai-settings.think-unavailable");
+        }
+    }
+    HorizontalLayout {
+        alignment: start;
+        Button {
+            text: @tr("ai-settings.restore-defaults");
+            enabled: root.enabled;
+            clicked => { root.restore-defaults(); }
+        }
+    }
+}

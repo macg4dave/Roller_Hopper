@@ -250,6 +250,7 @@ mod tests {
         let model = Model {
             name: "Test",
             folder: "test",
+            arch: super::super::Arch::Qwen3,
             weights: HELLO,
             tokenizer: ModelFile {
                 name: "empty.json",
@@ -295,6 +296,7 @@ mod tests {
         let model = Model {
             name: "Tokenizer only",
             folder: "live",
+            arch: super::super::Arch::Qwen3,
             weights: super::super::QWEN3_TOKENIZER,
             tokenizer: super::super::QWEN3_TOKENIZER,
         };

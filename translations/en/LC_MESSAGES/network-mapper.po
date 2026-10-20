@@ -93,8 +93,80 @@ msgstr "Device evidence (sample file)"
 msgid "ai-settings.run"
 msgstr "Run"
 
+# Ends the answer being written.
+msgid "ai-settings.stop"
+msgstr "Stop"
+
+msgid "ai-settings.restore-texts"
+msgstr "Restore prompt and sample"
+
 msgid "ai-settings.output"
 msgstr "Output"
+
+# Under the output. {n} is the answer's length in tokens, {0} the seconds it took, {1} the
+# tokens it wrote each second.
+msgid "ai-settings.answer-stats"
+msgid_plural "ai-settings.answer-stats.plural"
+msgstr[0] "{n} token in {0} s ({1} tokens a second)"
+msgstr[1] "{n} tokens in {0} s ({1} tokens a second)"
+
+msgid "ai-settings.end-limit"
+msgstr "The answer reached the answer limit. Raise the limit to let the model finish."
+
+msgid "ai-settings.end-stopped"
+msgstr "Stopped. The answer so far is kept."
+
+# How the model picks each word of its answer.
+msgid "ai-settings.generation"
+msgstr "Answer settings"
+
+msgid "ai-settings.temperature"
+msgstr "Temperature"
+
+msgid "ai-settings.temperature-explained"
+msgstr "At 0 the model always picks its likeliest word, so the same input gives the same answer. Higher values vary the answer."
+
+msgid "ai-settings.top-p"
+msgstr "Top-p"
+
+msgid "ai-settings.top-p-explained"
+msgstr "Picks only among the likeliest words that together reach this share; 1 uses them all. Applies above temperature 0."
+
+msgid "ai-settings.top-k"
+msgstr "Top-k"
+
+msgid "ai-settings.top-k-explained"
+msgstr "Picks only among this many likeliest words; 0 means no limit. Applies above temperature 0."
+
+msgid "ai-settings.repeat-penalty"
+msgstr "Repeat penalty"
+
+msgid "ai-settings.repeat-penalty-explained"
+msgstr "Above 1, makes the model less likely to repeat what it has just written. 1 is off."
+
+msgid "ai-settings.max-tokens"
+msgstr "Answer limit (tokens)"
+
+msgid "ai-settings.max-tokens-explained"
+msgstr "Stops the answer after this many tokens. A token is a word or part of one."
+
+msgid "ai-settings.seed"
+msgstr "Seed"
+
+msgid "ai-settings.seed-explained"
+msgstr "Starts the random choices: the same seed and settings repeat a varied answer. Applies above temperature 0."
+
+msgid "ai-settings.think"
+msgstr "Let the model think first"
+
+msgid "ai-settings.think-explained"
+msgstr "The model writes out its reasoning before the answer. Slower and longer, so raise the answer limit; sometimes more accurate."
+
+msgid "ai-settings.think-unavailable"
+msgstr "The loaded model cannot think before answering."
+
+msgid "ai-settings.restore-defaults"
+msgstr "Restore defaults"
 
 msgid "ai-settings.install"
 msgstr "Install AI"

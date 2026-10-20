@@ -1,0 +1,87 @@
+import { Button, TextEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Note, SectionTitle } from "ai-text.slint";
+
+// How the last answer ended, if one finished since the window opened.
+export enum AnswerEnd { none, complete, limit, stopped }
+
+// Trying the loaded model: the prompt and evidence to send, Run and Stop, and its answer with
+// how long it was and how long it took.
+export component AiTrial inherits VerticalLayout {
+    in-out property <string> prompt;
+    in-out property <string> input;
+    in property <string> output;
+    in property <bool> can-run;
+    in property <bool> running;
+    in property <int> answer-tokens;
+    in property <float> answer-seconds;
+    in property <AnswerEnd> answer-end;
+
+    callback run(string, string);
+    callback stop();
+    callback restore-texts();
+
+    spacing: Theme.space-s;
+
+    pure function end-text(end: AnswerEnd) -> string {
+        if end == AnswerEnd.limit { return @tr("ai-settings.end-limit"); }
+        if end == AnswerEnd.stopped { return @tr("ai-settings.end-stopped"); }
+        return "";
+    }
+
+    // Seconds to one decimal place.
+    pure function tenths(value: float) -> string {
+        return Math.round(value * 10) / 10;
+    }
+
+    SectionTitle { text: @tr("ai-settings.prompt"); }
+    TextEdit {
+        text <=> root.prompt;
+        wrap: word-wrap;
+        vertical-stretch: 3;
+    }
+
+    SectionTitle { text: @tr("ai-settings.input"); }
+    TextEdit {
+        text <=> root.input;
+        wrap: word-wrap;
+        vertical-stretch: 3;
+    }
+
+    HorizontalLayout {
+        spacing: Theme.space-s;
+        if !running: Button {
+            text: @tr("ai-settings.run");
+            primary: true;
+            enabled: root.can-run;
+            clicked => { root.run(root.prompt, root.input); }
+        }
+        if running: Button {
+            text: @tr("ai-settings.stop");
+            clicked => { root.stop(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Button {
+            text: @tr("ai-settings.restore-texts");
+            enabled: !running;
+            clicked => { root.restore-texts(); }
+        }
+    }
+
+    SectionTitle { text: @tr("ai-settings.output"); }
+    TextEdit {
+        text: root.output;
+        read-only: true;
+        wrap: word-wrap;
+        vertical-stretch: 3;
+    }
+    if answer-end != AnswerEnd.none && !running: Note {
+        text: @tr("ai-settings.answer-stats" | "ai-settings.answer-stats.plural" % answer-tokens, tenths(answer-seconds), tenths(answer-seconds > 0 ? answer-tokens / answer-seconds : 0));
+    }
+    if answer-end != AnswerEnd.none && answer-end != AnswerEnd.complete && !running: Text {
+        text: end-text(answer-end);
+        color: Theme.warning;
+        font-size: Theme.font-small;
+        wrap: word-wrap;
+    }
+}

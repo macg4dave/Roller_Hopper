@@ -2,7 +2,8 @@
 
 A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-memory mock data
 only — there is no real network discovery or scanning. Settings → AI settings installs an AI
-model (Qwen3-4B, 2.5 GB, or Qwen3-0.6B, 0.6 GB) into the user's application data folder,
+model (Qwen3-4B, 2.5 GB; Qwen3-0.6B, 0.6 GB; or SmolLM2-135M, 0.15 GB) into the user's
+application data folder,
 loads one, and runs it on an editable prompt and sample device file.
 
 ## Run
