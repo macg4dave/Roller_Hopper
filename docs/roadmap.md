@@ -227,6 +227,86 @@ until their qualification task is done.
   evidence. Report false positives and abstentions for each field. Automation needs a
   stricter bar.
 
+## Agreed decisions
+
+Agreed with the user on 20 October 2026. Later tasks meet these; changing one needs the user's
+approval. Scan capabilities are as requested: BE-0007 and BE-0008 establish what netscli-core
+supports, and anything unsupported is shown as unavailable, never faked.
+
+### Workload, limits and machines
+
+- Acceptance workload: 250 devices, about 400 cards (most devices one, NAS/servers two to
+  four), 30 VMs/containers, about 2,000 services (≈8 per device), 100 saved runs and about
+  50,000 log lines.
+- On that workload: input responds within 200 ms, also during a scan; pan, zoom and animation
+  frames take at most 50 ms; RAM stays within 1 GB without the model and 2 GB with it loaded;
+  Stop is acknowledged within 1 s and settled within 10 s; closing during a run finishes
+  within 5 s with nothing left running; Save and Open each finish within 5 s.
+- Viewports: 1366×768 at 100% (minimum), 1920×1080 at 125% and 2560×1440 at 150%.
+- Machines: Windows is the user's Windows 11 Pro PC. Linux and macOS machines are still to
+  be named (BLK-009).
+
+### Scan scope and methods
+
+- Targets and exclusions: comma- or line-separated IPv4 addresses, CIDR blocks from /16 to
+  /32 (including /31 and /32) and ranges (`10.0.5.10-10.0.5.40`, short form
+  `192.168.2.1-50`). At most 65,536 target addresses per run; invalid or oversized input is
+  rejected before Start.
+- TCP ports: lists and ranges (`22,80,443,8000-8100`) with Common and All (1–65535) presets.
+- Source interface: chosen per target from the OS routing table and shown before Start; the
+  user can pin one. VPN and virtual adapters are listed and labelled, and their subnets are
+  never suggested as targets automatically.
+- Named UDP methods: mDNS/DNS-SD (5353) and SSDP/UPnP (1900) only. NetBIOS, DNS and NTP are
+  not offered, and there is no blanket UDP sweep.
+- Identification depth: Basic (open ports), Standard (adds banners and service probes; the
+  default) and Deep (every netscli-core probe).
+- Pace presets: Gentle (32 probes in flight, 25 new a second, 3 s timeout, 2 retries), Normal
+  (the default: 128, 100/s, 1.5 s, 1 retry) and Fast (512, 400/s, 1 s, 1 retry). No numeric
+  advanced controls.
+- A method the OS denies is shown as unavailable, with its reason, before Start and skipped;
+  the rest of the run goes ahead. The app never asks for elevation.
+
+### Map placement and links
+
+- One map-wide Automatic / Free toggle in the canvas controls, Automatic by default and saved
+  with the project. In Automatic, a drag snaps into the tree as now. In Free, a drop leaves
+  the whole branch where it lands, with simple connectors. Free → Automatic is an explicit
+  layout action and rearranges with animation; Automatic → Free moves nothing. Arrange always
+  tidies the whole map.
+- Line pattern stays the group's choice. Network links: observed at full strength, inferred
+  faded, manual with a small square end mark. Organisational (display-only) lines are thin,
+  light grey and unmarked. A network link the display forest cannot show is a thin curved
+  line. The map key explains all four.
+
+### AI
+
+- Baseline machine: 4-core x86-64 with AVX2 (2018 or newer) or Apple M1, 8 GB RAM. Cold load
+  within 15 s; one device's suggestion within 10 s; at most half the cores, in the
+  background; the app within 2 GB with the model loaded.
+- Fields: type (the app's device kinds or Unknown), OS family (Windows, macOS, Linux, iOS,
+  Android, network/embedded or Unknown) and a description of at most 120 characters citing
+  evidence IDs. Below the confidence cut-off a field stays Unknown.
+- Quality on held-out cases: shown suggestions are right at least 90% of the time for type
+  and 85% for OS family, and beat the rule-based baseline; descriptions contain no invented
+  facts. Abstaining is allowed.
+- Automation: both controls are off by default, set per network context and never imported
+  as on. They act only above a cut-off measured at 97% precision or better, only on empty,
+  non-manual fields and on unambiguous, non-duplicate new hosts. Each automatic change is
+  labelled AI with its model and run, and can be undone per run or per field; an auto-added
+  device can be removed.
+
+### File limits and conflicts
+
+- Open refuses files over 256 MB, more than 10,000 devices, 50,000 cards or 200,000
+  services, names over 4 KB, notes over 64 KB, icons over 256 KB each or more than 500 icons.
+- Schema: one integer version. Older supported versions are migrated; newer ones are refused.
+- Before replacing, compare size, modified time and hash with the last Open or Save; if the
+  file changed, ask Overwrite / Save As / Cancel. No lock file.
+- A symlinked project is saved through to its target. Unix keeps the file mode; Windows takes
+  permissions from the folder, a documented limit.
+- History is never deleted automatically: warn once the saved file passes 100 MB; past
+  256 MB the save fails clearly and the previous file stays.
+
 ## IDs and maintenance
 
 | Item | Format | Next unused ID |
@@ -252,17 +332,15 @@ backend to one OS, omit AI, build a custom scanner or add recovery storage.
 
 Project foundation before real scanning, reliable updates before AI, then integrated
 acceptance. Early qualification exposes scanner, file and model blockers before work depends
-on them. M-002, M-003 and independent map or model work can proceed in parallel after M-001
-(each agent in its own worktree). A failed model check blocks the AI milestones but not
-inventory work.
+on them. M-002, M-003 and independent map or model work can proceed in parallel (each agent
+in its own worktree). A failed model check blocks the AI milestones but not inventory work.
 
 | Milestone | Outcome | Entry dependencies |
 | --- | --- | --- |
-| [M-001](#m-001-acceptance-decisions) | Measurable acceptance decisions | None |
-| [M-002](#m-002-qualify-critical-dependencies) | Qualified scanner, file lifecycle and model/runtime | M-001 |
-| [M-003](#m-003-durable-inventory-and-network-contexts) | Owned metadata, durable identity, scoped endpoints | M-001 |
+| [M-002](#m-002-qualify-critical-dependencies) | Qualified scanner, file lifecycle and model/runtime | None |
+| [M-003](#m-003-durable-inventory-and-network-contexts) | Owned metadata, durable identity, scoped endpoints | None |
 | [M-004](#m-004-observations-and-manual-authority) | Provenance, manual precedence, truthful status | M-003 |
-| [M-005](#m-005-separate-map-relationships) | Ownership, connectivity and display forest separated | M-003, BE-0004 |
+| [M-005](#m-005-separate-map-relationships) | Ownership, connectivity and display forest separated | M-003 |
 | [M-006](#m-006-committed-placement-and-view-state) | Automatic/free placement and restorable view | M-005 |
 | [M-007](#m-007-complete-versioned-project-format) | Complete validated JSON document | M-004, M-006 |
 | [M-008](#m-008-native-open-save-and-save-as) | Native file lifecycle and dirty handling | M-007, BE-0010 |
@@ -279,22 +357,6 @@ inventory work.
 | [M-019](#m-019-self-contained-builds-on-three-platforms) | Runnable bundles with every required asset | M-018, M-002 |
 | [M-020](#m-020-first-working-backend-acceptance) | Evidence-backed handover | M-019 |
 
-## M-001: Acceptance decisions
-
-Goal: settle the remaining choices with the user without reopening settled scope. Each task is
-done by presenting options with a recommended default and recording the answer in the product
-brief or the dependent tasks.
-
-| Task ID | Task / completion check | Depends on |
-| --- | --- | --- |
-| BE-0002 | Agree acceptance environments and workload: about 250 devices, cards per device, guests, services, accumulated history, viewport sizes, CPU/RAM/UI latency, and cancel/close/save time limits. Identify a test machine for each OS. | — |
-| BE-0003 | Specify address/CIDR/TCP-range/exclusion syntax, source-interface selection, named UDP methods, identification depths, pacing/timeouts/retries and how optional permissions degrade. Record supported versus requested capabilities. | BE-0002 |
-| BE-0004 | Agree examples for switching between automatic and free placement, and for styling organisational versus network links. Keep whole-branch moves, simple free connectors, explicit-only rearrangement and clear-area insertion of new cards. | — |
-| BE-0005 | Agree baseline CPU hardware, AI fields/categories, resource/latency limits, Unknown handling, per-field quality targets and stricter automation thresholds, plus policy scope (global or per network) and how automation is reversed. | BE-0002 |
-| BE-0006 | Specify file size/input limits, supported-schema policy, writer-conflict and external-change behaviour, ACL/link expectations, and handling of large history without automatic deletion. | BE-0002 |
-
-Exit: each decision has an answer and reviewable examples.
-
 ## M-002: Qualify critical dependencies
 
 Goal: find hard integration problems before committing to a scanner, save path or model
@@ -303,11 +365,11 @@ Live checks need user-approved targets.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0007 | Qualify a stock netscli-core release: features, full dependency graph, licences (including bundled probe/signature data) and fit with the protected Rust 1.94 on all three OSes. Record the chosen version/features, or bring the toolchain decision to the user. | BE-0003 |
+| BE-0007 | Qualify a stock netscli-core release: features, full dependency graph, licences (including bundled probe/signature data) and fit with the protected Rust 1.94 on all three OSes. Record the chosen version/features, or bring the toolchain decision to the user. | — |
 | BE-0008 | Trace the selected scanner, interface, DNS, neighbour and ICMP paths for child processes, capture/native libraries, safe API access and privileges. Produce a per-OS method matrix; qualify only necessary supplementary crates; get approval for any unavoidable exception. | BE-0007 |
 | BE-0009 | Exercise incremental results, pause (no new probes), stop/close task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
-| BE-0010 | Qualify native dialogs and one safe save/replace route on all three OSes, including Linux in-process dialogs, ACL/link/metadata behaviour and failed replacement. No helper executable or separately installed runtime. | BE-0006 |
-| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3/Candle is the first candidate, not a foregone choice. | BE-0005 |
+| BE-0010 | Qualify native dialogs and one safe save/replace route on all three OSes, including Linux in-process dialogs, ACL/link/metadata behaviour and failed replacement. No helper executable or separately installed runtime. | — |
+| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3/Candle is the first candidate, not a foregone choice. | — |
 | BE-0012 | Consolidate the qualified versions, features, assets and approvals; confirm each M-002 blocker in the backlog is resolved or still honestly open. | BE-0007, BE-0008, BE-0009, BE-0010, BE-0011 |
 
 Exit: every selected dependency has a compliant route. A successful build alone does not
@@ -350,7 +412,7 @@ Goal: reuse tree and arrangement behaviour without coupling it to network claims
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0024 | Separate evidence-backed network relationships from ownership and a saved display forest over existing card IDs. Keep network edges the forest cannot show. | BE-0018, BE-0004 |
+| BE-0024 | Separate evidence-backed network relationships from ownership and a saved display forest over existing card IDs. Keep network edges the forest cannot show. | BE-0018 |
 | BE-0025 | Drive traversal, `Arrangement` and snapping from display parentage, explicit root order and ordered tiers/siblings. | BE-0024 |
 | BE-0026 | Make display reparenting one validated presentation edit (no `Network::connect`); reject display cycles and multiple parents. | BE-0025 |
 | BE-0027 | Distinguish observed, inferred, manual and organisational links on the canvas and in its key. | BE-0026 |
@@ -366,7 +428,7 @@ Goal: keep the user's map across edits, scans and file operations.
 | --- | --- | --- |
 | BE-0029 | Store committed icon centres, arrangement, placement mode and layout parameters in Rust; keep pointer previews and spring state transient. | BE-0028 |
 | BE-0030 | Free positioning with simple derived connectors; one committed move for a displayed parent and all descendants; Cancel restores the branch. | BE-0029 |
-| BE-0031 | Keep automatic tree/snap/order/animation; implement the agreed mode switch and an explicit layout action. Remove the prototype's Reset layout. | BE-0030, BE-0004 |
+| BE-0031 | Keep automatic tree/snap/order/animation; implement the agreed mode switch and an explicit layout action. Remove the prototype's Reset layout. | BE-0030 |
 | BE-0032 | Place new cards in a clear area without moving established positions; refresh and ordinary edits keep placement and display parentage. | BE-0031 |
 | BE-0033 | Capture view centre, zoom, panels, filters, selection and display options into the document; restore after the viewport exists without the initial fit overriding them. | BE-0032 |
 
@@ -379,7 +441,7 @@ Goal: the complete save contract before native file controls.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0034 | Define the `.rhopper.json` schema/version and complete-state checklist (IDs, contexts, inventory, relationships, layout/view, manual data, scan settings/results/history/logs, AI state/model identity). | BE-0023, BE-0033, BE-0006 |
+| BE-0034 | Define the `.rhopper.json` schema/version and complete-state checklist (IDs, contexts, inventory, relationships, layout/view, manual data, scan settings/results/history/logs, AI state/model identity). | BE-0023, BE-0033 |
 | BE-0035 | Embed custom SVG icons with stable identifiers, validated size/content and built-in fallbacks; no absolute paths. | BE-0034 |
 | BE-0036 | Serialise immutable revisioned snapshots off the UI thread; keep all history while bounding working buffers; clear failure past an approved file limit. | BE-0035 |
 | BE-0037 | Parse Open into a separate candidate and validate schema, counts/strings, references, ownership/display cycles, placement and finite coordinates/zoom before installing it. | BE-0036 |
@@ -397,7 +459,7 @@ Goal: explicit saves that protect the previous file.
 | --- | --- | --- |
 | BE-0040 | Connect the qualified native dialogs; cancelling a picker changes neither document nor path. | BE-0039, BE-0010 |
 | BE-0041 | Write a complete sibling temporary file, commit via the qualified replacement route, keep the old file on failure and report errors visibly. | BE-0040 |
-| BE-0042 | One writer per file; detect external changes before replacing, per BE-0006. Test races and access failures. | BE-0041 |
+| BE-0042 | One writer per file; detect external changes before replacing, as agreed. Test races and access failures. | BE-0041 |
 | BE-0043 | Serialise writes per destination with generation/revision/path receipts; Save As changes the active path only on success. | BE-0042 |
 | BE-0044 | Dirty indicator and Save/Discard/Cancel before close or replacement; invalid Open keeps the project; a document switch invalidates old callbacks. | BE-0043 |
 | BE-0045 | Restore full state with motion at rest and old observations as last-known; a saved active run reopens as history; nothing starts traffic or AI on Open. | BE-0044 |
@@ -423,7 +485,7 @@ Goal: truthful run settings before any network traffic.
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
 | BE-0050 | Enumerate interfaces, addresses and routes through qualified APIs so an empty project can scan; distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
-| BE-0051 | Validate IPv4 addresses/CIDRs/exclusions lazily, including /31 and /32; show the source interface; mapped prefixes never grant permission. | BE-0050, BE-0003 |
+| BE-0051 | Validate IPv4 addresses/CIDRs/exclusions lazily, including /31 and /32; show the source interface; mapped prefixes never grant permission. | BE-0050 |
 | BE-0052 | TCP lists/ranges, named UDP protocols and supported identification depth; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
 | BE-0053 | Show available/unavailable methods with reasons, estimated work and limits before Start; reject invalid or oversized work without probing. | BE-0052, BE-0009 |
 | BE-0054 | Freeze context, targets, exclusions, ports, methods and limits into an immutable run configuration. | BE-0053 |
@@ -499,7 +561,7 @@ Goal: one qualified model useful inside the existing discovery and details workf
 | BE-0082 | Bundle and load the model, tokenizer/template and runtime locally with pinned identity, hashes and notices; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
 | BE-0084 | Show type/OS-family/description suggestions with evidence, reasons and labelled confidence; explicit accept/edit/reject; suggestions never become observations. | BE-0083 |
-| BE-0085 | Evaluate held-out cases against the evidence baseline; measure per-field false positives/abstention, peak RAM, CPU, cold load and latency on agreed machines. | BE-0084, BE-0005 |
+| BE-0085 | Evaluate held-out cases against the evidence baseline; measure per-field false positives/abstention, peak RAM, CPU, cold load and latency on agreed machines. | BE-0084 |
 | BE-0086 | Discard stale generation/evidence/model/policy results; protect edits made during inference; missing or corrupt assets leave manual workflows working, with no download or substitute. | BE-0085 |
 
 ## M-017: Explicit AI automation controls
@@ -508,7 +570,7 @@ Goal: the agreed opt-ins without giving AI authority over user data.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0087 | Separate "Fill missing inferred fields" and "Automatically add new devices" controls, both off by default, with the agreed scope and explanations. | BE-0086, BE-0005 |
+| BE-0087 | Separate "Fill missing inferred fields" and "Automatically add new devices" controls, both off by default, with the agreed scope and explanations. | BE-0086 |
 | BE-0088 | Apply missing-field suggestions only after revision/policy/manual checks, keeping source/model identity and a way to reverse them. | BE-0087 |
 | BE-0089 | Auto-add only with valid scoped evidence, resolved identity and the agreed thresholds; ambiguous or possible-duplicate findings stay in review. | BE-0088 |
 | BE-0090 | Save policy, suggestions, accepted provenance and model identity; Open runs nothing and does not trust imported consent. | BE-0089, BE-0079 |
@@ -522,7 +584,7 @@ Goal: combined behaviour under realistic load.
 | --- | --- | --- |
 | BE-0092 | Cross-feature deterministic tests: hostile files/replies, ownership/display cycles, wrong-context identity, stale results, save receipts. | BE-0091 |
 | BE-0093 | Stress queues and work limits; Stop stays responsive and late results are handled while AI or file work is busy; nothing collects after close. | BE-0092 |
-| BE-0094 | Measure about 250 devices by real card/service/history counts, including animation, projection, save snapshots and AI memory; optimise only measured bottlenecks. | BE-0093, BE-0002 |
+| BE-0094 | Measure about 250 devices by real card/service/history counts, including animation, projection, save snapshots and AI memory; optimise only measured bottlenecks. | BE-0093 |
 | BE-0095 | Keyboard/focus/error feedback, readable provenance and conflicts, no dead controls and complete translations across map, discovery, files and AI. | BE-0094 |
 | BE-0096 | Remove remaining production simulation paths and the Forget/Reset controls; update the README; any kept demo mode needs the user's decision. | BE-0095 |
 
@@ -544,7 +606,7 @@ Goal: close the roadmap with demonstrated behaviour.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0102 | Confirm machines, networks, local/routed/VLAN targets, ports/methods and live-test approval with the user. | BE-0101, BE-0002 |
+| BE-0102 | Confirm machines, networks, local/routed/VLAN targets, ports/methods and live-test approval with the user. | BE-0101 |
 | BE-0103 | On each OS: real local/routed IPv4 runs, chosen TCP ranges/named UDP/depth, pause/resume/stop, navigation, permission degradation and bounded close, keeping partial results. | BE-0102 |
 | BE-0104 | Repeat-run identity, conflicts, manual precedence and map preservation; full Open/Save/Save As, failed-save and external-change handling; cross-OS reopening. | BE-0103 |
 | BE-0105 | Offline AI suggestions and both opt-ins against the agreed criteria, including ambiguity, spoofed evidence and a missing model. | BE-0104, BE-0091 |
