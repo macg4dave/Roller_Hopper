@@ -1,12 +1,9 @@
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 
-// Title, search, Scan, the edit page toggle and Settings.
+// Title, Scan and Settings. Search and the edit page are reached from the device list.
 export component Header inherits Rectangle {
-    // Whether the edit page is showing instead of the map.
-    in-out property <bool> editing;
-
     height: Theme.header-height;
     background: Theme.surface;
 
@@ -38,26 +35,14 @@ export component Header inherits Rectangle {
 
         Rectangle { horizontal-stretch: 1; }
 
-        LineEdit {
-            width: 320px;
-            placeholder-text: @tr("header.search-placeholder");
-            edited(text) => { Bridge.search(text); }
-        }
         Button {
             text: Bridge.scanning ? @tr("header.scanning") : @tr("header.scan");
-            // Wide enough for both labels, so the search field does not shift during a scan.
+            // Wide enough for both labels, so the buttons do not shift during a scan.
             min-width: 120px;
             icon: @image-url("icons/scan.svg");
             colorize-icon: true;
             enabled: !Bridge.scanning;
             clicked => { Bridge.scan(); }
-        }
-        Button {
-            text: @tr("header.edit-devices");
-            icon: @image-url("icons/edit.svg");
-            colorize-icon: true;
-            checkable: true;
-            checked <=> root.editing;
         }
         Button {
             text: @tr("header.settings");

@@ -34,7 +34,7 @@ export component AppWindow inherits Window {
     property <length> edit-roles-width: Theme.edit-roles-width;
 
     VerticalLayout {
-        Header { editing <=> root.editing; }
+        Header { }
 
         Rectangle {
             vertical-stretch: 1;
@@ -49,6 +49,7 @@ export component AppWindow inherits Window {
                         min-width: Theme.panel-min-width;
                         horizontal-stretch: 0;
                         show-on-map(device) => { canvas.centre-on(device.x, device.y); }
+                        edit => { editing = true; }
                     }
                     canvas := TopologyCanvas {
                         min-width: Theme.canvas-min-width;

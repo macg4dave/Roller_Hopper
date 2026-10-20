@@ -1,12 +1,15 @@
-import { Button, ListView } from "std-widgets.slint";
+import { Button, LineEdit, ListView } from "std-widgets.slint";
 import { Bridge, DeviceView, StatusFilter } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
 
-// Left panel: All / Online / Offline filters and the matching devices.
+// Left panel: search, the way to the edit page, All / Online / Offline filters and the
+// matching devices.
 export component DeviceList inherits Rectangle {
     // A device was double-clicked: bring it into view on the map.
     callback show-on-map(DeviceView);
+    // Opens the edit page.
+    callback edit();
 
     background: Theme.surface;
 
@@ -19,6 +22,17 @@ export component DeviceList inherits Rectangle {
     VerticalLayout {
         padding: Theme.space-m;
         spacing: Theme.space-s;
+
+        LineEdit {
+            placeholder-text: @tr("list.search-placeholder");
+            edited(text) => { Bridge.search(text); }
+        }
+        Button {
+            text: @tr("list.edit-devices");
+            icon: @image-url("icons/edit.svg");
+            colorize-icon: true;
+            clicked => { root.edit(); }
+        }
 
         HorizontalLayout {
             spacing: Theme.space-xs;

@@ -15,17 +15,11 @@ msgstr ""
 msgid "app.title"
 msgstr "Network Mapper"
 
-msgid "header.search-placeholder"
-msgstr "Search by name, IP or MAC address"
-
 msgid "header.scan"
 msgstr "Scan"
 
 msgid "header.scanning"
 msgstr "Scanning…"
-
-msgid "header.edit-devices"
-msgstr "Edit devices"
 
 msgid "header.settings"
 msgstr "Settings"
@@ -37,6 +31,13 @@ msgid "settings.map-display-moved"
 msgstr "What the map shows for each device is set with the View button on the map."
 
 # Device list. filter.button: {0} is the filter name, {1} the number of devices.
+msgid "list.search-placeholder"
+msgstr "Search by name, IP or MAC address"
+
+# Opens the page for editing devices, roles and groups.
+msgid "list.edit-devices"
+msgstr "Edit devices"
+
 msgid "filter.all"
 msgstr "All"
 
