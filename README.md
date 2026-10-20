@@ -4,9 +4,10 @@ A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-me
 only — there is no real network discovery or scanning. Settings → AI settings installs an AI
 model (Qwen3-4B, 2.5 GB; Qwen3-0.6B, 0.6 GB; or SmolLM2-135M, 0.15 GB) into the user's
 application data folder,
-loads one, and runs it on an editable prompt and sample device file. A GGUF file of your own
-(Qwen3, Qwen2 or Llama, with its tokenizer in the file) placed directly in that `models` folder
-— `%APPDATA%\Network Mapper\models\` on Windows — is listed beside them.
+loads one with [mistral.rs](https://github.com/EricLBuehler/mistral.rs), and runs it on an
+editable prompt and sample device file. A GGUF file of your own (most Llama, Mistral, Phi and
+Qwen text models) placed directly in that `models` folder — `%APPDATA%\Network Mapper\models\`
+on Windows — is listed beside them; its own tokenizer and chat template are used.
 
 ## Run
 
@@ -38,13 +39,15 @@ NVCC_APPEND_FLAGS="-Xcompiler /Zc:preprocessor -Xcompiler /MD"
 ```
 
 then `cargo build --release --features cuda`. CUDA 13's headers need MSVC's conforming
-preprocessor, and `/MD` matches Skia's C runtime. Candle's kernel build does not notice a
-changed flag, so after changing one run `cargo clean --release -p candle-kernels`. The
+preprocessor, and `/MD` matches Skia's C runtime. The CUDA kernel builds inside mistral.rs
+(its `candle-kernels` and `mistralrs-quant` crates) do not notice a changed flag, so after
+changing one run `cargo clean --release -p candle-kernels -p mistralrs-quant`. The
 program loads `cublas64_13.dll`, `cublasLt64_13.dll`, `cudart64_13.dll`, `curand64_10.dll`,
 `nvrtc64_130_0.dll` and `nvrtc-builtins64_133.dll` at start-up: copy them from the toolkit's
 `bin\x64` beside the executable (and beside the test binaries in `deps\` for `cargo test`).
 The gate's `cargo clippy --all-features` builds this feature too, so it needs the same
-settings.
+settings. mistral.rs 0.8.1 also needs `nvcc` on `PATH` and a CUDA toolkit no newer than 13.2,
+so the 13.3 toolkit above does not build it yet (backlog BLK-012).
 
 ## Icons
 
@@ -72,7 +75,7 @@ src/model/         pure data and logic (devices with their network cards, virtua
                    layout; the simulated discovery run) — no Slint imports
 src/ai.rs          the AI models offered, pinned by revision and hash, where they are
                    installed, the user's own GGUF files, the prompt and sample; ai/ downloads
-                   and checks them and runs the loaded one with Candle (CPU or CUDA) — no
+                   and checks them and runs the loaded one with mistral.rs (CPU or CUDA) — no
                    Slint imports
 src/ai_settings.rs the AI settings window: install, load/unload, GPU switch and Run in the
                    background

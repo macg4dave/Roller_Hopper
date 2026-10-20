@@ -1,7 +1,7 @@
 //! The AI models the user can install, where they go, and running the loaded one. Each offered
-//! model's files are pinned by revision, size and SHA-256, so an install is either exactly
-//! those files or nothing. GGUF files the user puts in the models folder themselves can be
-//! loaded too.
+//! model is one GGUF file pinned by revision, size and SHA-256, so an install is either exactly
+//! that file or nothing. GGUF files the user puts in the models folder themselves can be loaded
+//! too; every model carries its own tokenizer and chat template.
 
 mod generation;
 mod install;
@@ -14,7 +14,7 @@ pub(crate) use run::{Answered, End, Job, RunError, Worker, WorkerEvent};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// One file of a model, downloaded from a pinned revision.
+/// A model file, downloaded from a pinned revision.
 #[derive(Debug)]
 pub(crate) struct ModelFile {
     name: &'static str,
@@ -24,30 +24,17 @@ pub(crate) struct ModelFile {
     sha256: &'static str,
 }
 
-/// A model the user can install, kept in its own folder: GGUF weights and the tokenizer that
-/// turns text into their tokens.
+/// A model the user can install: one GGUF file in a folder of its own.
 #[derive(Debug)]
 pub(crate) struct Model {
     /// The model's own name, shown as given.
     pub(crate) name: &'static str,
     folder: &'static str,
-    arch: Arch,
-    weights: ModelFile,
-    tokenizer: ModelFile,
-}
-
-/// How a model's weights are laid out, which decides how they load.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Arch {
-    Qwen3,
-    /// Qwen2 and Qwen2.5.
-    Qwen2,
-    /// Llama-style, such as `SmolLM2` and Llama 3.
-    Llama,
+    file: ModelFile,
 }
 
 /// A model ready to load: an offered one that is installed, or a GGUF file the user put in the
-/// models folder, which carries its own tokenizer.
+/// models folder.
 #[derive(Debug, Clone)]
 pub(crate) enum Choice {
     Offered(&'static Model),
@@ -66,11 +53,20 @@ impl Choice {
                 .unwrap_or_default(),
         }
     }
+
+    /// The GGUF file to load, for a models folder `dir`.
+    pub(crate) fn file(&self, dir: &Path) -> PathBuf {
+        match self {
+            Self::Offered(model) => model.path(dir).join(model.file.name),
+            Self::Own(path) => path.clone(),
+        }
+    }
 }
 
 /// The identification prompt, shared with the evaluation tool so both ask the same thing. The
-/// tool holds its answers to the schema while generating; the app cannot, so the schema is
-/// part of the prompt. It is the model's instruction, not UI text, so it is not translated.
+/// tool holds its answers to the schema while generating; the AI settings window runs whatever
+/// prompt the user edits, so it does not, and the schema is part of the prompt. It is the
+/// model's instruction, not UI text, so it is not translated.
 pub(crate) const PROMPT: &str = concat!(
     include_str!("../tools/ai/prompt.md"),
     "\nAnswer with JSON matching this schema:\n",
@@ -80,76 +76,53 @@ pub(crate) const PROMPT: &str = concat!(
 /// A sample device to try the prompt on, in the form the evaluation tool sends.
 pub(crate) const SAMPLE_EVIDENCE: &str = include_str!("ai/sample-evidence.txt");
 
-/// The same tokenizer serves every Qwen3 size.
-const QWEN3_TOKENIZER: ModelFile = ModelFile {
-    name: "tokenizer.json",
-    url: "https://huggingface.co/Qwen/Qwen3-4B/resolve/1cfa9a7208912126459214e8b04321603b3df60c/tokenizer.json",
-    size: 11_422_654,
-    sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
-};
-
 /// The models offered for install, recommended first.
 pub(crate) const MODELS: &[Model] = &[
     // 4-bit Q4_K_M keeps 4B parameters to 2.5 GB.
     Model {
         name: "Qwen3-4B",
         folder: "qwen3-4b-q4_k_m",
-        arch: Arch::Qwen3,
-        weights: ModelFile {
+        file: ModelFile {
             name: "Qwen3-4B-Q4_K_M.gguf",
             url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf",
             size: 2_497_280_256,
             sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
         },
-        tokenizer: QWEN3_TOKENIZER,
     },
     // Smaller and faster, but weaker at identification (roadmap Findings).
     Model {
         name: "Qwen3-0.6B",
         folder: "qwen3-0.6b-q8_0",
-        arch: Arch::Qwen3,
-        weights: ModelFile {
+        file: ModelFile {
             name: "Qwen3-0.6B-Q8_0.gguf",
             url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/Qwen3-0.6B-Q8_0.gguf",
             size: 639_446_688,
             sha256: "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
         },
-        tokenizer: QWEN3_TOKENIZER,
     },
     // A tiny download for slow lines or small PCs; weaker again than Qwen3-0.6B.
     Model {
         name: "SmolLM2-135M",
         folder: "smollm2-135m-instruct-q8_0",
-        arch: Arch::Llama,
-        weights: ModelFile {
+        file: ModelFile {
             name: "SmolLM2-135M-Instruct-Q8_0.gguf",
             url: "https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/SmolLM2-135M-Instruct-Q8_0.gguf",
             size: 144_811_360,
             sha256: "5a1395716f7913741cc51d98581b9b1228d80987a9f7d3664106742eb06bba83",
         },
-        tokenizer: ModelFile {
-            name: "tokenizer.json",
-            url: "https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct/resolve/12fd25f77366fa6b3b4b768ec3050bf629380bac/tokenizer.json",
-            size: 2_104_556,
-            sha256: "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
-        },
     },
 ];
 
 impl Model {
-    fn files(&self) -> [&ModelFile; 2] {
-        [&self.weights, &self.tokenizer]
-    }
-
-    /// The download size of all its files, in bytes.
+    /// The download size, in bytes.
     pub(crate) fn size(&self) -> u64 {
-        self.files().iter().map(|f| f.size).sum()
+        self.file.size
     }
 
-    /// Whether every file is in `dir` at its full size. The hashes were checked when they were
-    /// downloaded; re-reading gigabytes each time the window opens would be too slow.
+    /// Whether its file is in `dir` at full size. The hash was checked when it was downloaded;
+    /// re-reading gigabytes each time the window opens would be too slow.
     pub(crate) fn is_installed(&self, dir: &Path) -> bool {
-        self.files().iter().all(|f| f.is_complete(&self.path(dir)))
+        self.file.is_complete(&self.path(dir))
     }
 
     fn path(&self, dir: &Path) -> PathBuf {
@@ -171,7 +144,7 @@ pub(crate) fn models_dir() -> Option<PathBuf> {
 
 /// Whether this build can run models on an NVIDIA GPU (built with the `cuda` feature).
 pub(crate) fn gpu_built() -> bool {
-    candle_core::utils::cuda_is_available()
+    cfg!(feature = "cuda")
 }
 
 /// The models ready to load from `dir`: the offered ones fully installed, in offer order, then
@@ -212,9 +185,24 @@ mod tests {
             fs::write(dir.join(name), "").unwrap();
         }
         fs::create_dir_all(dir.join("folder.gguf")).unwrap();
-        let names: Vec<String> = installed(&dir).iter().map(Choice::name).collect();
+        let listed = installed(&dir);
+        let names: Vec<String> = listed.iter().map(Choice::name).collect();
         assert_eq!(names, ["A.GGUF", "b.gguf"]);
+        assert_eq!(
+            listed.first().map(|c| c.file(&dir)),
+            Some(dir.join("A.GGUF"))
+        );
         fs::remove_dir_all(&dir).ok();
         assert!(installed(&dir).is_empty());
+    }
+
+    #[test]
+    fn an_offered_model_loads_from_its_own_folder() {
+        let dir = Path::new("models");
+        let model = MODELS.first().unwrap();
+        assert_eq!(
+            Choice::Offered(model).file(dir),
+            dir.join("qwen3-4b-q4_k_m").join("Qwen3-4B-Q4_K_M.gguf")
+        );
     }
 }

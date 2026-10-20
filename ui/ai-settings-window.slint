@@ -49,11 +49,9 @@ export component AiSettingsWindow inherits Window {
     in-out property <string> input;
     in property <string> output;
 
-    // How the model picks each word, the most tokens an answer may have, and whether the
-    // loaded model can reason before it answers.
+    // How the model picks each word, and the most tokens an answer may have.
     in-out property <GenerationSettings> generation;
     in property <int> max-answer-tokens;
-    in property <bool> can-think;
     // The last answer: its length in tokens, how long it took and how it ended.
     in property <int> answer-tokens;
     in property <float> answer-seconds;
@@ -194,7 +192,6 @@ export component AiSettingsWindow inherits Window {
                         GenerationPanel {
                             settings <=> root.generation;
                             max-answer-tokens: root.max-answer-tokens;
-                            can-think: root.can-think;
                             enabled: state != ModelState.running;
                             restore-defaults => { root.restore-generation(); }
                         }

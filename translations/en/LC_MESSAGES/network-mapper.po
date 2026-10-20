@@ -53,7 +53,7 @@ msgstr "No model installed yet. Install one below, or add your own GGUF file."
 
 # {0} is the models folder.
 msgid "ai-settings.own-models"
-msgstr "To use a model of your own, put its GGUF file in {0} and refresh the list. Qwen3, Qwen2 and Llama models whose tokenizer is in the file can run."
+msgstr "To use a model of your own, put its GGUF file in {0} and refresh the list. Most Llama, Mistral, Phi and Qwen text models can run."
 
 # Starts the chosen model: reads it into memory.
 msgid "ai-settings.load"
@@ -120,10 +120,7 @@ msgid "ai-settings.state-missing"
 msgstr "This model's files are missing. Install it again, or put its file back in the models folder."
 
 msgid "ai-settings.state-broken"
-msgstr "This model's files could not be read as a model. Install it again, or replace its file."
-
-msgid "ai-settings.state-unsupported"
-msgstr "This model is of a kind the app cannot run. Qwen3, Qwen2 and Llama models whose tokenizer is in the file can run."
+msgstr "This model could not be loaded: its file is damaged or of a kind the app cannot run. Install it again, or use another file."
 
 msgid "ai-settings.state-too-long"
 msgstr "The prompt and evidence are too long for the model. Shorten them and run again."
@@ -197,20 +194,11 @@ msgstr "Answer limit (tokens)"
 msgid "ai-settings.max-tokens-explained"
 msgstr "Stops the answer after this many tokens. A token is a word or part of one."
 
-msgid "ai-settings.seed"
-msgstr "Seed"
-
-msgid "ai-settings.seed-explained"
-msgstr "Starts the random choices: the same seed and settings repeat a varied answer. Applies above temperature 0."
-
 msgid "ai-settings.think"
 msgstr "Let the model think first"
 
 msgid "ai-settings.think-explained"
-msgstr "The model writes out its reasoning before the answer. Slower and longer, so raise the answer limit; sometimes more accurate."
-
-msgid "ai-settings.think-unavailable"
-msgstr "The loaded model cannot think before answering."
+msgstr "Models that can, such as Qwen3, write out their reasoning before the answer. Slower and longer, so raise the answer limit; sometimes more accurate. Other models ignore it."
 
 msgid "ai-settings.restore-defaults"
 msgstr "Restore defaults"

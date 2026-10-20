@@ -10,7 +10,6 @@ export struct GenerationSettings {
     top-k: int,
     repeat-penalty: float,
     max-tokens: int,
-    seed: int,
     think: bool,
 }
 
@@ -82,8 +81,6 @@ export component GenerationPanel inherits VerticalLayout {
     in-out property <GenerationSettings> settings;
     // The most tokens an answer may have.
     in property <int> max-answer-tokens;
-    // Whether the loaded model can reason before it answers.
-    in property <bool> can-think;
     // False while an answer is being written.
     in property <bool> enabled;
 
@@ -133,24 +130,14 @@ export component GenerationPanel inherits VerticalLayout {
         value <=> root.settings.max-tokens;
         enabled: root.enabled;
     }
-    NumberSetting {
-        text: @tr("ai-settings.seed");
-        explanation: @tr("ai-settings.seed-explained");
-        minimum: 0;
-        maximum: 999999;
-        value <=> root.settings.seed;
-        enabled: root.enabled && root.settings.temperature > 0;
-    }
     VerticalLayout {
         spacing: Theme.space-xs;
         Switch {
             text: @tr("ai-settings.think");
             checked <=> root.settings.think;
-            enabled: root.enabled && root.can-think;
+            enabled: root.enabled;
         }
-        Note {
-            text: root.can-think ? @tr("ai-settings.think-explained") : @tr("ai-settings.think-unavailable");
-        }
+        Note { text: @tr("ai-settings.think-explained"); }
     }
     HorizontalLayout {
         alignment: start;

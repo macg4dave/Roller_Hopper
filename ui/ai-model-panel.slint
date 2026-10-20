@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 import { Card, Note } from "ai-text.slint";
 
 // The loaded model: none, on its way, ready, answering, or why it is not.
-export enum ModelState { none, loading, ready, running, no-model, missing, broken, unsupported, no-gpu, too-long, failed }
+export enum ModelState { none, loading, ready, running, no-model, missing, broken, no-gpu, too-long, failed }
 
 // Choosing a model, starting and stopping it (Load and Unload), and whether it runs on the
 // graphics card.
@@ -40,7 +40,6 @@ export component AiModelPanel inherits VerticalLayout {
         if state == ModelState.no-model { return @tr("ai-settings.state-no-model"); }
         if state == ModelState.missing { return @tr("ai-settings.state-missing"); }
         if state == ModelState.broken { return @tr("ai-settings.state-broken"); }
-        if state == ModelState.unsupported { return @tr("ai-settings.state-unsupported"); }
         if state == ModelState.no-gpu { return @tr("ai-settings.state-no-gpu"); }
         if state == ModelState.too-long { return @tr("ai-settings.state-too-long"); }
         if state == ModelState.failed { return @tr("ai-settings.state-failed"); }

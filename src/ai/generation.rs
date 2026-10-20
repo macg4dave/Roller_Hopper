@@ -1,12 +1,10 @@
 //! How the model picks each token of an answer: the settings the user can change in the AI
 //! settings window, kept within limits that keep a run bounded.
 
-use candle_transformers::generation::Sampling;
+use mistralrs::SamplingParams;
 
 /// The most tokens an answer may have, whatever the user sets.
 pub(crate) const MAX_ANSWER_TOKENS: usize = 8192;
-/// How many of the answer's latest tokens the repeat penalty looks back over.
-pub(crate) const REPEAT_WINDOW: usize = 64;
 
 /// The default is the evaluation tool's: greedy, so the same prompt always gives the same
 /// answer, with thinking off.
@@ -19,13 +17,11 @@ pub(crate) struct Generation {
     pub(crate) top_p: f32,
     /// Samples only among this many likeliest tokens; 0 for no limit.
     pub(crate) top_k: usize,
-    /// Above 1, makes tokens already in the answer less likely; 1 for none.
+    /// Above 1, makes tokens already in the text less likely; 1 for none.
     pub(crate) repeat_penalty: f32,
     /// Stops a model that never ends its turn.
     pub(crate) max_tokens: usize,
-    /// Starts the random choices, so a sampled answer can be repeated.
-    pub(crate) seed: u64,
-    /// Lets a model that can (Qwen3) reason before it answers.
+    /// Lets a model whose chat template can (such as Qwen3) reason before it answers.
     pub(crate) think: bool,
 }
 
@@ -38,7 +34,6 @@ impl Default for Generation {
             repeat_penalty: 1.0,
             // Enough for the identification answer.
             max_tokens: 700,
-            seed: 0,
             think: false,
         }
     }
@@ -65,24 +60,27 @@ impl Generation {
         }
     }
 
-    /// Candle's sampling for these settings: greedy at temperature 0, otherwise narrowed by
-    /// top-k and top-p when they are set.
-    pub(crate) fn sampling(&self) -> Sampling {
-        if self.temperature <= 0.0 {
-            return Sampling::ArgMax;
+    /// The engine's sampling for these settings: greedy at temperature 0, otherwise narrowed
+    /// by top-k and top-p when they are set.
+    pub(crate) fn sampling(&self) -> SamplingParams {
+        let warm = self.temperature > 0.0;
+        let base = if warm {
+            SamplingParams::neutral()
+        } else {
+            SamplingParams::deterministic()
+        };
+        SamplingParams {
+            temperature: warm.then_some(f64::from(self.temperature)),
+            top_k: if warm {
+                (self.top_k > 0).then_some(self.top_k)
+            } else {
+                base.top_k
+            },
+            top_p: (warm && self.top_p < 1.0).then_some(f64::from(self.top_p)),
+            repetition_penalty: (self.repeat_penalty > 1.0).then_some(self.repeat_penalty),
+            max_len: Some(self.max_tokens),
+            ..base
         }
-        let (temperature, p) = (f64::from(self.temperature), f64::from(self.top_p));
-        match (self.top_k, p < 1.0) {
-            (0, false) => Sampling::All { temperature },
-            (0, true) => Sampling::TopP { p, temperature },
-            (k, false) => Sampling::TopK { k, temperature },
-            (k, true) => Sampling::TopKThenTopP { k, p, temperature },
-        }
-    }
-
-    /// Whether the repeat penalty changes anything.
-    pub(crate) fn penalises_repeats(&self) -> bool {
-        self.repeat_penalty > 1.0
     }
 }
 
@@ -90,54 +88,45 @@ impl Generation {
 mod tests {
     use super::*;
 
+    /// The sampling settings that decide how a token is picked.
+    fn picking(settings: &Generation) -> (Option<f64>, Option<usize>, Option<f64>, Option<f32>) {
+        let s = settings.sampling();
+        (s.temperature, s.top_k, s.top_p, s.repetition_penalty)
+    }
+
     #[test]
     fn the_default_is_greedy_and_fits_an_identification_answer() {
         let default = Generation::default();
-        assert_eq!(default.sampling(), Sampling::ArgMax);
-        assert!(!default.penalises_repeats());
+        assert_eq!(picking(&default), (None, Some(1), None, None));
+        assert_eq!(default.sampling().max_len, Some(700));
         assert!(!default.think);
         assert_eq!(default.bounded(), default);
     }
 
     #[test]
-    fn sampling_follows_temperature_top_k_and_top_p() {
+    fn sampling_follows_temperature_top_k_top_p_and_the_repeat_penalty() {
         // Values f32 holds exactly, so they compare equal after widening.
         let warm = Generation {
             temperature: 0.75,
             ..Generation::default()
         };
-        assert_eq!(warm.sampling(), Sampling::All { temperature: 0.75 });
-        let k = Generation { top_k: 40, ..warm };
+        assert_eq!(picking(&warm), (Some(0.75), None, None, None));
+        let narrowed = Generation {
+            top_k: 40,
+            top_p: 0.5,
+            repeat_penalty: 1.25,
+            ..warm
+        };
         assert_eq!(
-            k.sampling(),
-            Sampling::TopK {
-                k: 40,
-                temperature: 0.75
-            }
-        );
-        let p = Generation { top_p: 0.5, ..warm };
-        assert_eq!(
-            p.sampling(),
-            Sampling::TopP {
-                p: 0.5,
-                temperature: 0.75
-            }
-        );
-        let both = Generation { top_p: 0.5, ..k };
-        assert_eq!(
-            both.sampling(),
-            Sampling::TopKThenTopP {
-                k: 40,
-                p: 0.5,
-                temperature: 0.75
-            }
+            picking(&narrowed),
+            (Some(0.75), Some(40), Some(0.5), Some(1.25))
         );
         // Top-k and top-p only narrow sampling; at temperature 0 the answer stays greedy.
         let cold = Generation {
             temperature: 0.0,
-            ..both
+            ..narrowed
         };
-        assert_eq!(cold.sampling(), Sampling::ArgMax);
+        assert_eq!(picking(&cold), (None, Some(1), None, Some(1.25)));
     }
 
     #[test]
@@ -148,7 +137,6 @@ mod tests {
             top_k: 1_000_000,
             repeat_penalty: 9.0,
             max_tokens: 0,
-            seed: 7,
             think: true,
         }
         .bounded();
@@ -157,7 +145,7 @@ mod tests {
         assert_eq!(wild.top_k, 1000);
         assert!((wild.repeat_penalty - 2.0).abs() < f32::EPSILON);
         assert_eq!(wild.max_tokens, 1);
-        assert_eq!((wild.seed, wild.think), (7, true));
+        assert!(wild.think);
         let long = Generation {
             max_tokens: usize::MAX,
             ..Generation::default()

@@ -5,13 +5,12 @@
 mod generation;
 mod install;
 
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
-use crate::ai::{
-    self, Answered, Choice, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent,
-};
+use crate::ai::{self, Answered, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent};
 use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
 /// Opens the window from Settings, bringing back the same window each time.
@@ -69,9 +68,7 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
 /// Loading and running go to one worker, which keeps the loaded model between runs.
 fn connect_worker(window: &AiSettingsWindow) {
     let reporting = window.as_weak();
-    // Without a data folder nothing can be installed, so every load reports Missing.
-    let dir = ai::models_dir().unwrap_or_default();
-    let worker = Rc::new(Worker::start(dir, move |event| {
+    let worker = Rc::new(Worker::start(move |event| {
         // An error only means the app is closing, so there is no window to update.
         reporting
             .upgrade_in_event_loop(move |w| show_event(&w, event))
@@ -124,8 +121,7 @@ fn connect_worker(window: &AiSettingsWindow) {
 
 /// Asks the worker to load the model listed as `name`, on the GPU or the CPU.
 fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
-    window.set_can_think(false);
-    let Some(model) = choice_named(name) else {
+    let Some(model) = file_named(name) else {
         // The file left the folder after the list was read.
         window.set_loaded_name(SharedString::new());
         window.set_state(ModelState::Missing);
@@ -168,25 +164,22 @@ fn send(window: &AiSettingsWindow, worker: &Worker, job: Job) {
     }
 }
 
-/// The model the folder now holds under `name`, re-read so a file added or removed since the
-/// list was shown is found or reported missing.
-fn choice_named(name: &str) -> Option<Choice> {
+/// The file of the model the folder now holds under `name`, re-read so a file added or
+/// removed since the list was shown is found or reported missing.
+fn file_named(name: &str) -> Option<PathBuf> {
     let dir = ai::models_dir()?;
-    ai::installed(&dir).into_iter().find(|c| c.name() == name)
+    let model = ai::installed(&dir).into_iter().find(|c| c.name() == name)?;
+    Some(model.file(&dir))
 }
 
 fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
     match event {
         WorkerEvent::Unloaded => {
             window.set_loaded_name(SharedString::new());
-            window.set_can_think(false);
             window.set_state(ModelState::None);
         }
         WorkerEvent::Loading => window.set_state(ModelState::Loading),
-        WorkerEvent::Ready { thinks } => {
-            window.set_can_think(thinks);
-            window.set_state(ModelState::Ready);
-        }
+        WorkerEvent::Ready => window.set_state(ModelState::Ready),
         WorkerEvent::Finished(Ok(answered)) => {
             show_answered(window, answered);
             window.set_state(ModelState::Ready);
@@ -213,7 +206,6 @@ fn state(error: RunError) -> ModelState {
         RunError::NoModel => ModelState::NoModel,
         RunError::Missing => ModelState::Missing,
         RunError::Broken => ModelState::Broken,
-        RunError::Unsupported => ModelState::Unsupported,
         RunError::NoGpu => ModelState::NoGpu,
         RunError::TooLong => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,

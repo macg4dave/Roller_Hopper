@@ -78,6 +78,11 @@ built around them.
   change testable logic.
 - Test behaviour, not implementation details. No tests that only restate a constant.
 - A bug fix comes with a test that fails without the fix, where the logic is testable.
+- **AI checks use the small model.** To check that the AI loads and answers, or that CUDA
+  works, run only the live tests on SmolLM2-135M:
+  `cargo test --release -- --ignored llama sampling_settings` (add `--features cuda` for the
+  GPU). Run the larger models' tests (Qwen3-0.6B, Qwen3-4B) only when the task is measuring
+  usefulness or speed, or the user asks.
 
 ### Tests are not the source of truth
 

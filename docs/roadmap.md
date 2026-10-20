@@ -89,9 +89,9 @@ Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
   data only". Settings holds a pointer to the View menu and opens the AI settings window:
-  install Qwen3-4B, Qwen3-0.6B or SmolLM2-135M, or list the user's own GGUF files (Qwen3,
-  Qwen2 or Llama with an embedded BPE tokenizer, ChatML or Llama 3 turns) from the models
-  folder; Load or Unload one (CPU, or GPU in a `cuda` build, with a CUDA light), and Run it on
+  install Qwen3-4B, Qwen3-0.6B or SmolLM2-135M, or list the user's own GGUF files from the
+  models folder; Load or Unload one with mistral.rs (CPU, or GPU in a `cuda` build, with a
+  CUDA light), and Run it on
   an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings. The
   settings and edited texts are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
@@ -282,6 +282,9 @@ Gaps the UI shows against the plan:
   Qwen3-0.6B Q8_0 answers the identification prompt and sample: 154 s on the CPU in a plain
   release build, 24.5 s with `target-cpu=x86-64-v3`, 8.9 s on the GPU (CUDA 13.3, warm;
   the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
+- **Runtime now mistral.rs 0.8.1**, the evaluation tool's engine: GGUF files with their own
+  tokenizer and chat template, one file per offered model. The Candle timings above predate
+  it and need re-measuring; it seeds sampling once per engine, so there is no per-answer seed.
 - Earlier alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
@@ -408,7 +411,7 @@ These extend the product brief's wording, which needs updating first (BLK-010).
 | --- | --- | --- |
 | Milestone | `M-001` | `M-021` |
 | Task or backlog need | `BE-0001` | `BE-0110` |
-| Blocker (in the backlog) | `BLK-001` | `BLK-012` |
+| Blocker (in the backlog) | `BLK-001` | `BLK-014` |
 
 Take the next ID from this table and advance it in the same edit. Never reuse an ID, even after
 its item is deleted. Splitting a task keeps the original ID for what remains.
@@ -654,7 +657,7 @@ Goal: one qualified model useful inside the existing discovery and details workf
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0082 | Load the model and tokenizer installed by Install AI, with the runtime and template compiled in, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
+| BE-0082 | Load the model installed by Install AI with mistral.rs (tokenizer and template from its GGUF), output held to the schema by its JSON-schema constraint as the evaluation tool does, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
 | BE-0108 | Make the `cuda` build reproducible: one repository command that finds the toolkit and MSVC, sets the build settings (README "AI on the GPU") and puts the runtime DLLs beside the app and test binaries, replacing the manual steps; resolves BLK-011. | BE-0082 |
 | BE-0109 | Harden Install AI: check free space before starting, resume a broken download, fail a stalled read, remove an installed model; test against a local server, not the internet. | BE-0082 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
