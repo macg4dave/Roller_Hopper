@@ -7,6 +7,7 @@ import { DeviceIcon } from "components/device-icon.slint";
 import { DeviceRow } from "components/device-row.slint";
 import { IconPicker } from "components/icon-picker.slint";
 import { RolePicker } from "components/role-picker.slint";
+import { Splitter } from "components/splitter.slint";
 import { PortEditor } from "port-editor.slint";
 
 // Edit page, left side: every device on the left, the selected one's editable fields on the right.
@@ -15,16 +16,25 @@ export component DeviceEditor inherits HorizontalLayout {
     property <bool> confirm-forget;
     property <int> selected-id: Bridge.selected-id;
     changed selected-id => { confirm-forget = false; }
+    in-out property <length> list-width;
 
-    spacing: Theme.space-l;
-
-    ListView {
-        width: Theme.list-width;
+    list := ListView {
+        preferred-width: root.list-width;
+        min-width: Theme.panel-min-width;
+        horizontal-stretch: 0;
         for device in Bridge.devices: DeviceRow {
             device: device;
             selected: device.id == Bridge.selected-id;
             clicked => { Bridge.select(device.id); }
         }
+    }
+
+    Splitter {
+        width: Theme.space-l;
+        size <=> root.list-width;
+        pane-width: list.width;
+        min-size: Theme.panel-min-width;
+        max-size: root.width - Theme.space-l - Theme.edit-fields-min-width;
     }
 
     if Bridge.selected-id < 0: Text {

@@ -7,6 +7,7 @@ import { DeviceList } from "device-list.slint";
 import { TopologyCanvas } from "topology-canvas.slint";
 import { DetailsPanel } from "details-panel.slint";
 import { EditPage } from "edit-page.slint";
+import { Splitter } from "components/splitter.slint";
 
 export { Bridge, Labels }
 
@@ -25,6 +26,12 @@ export component AppWindow inherits Window {
     // The edit page covers the map view rather than replacing it, so the map keeps its zoom and
     // pan while the page is open.
     property <bool> editing;
+    // Panel widths the user dragged to; kept here so they survive leaving and reopening the
+    // edit page.
+    property <length> list-width: Theme.list-width;
+    property <length> details-width: Theme.details-width;
+    property <length> edit-list-width: Theme.list-width;
+    property <length> edit-roles-width: Theme.edit-roles-width;
 
     VerticalLayout {
         Header { editing <=> root.editing; }
@@ -32,18 +39,50 @@ export component AppWindow inherits Window {
         Rectangle {
             vertical-stretch: 1;
 
-            HorizontalLayout {
+            Rectangle {
                 visible: !editing;
-                DeviceList {
-                    show-on-map(device) => { canvas.centre-on(device.x, device.y); }
+
+                HorizontalLayout {
+                    // A narrow window squeezes the map first, then the panels down to their minimum.
+                    list := DeviceList {
+                        preferred-width: root.list-width;
+                        min-width: Theme.panel-min-width;
+                        horizontal-stretch: 0;
+                        show-on-map(device) => { canvas.centre-on(device.x, device.y); }
+                    }
+                    canvas := TopologyCanvas {
+                        min-width: Theme.canvas-min-width;
+                        horizontal-stretch: 1;
+                    }
+                    details := DetailsPanel {
+                        preferred-width: root.details-width;
+                        min-width: Theme.panel-min-width;
+                        horizontal-stretch: 0;
+                        edit => { editing = true; }
+                    }
                 }
-                canvas := TopologyCanvas { horizontal-stretch: 1; }
-                DetailsPanel {
-                    edit => { editing = true; }
+
+                // Over the panel edges rather than in the layout, so they take no room from the map.
+                Splitter {
+                    x: list.width - self.width / 2;
+                    size <=> root.list-width;
+                    pane-width: list.width;
+                    min-size: Theme.panel-min-width;
+                    max-size: parent.width - details.width - Theme.canvas-min-width;
+                }
+                Splitter {
+                    x: details.x - self.width / 2;
+                    size <=> root.details-width;
+                    pane-width: details.width;
+                    min-size: Theme.panel-min-width;
+                    max-size: parent.width - list.width - Theme.canvas-min-width;
+                    pane-after: true;
                 }
             }
 
             if editing: EditPage {
+                list-width <=> root.edit-list-width;
+                roles-width <=> root.edit-roles-width;
                 back => { editing = false; }
             }
         }

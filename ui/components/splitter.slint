@@ -1,0 +1,33 @@
+import { Theme } from "../theme.slint";
+
+// A handle dragged sideways to resize the pane beside it. The caller gives the pane
+// `preferred-width: size`, places the handle on the pane's edge so it follows the drag, and
+// lets the layout squeeze the pane when the window is too narrow.
+export component Splitter inherits Rectangle {
+    // The width the user chose.
+    in-out property <length> size;
+    // The pane's width as laid out, which a narrow window may hold below `size`.
+    in property <length> pane-width;
+    in property <length> min-size;
+    in property <length> max-size;
+    // The pane is on the handle's right, so dragging left widens it.
+    in property <bool> pane-after;
+
+    width: Theme.splitter-width;
+
+    Rectangle {
+        width: 2px;
+        background: touch.has-hover || touch.pressed ? Theme.accent : transparent;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: col-resize;
+        // The handle moves with the pane edge, so each move is measured from the press point.
+        moved => {
+            root.size = clamp(
+                root.pane-width + (root.pane-after ? -1 : 1) * (self.mouse-x - self.pressed-x),
+                root.min-size,
+                max(root.min-size, root.max-size));
+        }
+    }
+}
