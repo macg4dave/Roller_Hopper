@@ -123,6 +123,10 @@ msgstr "Other address"
 msgid "details.other-address.value"
 msgstr "{} via {}"
 
+# Shown for a further network interface: the device it belongs to.
+msgid "details.interface-of"
+msgstr "Interface of"
+
 msgid "details.mac"
 msgstr "MAC address"
 
@@ -187,16 +191,13 @@ msgstr "Forget"
 msgid "edit.cancel"
 msgstr "Cancel"
 
-# The further network interfaces of the device being edited: each has its own IP address and is
-# attached behind another device, chosen from a dropdown.
+# Adding a further network interface to the device being edited: it has its own IP address and
+# connects behind another device, chosen from a dropdown. It is then listed under the device.
 msgid "edit.interfaces"
 msgstr "Other interfaces"
 
 msgid "edit.interface-via"
-msgstr "Attached behind"
-
-msgid "edit.interface-remove"
-msgstr "Remove interface"
+msgstr "Connected behind"
 
 msgid "edit.interface-add"
 msgstr "Add interface"

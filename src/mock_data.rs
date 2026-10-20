@@ -3,8 +3,8 @@
 use std::net::Ipv4Addr;
 
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Interface,
-    LastSeen, LineStyle, MacAddr, Network, Role, Services, Status,
+    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LastSeen,
+    LineStyle, MacAddr, Network, Role, Services, Status,
 };
 
 /// The home network's /24, and that of the separate lab network behind the Lab Router.
@@ -31,6 +31,8 @@ struct Spec {
     subnet: [u8; 3],
     host: u8,
     mac: [u8; 6],
+    /// The id of the device this is a further interface of.
+    parent: Option<u32>,
     manufacturer: Option<&'static str>,
     model: Option<&'static str>,
     hostname: Option<&'static str>,
@@ -53,7 +55,8 @@ impl Spec {
             icon: None,
             status: self.status,
             ip: address(self.subnet, self.host),
-            mac: MacAddr(self.mac),
+            mac: Some(MacAddr(self.mac)),
+            parent: self.parent.map(DeviceId),
             manufacturer: self.manufacturer,
             model: self.model,
             hostname: self.hostname,
@@ -81,6 +84,7 @@ fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -
         subnet: HOME,
         host,
         mac,
+        parent: None,
         manufacturer: None,
         model: None,
         hostname: None,
@@ -336,6 +340,20 @@ fn devices() -> Vec<Device> {
                 [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x03],
             )
         },
+        // The Docker Host's second virtual network card, on the lab network.
+        Spec {
+            manufacturer: Some("Proxmox"),
+            hostname: Some("docker"),
+            subnet: LAB,
+            parent: Some(19),
+            ..spec(
+                24,
+                "Docker Host",
+                K::Server,
+                23,
+                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13],
+            )
+        },
         Spec {
             manufacturer: Some("Proxmox"),
             hostname: Some("win11-vm"),
@@ -423,6 +441,7 @@ fn connections() -> Vec<Connection> {
         (6, 20, Known),
         (6, 21, Known),
         (22, 23, Known),
+        (22, 24, Known),
     ]
     .into_iter()
     .map(|(up, down, kind)| Connection {
@@ -433,19 +452,8 @@ fn connections() -> Vec<Connection> {
     .collect()
 }
 
-/// The Docker Host's second virtual network card, on the lab network.
-fn interfaces() -> Vec<Interface> {
-    vec![Interface {
-        device: DeviceId(19),
-        upstream: DeviceId(22),
-        ip: address(LAB, 23),
-        mac: Some(MacAddr([0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13])),
-        kind: ConnectionKind::Known,
-    }]
-}
-
 pub(crate) fn network() -> Network {
-    let mut network = Network::new(devices(), connections(), interfaces());
+    let mut network = Network::new(devices(), connections());
     // Custom roles as if the user had added them: no standard role has the TV or console icon,
     // and a virtual machine is told apart from the host it runs on.
     let custom: [(&[u32], _, _); 3] = [
@@ -552,43 +560,40 @@ mod tests {
     fn ids_ips_and_macs_are_unique() {
         let network = network();
         let devices = network.devices();
-        let interfaces = network.interfaces();
-        let addresses = devices.len() + interfaces.len();
         let unique =
-            |values: Vec<String>, count| values.iter().collect::<HashSet<_>>().len() == count;
+            |values: Vec<String>| values.iter().collect::<HashSet<_>>().len() == devices.len();
         assert!(unique(
-            devices.iter().map(|d| format!("{:?}", d.id)).collect(),
-            devices.len()
+            devices.iter().map(|d| format!("{:?}", d.id)).collect()
         ));
-        let ips = devices
-            .iter()
-            .map(|d| d.ip)
-            .chain(interfaces.iter().map(|i| i.ip));
-        assert!(unique(ips.map(|ip| ip.to_string()).collect(), addresses));
-        let macs = devices
-            .iter()
-            .map(|d| Some(d.mac))
-            .chain(interfaces.iter().map(|i| i.mac));
-        let macs: Option<Vec<_>> = macs.collect();
-        let macs = macs.expect("every sample interface has a MAC");
-        assert!(unique(
-            macs.iter().map(ToString::to_string).collect(),
-            addresses
-        ));
+        assert!(unique(devices.iter().map(|d| d.ip.to_string()).collect()));
+        let macs: Option<Vec<_>> = devices.iter().map(|d| d.mac).collect();
+        let macs = macs.expect("every sample device has a MAC");
+        assert!(unique(macs.iter().map(ToString::to_string).collect()));
     }
 
     #[test]
     fn an_interface_joins_its_device_to_another_subnet() {
         let network = network();
-        assert!(!network.interfaces().is_empty());
+        let devices = network.devices();
         let subnet = |ip: Ipv4Addr| ip.octets()[..3].to_vec();
-        for interface in network.interfaces() {
-            let device = network.device(interface.device).unwrap();
-            let upstream = network.device(interface.upstream).unwrap();
+        let interfaces = devices
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.parent.is_some());
+        let mut found = 0;
+        for (at, interface) in interfaces {
+            let device = network.device(interface.parent.unwrap()).unwrap();
+            let upstream = network.device(network.uplink(interface.id).unwrap().upstream);
             assert_ne!(subnet(interface.ip), subnet(device.ip), "{interface:?}");
-            assert_eq!(subnet(interface.ip), subnet(upstream.ip), "{interface:?}");
-            assert!(!network.is_within(interface.upstream, interface.device));
+            assert_eq!(subnet(interface.ip), subnet(upstream.unwrap().ip));
+            let before = devices.get(at - 1).unwrap();
+            assert!(
+                before.id == device.id || before.parent == Some(device.id),
+                "follows it"
+            );
+            found += 1;
         }
+        assert!(found > 0);
     }
 
     #[test]

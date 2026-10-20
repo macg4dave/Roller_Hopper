@@ -103,7 +103,8 @@ export component DeviceEditor inherits HorizontalLayout {
                     selected => { Bridge.choose-role(self.current-index); }
                 }
             }
-            DetailField {
+            // An interface's own interfaces would be the same machine again.
+            if !Bridge.details.interface: DetailField {
                 label: @tr("edit.interfaces");
                 InterfaceEditor { }
             }

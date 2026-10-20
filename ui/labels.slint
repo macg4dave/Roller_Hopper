@@ -79,14 +79,14 @@ export global Labels {
         return @tr("groups.colour.none");
     }
 
-    // The ghost on the map of a device's further interface.
+    // A further interface of a device, named after it in the lists.
     public pure function ghost-name(name: string) -> string {
         return @tr("map.ghost", device-name(name));
     }
 
-    // A further address of a device and the device it is attached behind.
+    // A further address of a device and the device it connects through, if any.
     public pure function other-address(ip: string, via-name: string) -> string {
-        return @tr("details.other-address.value", ip, device-name(via-name));
+        return via-name == "" ? ip : @tr("details.other-address.value", ip, via-name);
     }
 
     public pure function uplink(name: string, inferred: bool) -> string {

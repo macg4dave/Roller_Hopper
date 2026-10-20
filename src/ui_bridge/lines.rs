@@ -3,7 +3,7 @@
 
 use super::convert;
 use crate::model::{
-    Connection, ConnectionKind, DeviceId, Ghost, GroupColour, LineStyle, Network, Point, Positions,
+    Connection, ConnectionKind, DeviceId, GroupColour, LineStyle, Network, Point, Positions,
 };
 use crate::ui;
 
@@ -68,16 +68,18 @@ pub(super) fn lines(
     sets.collect()
 }
 
-/// SVG path commands for the dashed jump from each device at `shown` to its ghost, for the
-/// ghosts whose device, or the device they hang from, is `selected`. Empty when there are none.
-pub(super) fn jumps(shown: &Positions, ghosts: &[Ghost], selected: Option<DeviceId>) -> String {
-    let lit = ghosts.iter().filter(|g| {
-        let ends = [g.interface.device, g.interface.upstream];
-        selected.is_some_and(|id| ends.contains(&id))
-    });
-    let lines = lit.filter_map(|g| {
-        let from = shown.get(&g.interface.device)?;
-        clear_of_icons(*from, g.at).map(|line| path(LineStyle::Dashed, &line))
+/// SVG path commands for the dashed jump from each device at `shown` to its further interfaces,
+/// for those where the device or the interface is `selected`. Empty when there are none.
+pub(super) fn jumps(network: &Network, shown: &Positions, selected: Option<DeviceId>) -> String {
+    let pairs = network
+        .devices()
+        .iter()
+        .filter_map(|d| Some((d.parent?, d.id)));
+    let lit = pairs
+        .filter(|&(device, interface)| selected.is_some_and(|id| id == device || id == interface));
+    let lines = lit.filter_map(|(device, interface)| {
+        let line = clear_of_icons(*shown.get(&device)?, *shown.get(&interface)?)?;
+        Some(path(LineStyle::Dashed, &line))
     });
     lines.collect::<Vec<_>>().join(" ")
 }
@@ -297,15 +299,18 @@ mod tests {
     }
 
     #[test]
-    fn a_ghost_is_joined_to_its_device_only_while_either_end_is_selected() {
+    fn an_interface_is_joined_to_its_device_only_while_either_is_selected() {
         let network = crate::mock_data::network();
         let (positions, _) = routed(&network);
-        let ghosts = crate::model::ghosts(&network, &positions);
-        let interface = ghosts.first().map(|g| g.interface).unwrap();
-        assert_eq!(jumps(&positions, &ghosts, None), "");
-        assert_eq!(jumps(&positions, &ghosts, Some(DeviceId(4))), "", "the NAS");
-        for end in [interface.device, interface.upstream] {
-            let jump = jumps(&positions, &ghosts, Some(end));
+        let (docker_host, docker_lab, lab_router) = (DeviceId(19), DeviceId(24), DeviceId(22));
+        assert_eq!(jumps(&network, &positions, None), "");
+        assert_eq!(
+            jumps(&network, &positions, Some(lab_router)),
+            "",
+            "upstream"
+        );
+        for end in [docker_host, docker_lab] {
+            let jump = jumps(&network, &positions, Some(end));
             assert!(jump.matches('M').count() > 1, "dashed: {jump}");
         }
     }

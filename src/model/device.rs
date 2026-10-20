@@ -171,7 +171,12 @@ pub(crate) struct Device {
     pub(crate) icon: Option<Icon>,
     pub(crate) status: Status,
     pub(crate) ip: Ipv4Addr,
-    pub(crate) mac: MacAddr,
+    /// Detected with the device; `None` for an interface the user added.
+    pub(crate) mac: Option<MacAddr>,
+    /// The device this is a further network interface of, if it is one. It has its own address,
+    /// name, role and icon, and connects on its own, often on another subnet; the map and the
+    /// lists show it as a ghost of that device.
+    pub(crate) parent: Option<DeviceId>,
     pub(crate) manufacturer: Option<&'static str>,
     pub(crate) model: Option<&'static str>,
     pub(crate) hostname: Option<&'static str>,
@@ -187,7 +192,9 @@ impl Device {
         query.is_empty()
             || self.name.to_lowercase().contains(&query)
             || self.ip.to_string().contains(&query)
-            || self.mac.to_string().to_lowercase().contains(&query)
+            || self
+                .mac
+                .is_some_and(|mac| mac.to_string().to_lowercase().contains(&query))
     }
 }
 
@@ -204,7 +211,8 @@ mod tests {
             icon: None,
             status: Status::Online,
             ip: Ipv4Addr::new(192, 168, 1, 50),
-            mac: MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c]),
+            mac: Some(MacAddr([0x8c, 0x79, 0xf5, 0x1a, 0x2b, 0x3c])),
+            parent: None,
             manufacturer: None,
             model: None,
             hostname: None,

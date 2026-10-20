@@ -51,8 +51,8 @@ export struct DeviceView {
     y: float,
     // Hidden by the current search or filter: faded on the map.
     dimmed: bool,
-    // A ghost of the device on another of its interfaces (see Bridge.ghosts), which has the
-    // device's id but the interface's address and MAC, and is drawn where the ghost is.
+    // A further interface of another device, shown as its ghost: faded, and in the lists
+    // indented under that device, which it comes straight after.
     ghost: bool,
 }
 
@@ -66,12 +66,11 @@ export struct NodePlace {
     root-y: float,
 }
 
-/// A further interface of the selected device: its address, and the device it is attached
-/// behind, by name and by its index in Bridge.upstream-choices.
+/// A further interface of the selected device: its address, and the name of the device it
+/// connects through, empty when it stands alone.
 export struct OtherAddress {
     ip: string,
     via-name: string,
-    via: int,
 }
 
 /// Read-only details of the selected device. Empty strings are not shown.
@@ -90,6 +89,9 @@ export struct DeviceDetails {
     notes: string,
     ip: string,
     mac: string,
+    // A further interface of another device, and that device's name.
+    interface: bool,
+    interface-of: string,
     manufacturer: string,
     model: string,
     hostname: string,
@@ -160,25 +162,20 @@ export struct MapBounds {
 export global Bridge {
     in property <[DeviceView]> devices;
     in property <[NodePlace]> places;
-    // A device's further interfaces, each drawn as a faded ghost of the device in the branch it
-    // is attached to: the device with the interface's address and MAC, at the spot where the
-    // ghost is drawn right now.
-    in property <[DeviceView]> ghosts;
-    // The devices the search and filter let through, each followed by its ghosts, at their
-    // settled spots.
+    // The devices the search and filter let through, in the order of Bridge.devices.
     in property <[DeviceView]> list;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
     in property <Strand> strand;
-    // While a device with a ghost, or the device a ghost hangs from, is selected: the line from
-    // the device to its ghost, as SVG path commands in map units. Empty otherwise.
+    // While a device or one of its further interfaces is selected: the lines from the device to
+    // its interfaces, as SVG path commands in map units. Empty otherwise.
     in property <string> jump;
     in property <MapBounds> bounds;
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[OtherAddress]> other-addresses;
-    // The names of the devices an interface of the selected device can be attached behind:
-    // every other device, in device order.
+    // The names of the devices a new interface of the selected device can be connected behind:
+    // every other device but its own interfaces, in device order.
     in property <[string]> upstream-choices;
     in property <[PortView]> ports;
     in property <[string]> roles;
@@ -225,14 +222,10 @@ export global Bridge {
     callback set-port-number(int, string);
     callback set-port-description(int, string);
     callback remove-port(int);
-    // The selected device's further interfaces, identified by their index in other-addresses,
-    // with the device they are attached behind by its index in upstream-choices. Addresses come
-    // as typed; one that is not an IPv4 address, or is already in use, is refused
-    // (add-interface returns false).
+    // A further interface of the selected device, at an address as typed, connected behind the
+    // device at an index in upstream-choices. Refused (false) when the address is not IPv4 or
+    // is already in use. Once added, it is a device of its own.
     callback add-interface(string, int) -> bool;
-    callback set-interface-ip(int, string);
-    callback set-interface-upstream(int, int);
-    callback remove-interface(int);
     // The role list. Roles are identified by their index in role-list.
     callback add-role(string, string);
     callback rename-role(int, string);

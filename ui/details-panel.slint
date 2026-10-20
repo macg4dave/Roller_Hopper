@@ -94,7 +94,11 @@ export component DetailsPanel inherits Rectangle {
                 label: @tr("details.other-address");
                 value: Labels.other-address(address.ip, address.via-name);
             }
-            DetailField { label: @tr("details.mac"); value: Bridge.details.mac; }
+            if Bridge.details.interface: DetailField {
+                label: @tr("details.interface-of");
+                value: Labels.device-name(Bridge.details.interface-of);
+            }
+            if Bridge.details.mac != "": DetailField { label: @tr("details.mac"); value: Bridge.details.mac; }
             DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
             if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
             if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }

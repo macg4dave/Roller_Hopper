@@ -19,8 +19,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, Connection, Device, DeviceId, Ghost, GroupId, Icon, Level, Network, Point,
-    Positions, Role, Snap, StatusFilter, ghosts, link_route, snap_target, tree_layout, trunk,
+    Arrangement, Connection, Device, DeviceId, GroupId, Icon, Level, Network, Point, Positions,
+    Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -149,42 +149,42 @@ impl AppState {
         added
     }
 
-    /// The devices an interface of the selected device can hang behind, in dropdown order.
+    /// The devices a new interface of the selected device can be connected behind, in dropdown
+    /// order: any but the device and its other interfaces.
     fn upstream_choices(&self) -> Vec<DeviceId> {
-        let others = self.network.devices().iter().map(|d| d.id);
-        others.filter(|&id| Some(id) != self.selected).collect()
-    }
-
-    fn upstream_choice(&self, choice: usize) -> Option<DeviceId> {
-        self.upstream_choices().get(choice).copied()
+        let Some(selected) = self.selected else {
+            return Vec::new();
+        };
+        let others = self.network.devices().iter();
+        let others = others.filter(|d| d.id != selected && d.parent != Some(selected));
+        others.map(|d| d.id).collect()
     }
 
     /// Adds an interface at `ip` as typed to the selected device, behind the device at `choice`
-    /// in the dropdown. False if refused, so the UI can keep what was typed.
+    /// in the dropdown. False if refused, so the UI can keep what was typed. The map is laid out
+    /// again with it, at rest: the map is out of sight on the edit page.
     fn add_interface(&mut self, ip: &str, choice: usize) -> bool {
-        let mut added = false;
-        if let (Some(upstream), Some(ip)) = (self.upstream_choice(choice), convert::ip(ip)) {
-            self.edit_interfaces(|network, id| added = network.add_interface(id, upstream, ip));
+        let upstream = self.upstream_choices().get(choice).copied();
+        let (Some(device), Some(upstream), Some(ip)) = (self.selected, upstream, convert::ip(ip))
+        else {
+            return false;
+        };
+        if self.network.add_interface(device, upstream, ip).is_none() {
+            return false;
         }
-        added
+        self.lay_out();
+        self.motion = Motion::new(self.positions.clone());
+        true
     }
 
-    /// Changes the selected device's interfaces. Their ghosts take room on the map, so it is laid
-    /// out again, at rest: it is out of sight on the edit page.
-    fn edit_interfaces(&mut self, edit: impl FnOnce(&mut Network, DeviceId)) {
-        if let Some(id) = self.selected {
-            edit(&mut self.network, id);
-            self.lay_out();
-            self.motion = Motion::new(self.positions.clone());
-        }
-    }
-
-    /// Forgets the selected device until restart; the rest of the map stays where it is.
+    /// Forgets the selected device, with its further interfaces, until restart; the rest of the
+    /// map stays where it is.
     fn forget_selected(&mut self) {
         if let Some(id) = self.selected.take() {
-            self.network.remove_device(id);
-            self.positions.remove(&id);
-            self.motion.forget(id);
+            for forgotten in self.network.remove_device(id) {
+                self.positions.remove(&forgotten);
+                self.motion.forget(forgotten);
+            }
         }
     }
 
@@ -220,7 +220,7 @@ impl AppState {
     }
 
     /// The connections to draw: all but the dragged device's uplink, which [`Self::strand`]
-    /// stands in for, then the lines to the ghosts.
+    /// stands in for.
     /// Each runs along its route as shown, branching off its neighbour's line, with the dragged
     /// device left out of the rows it was in.
     fn links(&self) -> Vec<(Connection, [Point; 3])> {
@@ -229,33 +229,9 @@ impl AppState {
             .arrangement
             .inner_neighbours(&self.network, self.dragging);
         let links = self.network.connections().iter();
-        let ghost_links = self
-            .ghosts()
-            .into_iter()
-            .map(|g| (g.interface.link(), g.line));
         links
             .filter(|c| Some(c.downstream) != self.dragging)
             .filter_map(|&c| Some((c, link_route(shown, &inner, c.upstream, c.downstream)?)))
-            .chain(ghost_links)
-            .collect()
-    }
-
-    /// The ghost of every interface, where its branch is shown.
-    fn ghosts(&self) -> Vec<Ghost> {
-        ghosts(&self.network, self.motion.shown())
-    }
-
-    /// The device list: the devices the search and filter let through, each followed by the
-    /// ghosts of its interfaces. Ghosts are at their settled spots, like the devices, so the
-    /// list does not change while the map moves.
-    fn listed(&self) -> Vec<(&Device, Option<Ghost>)> {
-        let ghosts = ghosts(&self.network, &self.positions);
-        let devices = self.network.filtered(self.filter, &self.query);
-        devices
-            .flat_map(|device| {
-                let own = ghosts.iter().filter(|g| g.interface.device == device.id);
-                std::iter::once((device, None)).chain(own.map(move |&g| (device, Some(g))))
-            })
             .collect()
     }
 
@@ -483,7 +459,8 @@ fn connect_port_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     }));
 }
 
-/// Adding, re-addressing, re-attaching and removing the selected device's further interfaces.
+/// Adding a further interface to the selected device. Once added, it is a device of its own:
+/// edited, moved and forgotten like any other.
 fn connect_interface_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let (add_ui, add_state) = (ui.as_weak(), Rc::clone(state));
@@ -494,24 +471,6 @@ fn connect_interface_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         });
         added
     });
-    let readdress = handler(ui, state, |st, (index, ip): (i32, SharedString)| {
-        if let Some(ip) = convert::ip(&ip) {
-            let index = convert::index(index);
-            st.edit_interfaces(|n, id| n.set_interface_ip(id, index, ip));
-        }
-    });
-    bridge.on_set_interface_ip(move |index, ip| readdress((index, ip)));
-    let reattach = handler(ui, state, |st, (index, choice)| {
-        if let Some(upstream) = st.upstream_choice(convert::index(choice)) {
-            let index = convert::index(index);
-            st.edit_interfaces(|n, id| n.set_interface_upstream(id, index, upstream));
-        }
-    });
-    bridge.on_set_interface_upstream(move |index, choice| reattach((index, choice)));
-    bridge.on_remove_interface(handler(ui, state, |st, index| {
-        let index = convert::index(index);
-        st.edit_interfaces(|n, id| n.remove_interface(id, index));
-    }));
 }
 
 /// A new role's name and icon, with the role names the dropdown shows.
@@ -804,74 +763,59 @@ mod tests {
     }
 
     #[test]
-    fn an_interface_is_added_behind_the_device_chosen_and_gets_a_ghost() {
+    fn an_interface_is_added_behind_the_device_chosen_and_placed_on_the_map() {
         let mut state = AppState::new(mock_data::network());
-        assert!(!state.add_interface("10.0.0.5", 0), "nothing selected");
+        assert!(!state.add_interface("10.0.0.7", 0), "nothing selected");
         let pc = DeviceId(5);
         state.selected = Some(pc);
         let choices = state.upstream_choices();
         assert!(!choices.contains(&pc), "not behind itself");
         let switch = choices.iter().position(|&id| id == DeviceId(2)).unwrap();
         assert!(!state.add_interface("10.0.0", switch));
-        assert!(!state.add_interface("10.0.0.5", 999));
-        assert!(state.add_interface(" 10.0.0.5 ", switch));
+        assert!(!state.add_interface("10.0.0.7", 999));
+        assert!(state.add_interface(" 10.0.0.7 ", switch));
 
-        let ghost = state
-            .ghosts()
-            .into_iter()
-            .find(|g| g.interface.device == pc);
-        assert_eq!(ghost.map(|g| g.interface.upstream), Some(DeviceId(2)));
+        let added = state
+            .network
+            .interfaces_of(pc)
+            .next()
+            .map(|d| d.id)
+            .unwrap();
+        let link = state.network.uplink(added).map(|c| c.upstream);
+        assert_eq!(link, Some(DeviceId(2)));
+        assert!(state.positions.contains_key(&added));
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
-        let device = state.network.device(pc).unwrap();
-        let addresses = convert::other_addresses(&state.network, device, &choices);
-        assert_eq!(addresses.first().map(|a| a.via), i32::try_from(switch).ok());
+
+        state.selected = Some(DeviceId(19));
+        let docker_lab = DeviceId(24);
+        assert!(!state.upstream_choices().contains(&docker_lab), "its own");
     }
 
     #[test]
-    fn the_list_shows_each_devices_ghosts_straight_after_it() {
-        let mut state = state_with(5);
-        let router = state
-            .upstream_choices()
-            .iter()
-            .position(|&id| id == DeviceId(1));
-        assert!(state.add_interface("10.0.0.7", router.unwrap()));
-        let rows: Vec<_> = state
-            .listed()
-            .iter()
-            .map(|(d, g)| (d.id, g.map(|g| g.interface.ip.to_string())))
-            .collect();
-        for (device, ip) in [(5, "10.0.0.7"), (19, "10.0.0.23")] {
-            let at = rows
-                .iter()
-                .position(|r| r.0 == DeviceId(device) && r.1.is_none());
-            let next = at.and_then(|at| rows.get(at + 1));
-            assert_eq!(next, Some(&(DeviceId(device), Some(ip.into()))), "{device}");
-        }
-        assert_eq!(
-            rows.iter().filter(|r| r.1.is_some()).count(),
-            state.network.interfaces().len()
-        );
-
-        state.query = "10.0.0.7".into();
-        let ids: Vec<_> = state
-            .listed()
-            .iter()
-            .map(|(d, g)| (d.id, g.is_some()))
-            .collect();
-        assert_eq!(
-            ids,
-            [(DeviceId(5), false), (DeviceId(5), true)],
-            "searched by it"
-        );
+    fn an_interface_is_dragged_and_dropped_like_any_device() {
+        let mut state = AppState::new(mock_data::network());
+        let docker_lab = DeviceId(24);
+        let far = Point {
+            x: -1000.0,
+            y: -1000.0,
+        };
+        state.drag_to(docker_lab, far);
+        state.drop_dragged();
+        assert!(state.network.uplink(docker_lab).is_none(), "stands alone");
+        state.reset_layout();
+        let link = state.network.uplink(docker_lab).map(|c| c.upstream);
+        assert_eq!(link, Some(DeviceId(22)), "back behind the lab router");
     }
 
     #[test]
-    fn forgetting_clears_the_selection_and_its_place_on_the_map() {
-        let mut state = state_with(10);
+    fn forgetting_clears_the_selection_and_the_places_of_the_device_and_its_interfaces() {
+        let mut state = state_with(19);
         state.forget_selected();
         assert_eq!(state.selected, None);
-        assert!(state.network.device(DeviceId(10)).is_none());
-        assert!(!state.positions.contains_key(&DeviceId(10)));
+        for gone in [DeviceId(19), DeviceId(24)] {
+            assert!(state.network.device(gone).is_none(), "{gone:?}");
+            assert!(!state.positions.contains_key(&gone), "{gone:?}");
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use super::{AppState, convert, lines};
-use crate::model::{Device, Ghost, Network, Role, StatusFilter};
+use crate::model::{Device, Network, Role, StatusFilter};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
@@ -21,7 +21,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     };
 
     let node = |d: &Device| {
-        let shown = state.filter.admits(d.status) && network.matches(d, &state.query);
+        let shown = state.filter.admits(d.status) && d.matches(&state.query);
         ui::DeviceView {
             dimmed: !shown,
             ..view(d)
@@ -31,22 +31,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     if let Some(model) = sync(&bridge.get_devices(), nodes.collect()) {
         bridge.set_devices(model);
     }
-    let ghosts = state.ghosts();
-    let ghost_views = ghosts.iter().filter_map(|g| {
-        let device = network.device(g.interface.device)?;
-        Some(convert::ghost_view(node(device), g))
-    });
-    if let Some(model) = sync(&bridge.get_ghosts(), ghost_views.collect()) {
-        bridge.set_ghosts(model);
-    }
-    push_map(&bridge, state, &ghosts);
-    let list = state
-        .listed()
-        .into_iter()
-        .map(|(device, ghost)| match ghost {
-            Some(ghost) => convert::ghost_view(view(device), &ghost),
-            None => view(device),
-        });
+    push_map(&bridge, state);
+    let list = network.filtered(state.filter, &state.query).map(view);
     if let Some(model) = sync(&bridge.get_list(), list.collect()) {
         bridge.set_list(model);
     }
@@ -60,9 +46,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_selection(&bridge, &labels, state);
 }
 
-/// Where each device is drawn right now, the lines between them and to the `ghosts`, and the
-/// area they take up.
-fn push_map(bridge: &Bridge<'_>, state: &AppState, ghosts: &[Ghost]) {
+/// Where each device is drawn right now, the lines between them, and the area they take up.
+fn push_map(bridge: &Bridge<'_>, state: &AppState) {
     let on_map = state.motion.shown();
     let trunks = state.trunks();
     let places = state.network.devices().iter().map(|d| {
@@ -91,9 +76,8 @@ fn push_map(bridge: &Bridge<'_>, state: &AppState, ghosts: &[Ghost]) {
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }
-    bridge.set_jump(lines::jumps(on_map, ghosts, highlighted).into());
-    let nodes_at = on_map.values().copied().chain(ghosts.iter().map(|g| g.at));
-    bridge.set_bounds(convert::bounds(nodes_at));
+    bridge.set_jump(lines::jumps(&state.network, on_map, highlighted).into());
+    bridge.set_bounds(convert::bounds(on_map.values().copied()));
 }
 
 /// The role dropdown's names, the role list's rows and the groups they can be in.
@@ -151,18 +135,20 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     if let Some(model) = sync(&bridge.get_ports(), ports) {
         bridge.set_ports(model);
     }
-    let upstreams = selected
-        .map(|_| state.upstream_choices())
-        .unwrap_or_default();
     let addresses = selected
-        .map(|d| convert::other_addresses(&state.network, d, &upstreams))
+        .map(|d| convert::other_addresses(&state.network, d))
         .unwrap_or_default();
     if let Some(model) = sync(&bridge.get_other_addresses(), addresses) {
         bridge.set_other_addresses(model);
     }
-    let upstream_names = upstreams.iter().filter_map(|&upstream| {
-        let name = state.network.device(upstream)?.name.trim();
-        Some(labels.invoke_device_name(name.into()))
+    // Named as in the device list, where an interface is told apart from its device.
+    let upstream_names = state.upstream_choices().into_iter().filter_map(|upstream| {
+        let device = state.network.device(upstream)?;
+        let name = device.name.trim().into();
+        Some(match device.parent {
+            Some(_) => labels.invoke_ghost_name(name),
+            None => labels.invoke_device_name(name),
+        })
     });
     if let Some(model) = sync(&bridge.get_upstream_choices(), upstream_names.collect()) {
         bridge.set_upstream_choices(model);

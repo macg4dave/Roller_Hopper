@@ -7,8 +7,8 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, Ghost, GroupColour, Icon, LineStyle, Network,
-    Point, Role, Snap, Status, StatusFilter,
+    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LineStyle, Network, Point,
+    Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -150,7 +150,7 @@ pub(super) fn device_view(
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
         ip: device.ip.to_string().into(),
-        mac: device.mac.to_string().into(),
+        mac: mac(device),
         hostname: device.hostname.unwrap_or_default().into(),
         role,
         icon: icons.image(&network.icon(device)),
@@ -159,47 +159,30 @@ pub(super) fn device_view(
         x: at.x,
         y: at.y,
         dimmed: false,
-        ghost: false,
+        ghost: device.parent.is_some(),
     }
 }
 
-/// The ghost of an interface of the device in `view`: the device with the interface's address
-/// and MAC, where the ghost is shown.
-pub(super) fn ghost_view(view: ui::DeviceView, ghost: &Ghost) -> ui::DeviceView {
-    ui::DeviceView {
-        ip: ghost.interface.ip.to_string().into(),
-        mac: ghost
-            .interface
-            .mac
-            .map(|mac| mac.to_string())
-            .unwrap_or_default()
-            .into(),
-        x: ghost.at.x,
-        y: ghost.at.y,
-        ghost: true,
-        ..view
-    }
+/// The MAC address as shown; empty for an interface the user added.
+fn mac(device: &Device) -> SharedString {
+    device
+        .mac
+        .map(|mac| mac.to_string())
+        .unwrap_or_default()
+        .into()
 }
 
-/// The further addresses of `device`, each with the device it is attached behind: by name, and
-/// by its place in `upstreams`, the edit page's dropdown.
-pub(super) fn other_addresses(
-    network: &Network,
-    device: &Device,
-    upstreams: &[DeviceId],
-) -> Vec<ui::OtherAddress> {
+/// The further addresses of `device`, each with the name of the device it connects through;
+/// empty when it stands alone.
+pub(super) fn other_addresses(network: &Network, device: &Device) -> Vec<ui::OtherAddress> {
     let addresses = network.interfaces_of(device.id).map(|i| ui::OtherAddress {
         ip: i.ip.to_string().into(),
         via_name: network
-            .device(i.upstream)
+            .uplink(i.id)
+            .and_then(|link| network.device(link.upstream))
             .map(|d| d.name.trim())
             .unwrap_or_default()
             .into(),
-        via: upstreams
-            .iter()
-            .position(|&id| id == i.upstream)
-            .and_then(|choice| i32::try_from(choice).ok())
-            .unwrap_or(-1),
     });
     addresses.collect()
 }
@@ -247,7 +230,14 @@ pub(super) fn details(
         role,
         notes: device.notes.as_str().into(),
         ip: device.ip.to_string().into(),
-        mac: device.mac.to_string().into(),
+        mac: mac(device),
+        interface: device.parent.is_some(),
+        interface_of: device
+            .parent
+            .and_then(|parent| network.device(parent))
+            .map(|d| d.name.trim())
+            .unwrap_or_default()
+            .into(),
         manufacturer: text(device.manufacturer),
         model: text(device.model),
         hostname: text(device.hostname),
