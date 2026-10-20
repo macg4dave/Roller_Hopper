@@ -192,6 +192,7 @@ pub(super) fn details(
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
         custom_icon: device.icon.is_some(),
+        colour: colour(network.colour(device)),
         status: status(device.status),
         name: device.name.trim().into(),
         role,

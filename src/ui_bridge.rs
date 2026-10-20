@@ -71,15 +71,13 @@ impl AppState {
     }
 
     /// Adds the role named `name`, shown with `icon`, unless it matches one of the roles `shown`
-    /// in the dropdown (which may be translated, so only the UI knows their names). Returns the
-    /// index of the new or matching role; a matching role keeps its own icon.
-    fn add_role(&mut self, name: &str, icon: Icon, shown: &[SharedString]) -> Option<usize> {
+    /// in the dropdown (which may be translated, so only the UI knows their names).
+    fn add_role(&mut self, name: &str, icon: Icon, shown: &[SharedString]) {
         let lower = name.trim().to_lowercase();
-        if let Some(index) = shown.iter().position(|r| r.trim().to_lowercase() == lower) {
-            return Some(index);
+        if !shown.iter().any(|r| r.trim().to_lowercase() == lower) {
+            // A blank name adds nothing, which is what the user expects of it.
+            self.network.add_custom_role(name, icon);
         }
-        let role = self.network.add_custom_role(name, icon)?;
-        self.network.roles().iter().position(|r| *r == role)
     }
 
     /// Renames the role at `index`, unless `new` is the name of another role `shown` in the
@@ -201,15 +199,6 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_choose_role(handler(ui, state, |st, index| {
         st.choose_role(convert::index(index));
     }));
-    let choose_new = handler(ui, state, |st, (name, icon, shown): NewRole| {
-        if let Some(index) = st.add_role(&name, icon, &shown) {
-            st.choose_role(index);
-        }
-    });
-    let ui_weak = ui.as_weak();
-    bridge.on_choose_new_role(move |name, icon| {
-        choose_new((name, convert::icon_from_ui(&icon), shown_roles(&ui_weak)));
-    });
     bridge.on_set_icon(handler(ui, state, |st, icon: SharedString| {
         st.edit_selected(|d| d.icon = Some(convert::icon_from_ui(&icon)));
     }));
@@ -252,7 +241,6 @@ type NewRole = (SharedString, Icon, Vec<SharedString>);
 fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let add = handler(ui, state, |st, (name, icon, shown): NewRole| {
-        // The index is only needed when a device is to get the new role.
         st.add_role(&name, icon, &shown);
     });
     let add_ui = ui.as_weak();
@@ -413,13 +401,12 @@ mod tests {
     }
 
     #[test]
-    fn adding_a_role_that_is_already_shown_finds_it_instead() {
+    fn adding_a_role_that_is_already_shown_adds_nothing() {
         let mut state = state_with(10);
         let shown = shown_roles(&state);
-        let before = state.network.roles().len();
-        let index = state.add_role(" serveur ", Icon::new("Entertainment/Smart TV"), &shown);
-        assert_eq!(index.and_then(|i| state.role(i)), Some(Role::Server));
-        assert_eq!(state.network.roles().len(), before, "nothing added");
+        let before = state.network.clone();
+        state.add_role(" serveur ", Icon::new("Entertainment/Smart TV"), &shown);
+        assert_eq!(state.network, before);
     }
 
     #[test]
@@ -428,8 +415,8 @@ mod tests {
         let shown = shown_roles(&state);
         let media = Role::Custom("Media".into());
         let server = Icon::new("Computers/Server");
-        let index = state.add_role("Media", server.clone(), &shown);
-        assert_eq!(index, Some(state.network.roles().len() - 1));
+        state.add_role("Media", server.clone(), &shown);
+        assert_eq!(state.network.roles().last(), Some(&media));
         assert_eq!(state.network.role_icon(&media), Some(&server));
         assert_eq!(
             selected_role(&state),

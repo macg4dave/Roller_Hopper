@@ -127,9 +127,6 @@ msgstr "Notes"
 msgid "details.notes-placeholder"
 msgstr "Add a note"
 
-msgid "role-picker.add-custom"
-msgstr "Add custom role"
-
 msgid "new-role.name"
 msgstr "New role"
 

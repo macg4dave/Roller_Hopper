@@ -55,6 +55,8 @@ export struct DeviceDetails {
     icon: IconChoice,
     // The icon was picked for this device rather than coming from its role.
     custom-icon: bool,
+    // The colour of the role's group, as on the map and in the list.
+    colour: GroupColour,
     status: DeviceStatus,
     name: string,
     // Already translated, like DeviceView.role.
@@ -153,8 +155,6 @@ export global Bridge {
     // Reads the icon folder again, so icons added since appear. Icons are passed by their id;
     // an empty id is the Unknown icon.
     callback refresh-icons();
-    // Adds a role, with the icon picked for it, and gives it to the selected device.
-    callback choose-new-role(string, string);
     callback edit-notes(string);
     // The selected device's own icon, or back to its role's icon.
     callback set-icon(string);

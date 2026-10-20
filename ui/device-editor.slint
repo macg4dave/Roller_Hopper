@@ -1,11 +1,10 @@
-import { Button, LineEdit, ListView, ScrollView, TextEdit } from "std-widgets.slint";
+import { Button, ComboBox, LineEdit, ListView, ScrollView, TextEdit } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceRow } from "components/device-row.slint";
 import { IconChooser } from "components/icon-chooser.slint";
-import { RolePicker } from "components/role-picker.slint";
 import { Splitter } from "components/splitter.slint";
 import { PortEditor } from "port-editor.slint";
 
@@ -62,7 +61,7 @@ export component DeviceEditor inherits HorizontalLayout {
                     height: 52px;
                     icon: Bridge.details.icon;
                     icon-size: 36px;
-                    tint: Theme.accent;
+                    tint: Theme.group-colour(Bridge.details.colour, Theme.accent);
                     reset-text: @tr("edit.icon-from-role");
                     can-reset: Bridge.details.custom-icon;
                     picked(icon) => { Bridge.set-icon(icon.id); }
@@ -95,7 +94,13 @@ export component DeviceEditor inherits HorizontalLayout {
             }
             DetailField {
                 label: @tr("details.role");
-                RolePicker { }
+                // The role decides the icon the device is shown with. New roles are added in the
+                // role list.
+                ComboBox {
+                    model: Bridge.roles;
+                    current-index <=> Bridge.role-index;
+                    selected => { Bridge.choose-role(self.current-index); }
+                }
             }
             DetailField {
                 label: @tr("details.open-ports");
