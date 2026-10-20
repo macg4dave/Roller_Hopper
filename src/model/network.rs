@@ -232,7 +232,7 @@ mod tests {
     fn filters_combine_status_and_search() {
         let network = mock_data::network();
         let offline: Vec<_> = network.filtered(StatusFilter::Offline, "").collect();
-        assert!(!offline.is_empty());
+        assert_ne!(offline, [] as [&Device; 0]);
         assert!(offline.iter().all(|d| d.status == Status::Offline));
 
         let total = network.count(StatusFilter::All);
@@ -244,7 +244,7 @@ mod tests {
         let routers: Vec<_> = network
             .filtered(StatusFilter::Online, "192.168.1.1")
             .collect();
-        assert!(!routers.is_empty());
+        assert_ne!(routers, [] as [&Device; 0]);
         assert!(routers.iter().all(|d| d.matches("192.168.1.1")));
     }
 

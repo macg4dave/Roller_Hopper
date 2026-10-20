@@ -304,7 +304,7 @@ mod tests {
         state.selected = Some(Selection::Card(CardId(101)));
         assert_eq!(state.selected_device(), Some(DeviceId(1)));
         assert_eq!(state.selected_cards(), [CardId(101)]);
-        assert!(state.ties().is_empty());
+        assert_eq!(state.ties(), [] as [[Point; 2]; 0]);
         state.edit_selected(|d| d.name = "Gateway".into());
         assert_eq!(
             state.network.device(DeviceId(1)).map(|d| d.name.as_str()),

@@ -52,9 +52,50 @@ until their qualification task is done.
   so display reparenting creates a network link. `lay_out` replaces all positions and startup
   begins with an empty arrangement. During a drag, `AppState.positions` holds preview
   positions. Pan, zoom and auto-fit live in Slint.
-- Pinned: Rust 1.94 (protected), Slint/slint-build 1.18.1 with `renderer-skia`, ipnet 2.12.2.
+- Pinned: Rust 1.99.1 (protected; raised from 1.94 for the scanner, with the user's approval),
+  Slint/slint-build 1.18.1 with `renderer-skia`, ipnet 2.12.2.
   Slint's generic software renderer does not support the canvas's scaling; Skia software
   rendering is a different option, untested.
+
+### What the prototype UI settles
+
+The mock GUI is the interaction specification: real data flows through its pages and
+controls, changed only where the brief or an agreed decision says. It already defines:
+
+- Main view: search by name, IP or MAC; All / Online / Offline filters with counts; a device
+  list with collapsible network cards; Add device. The map has zoom, a percentage, Fit, Reset
+  layout and a View menu (names, roles, IP addresses, MAC addresses, hostnames, status dots).
+  Details show what a guest runs on, each card with the link it is plugged into (known or
+  inferred), type, manufacturer, model, hostname, last seen, open ports and notes.
+- Edit page ("Devices, roles and groups"): device name, role, icon and notes; network cards
+  with name, icon, IPv4/prefix, mask, gateway and MAC, each with an inline hint; manual ports
+  (number and description); VM/container guests. Roles can be added, renamed, given an icon or
+  group, deleted (their devices become Other), set to follow detected icons, and the standard
+  set restored. Groups have a name, colour and line style.
+- Move network card: moving a card to another device merges them, confirmed when it is the
+  source device's only card; its guests follow. On the discovery page a found card can move
+  onto a mapped device, which is how a possible duplicate is resolved by hand.
+- Discovery: a Network choice; Ping sweep, Port scan and Service detection options; Start or
+  Scan again, Pause/Resume and Stop; "n of m addresses checked" with elapsed time and a
+  progress bar. Results show name, found-by method chips, confidence and the flags New,
+  Duplicate?, Added and Ignored, with "Same MAC as"; a mapped card outside the scanned network
+  shows Not seen. A mapped host gets its normal editor and Show on map; others get a pre-Add
+  form, Add to map and Ignore. The log has Info and Warning lines, and the header shows
+  Scanning… while a run continues on another page.
+- Icons come from an `icons` folder beside the program (the source tree as fallback), with
+  subfolders as categories, re-read whenever the picker opens.
+
+Gaps the UI shows against the plan:
+
+- No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
+  data only". Settings holds only a pointer to the View menu.
+- The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
+  depth and pace presets; method labels include SNMP, ONVIF and LLDP, which are not offered;
+  Confidence is a made-up percentage.
+- The card IP hint promises an address "no other card has" (global uniqueness); manual ports
+  have no transport; last seen is relative ("At last scan", "n minutes ago").
+- Forget device comes back on restart, and Ignore lasts one run. Custom icons are referenced
+  in the folder, not embedded.
 
 ### Scanner: netscli-core
 
@@ -62,16 +103,31 @@ until their qualification task is done.
   source, local patch, submodule or replacement scanner. The app owns scope, run lifetime,
   admission and manual authority; the library owns probing, retries and fingerprints. Defects
   get a minimal reproduction for upstream (reporting it needs the user's go-ahead).
-- Inspected release **0.3.4**: MIT, empty default features, with optional capture, database
-  and mDNS features; keep capture off. It has TCP/UDP scanners, discovery, sweep, DNS, service
-  probes, OUI and optional mDNS. Its APIs include `PortScanner`, `DiscoverEngine` and
-  `SweepEngine`, progress callbacks and cancellation tokens. Upstream CI covers all three OSes.
-- **Blocking problems found:**
-  - It declares Rust 1.96, but the project pins 1.94. `cargo info` picks 0.2.6 for 1.94; that
-    release is unqualified and also shells out for ARP, so it is not a fallback.
-  - On macOS, ARP reads run `arp`; traceroute runs system tools; the Windows reverse-name
-    fallback can run `ping`. These break the no-child-program rule and must be avoided or
-    brought to the user as a platform exception.
+- **Chosen release: 0.3.4** with `default-features = false, features = ["mdns"]`; never
+  `pcap` or `db`. It needs Rust 1.96 for real (its `sysinfo` 0.39 uses `cfg_select!`), so the
+  toolchain moved to 1.99.1. Checked on Windows: builds with and without `mdns`. Linux and
+  macOS builds are unchecked here; upstream CI covers them.
+- Licences: the 240 runtime packages (all targets, `mdns` on) are MIT, Apache-2.0, ISC,
+  BSD-3-Clause or Unicode-3.0; LGPL appears only as one choice of an OR. The service probes
+  are its own, not nmap's database. The IEEE OUI registry is embedded (about 400 KB); it
+  prefers `NETSCLI_OUI_PATH` or an `oui.min.json.gz` beside the program.
+- API: `PingScanner`, `PortScanner`, `DiscoverEngine`, `SweepEngine`, DNS, OUI and mDNS, with
+  progress callbacks. Only packet capture has a cancellation token: a scan stops when its
+  future is dropped, and neighbour-table reads run in `spawn_blocking`. There is no pause.
+  `scan_host` takes at most 4,096 ports (`MAX_PORTS_PER_SCAN`) and returns a host's ports at
+  the end; its callback reports each port as it finishes. Concurrency caps at 1,024.
+- **Child processes (static trace of 0.3.4):** every `DiscoverEngine`/`SweepEngine` scan
+  reads the neighbour table, which runs `arp -an` on macOS (Windows uses `GetIpNetTable2`,
+  Linux `/proc/net/arp`); `reverse_lookup_best_effort_timeout` runs `ping -a` on Windows
+  (reached by discovery with names on, `inspect` and `Ops`); `trace_route` and ARP-table
+  changes run system tools. Compliant route: drive `PingScanner`, `PortScanner` and
+  `reverse_lookup_timeout` (hickory) directly, and never call trace or ARP changes. That
+  leaves macOS without neighbour MACs unless a safe in-process source is qualified or the
+  user approves an exception.
+- **ICMP:** Windows uses `IcmpSendEcho`, unprivileged. Linux and macOS open a raw Layer 3
+  socket, which needs root or `CAP_NET_RAW`; otherwise `PingScanner` silently uses a TCP
+  connect probe (`method` reports `tcp-connect`). That must show as ICMP unavailable, not as
+  a ping.
 - Use the library's full typed configuration where it is useful (targets, exclusions,
   source interface, discovery methods, TCP lists/ranges, named UDP, probes, concurrency,
   timeouts, retries). The first GUI shows a subset, but don't add empty options.
@@ -199,8 +255,8 @@ until their qualification task is done.
 - **First candidate: Qwen3-0.6B Q8_0 GGUF (Apache-2.0, about 639 MB) on Candle 0.11.0's
   `quantized_qwen3`**. Use non-thinking mode with short, bounded context and output, and
   bundle `tokenizer.json` and the chat template. Not shown yet: that this exact artifact,
-  tokenizer, template and runtime work together, Rust 1.94 compatibility (Candle declares no
-  MSRV), CPU latency and RAM, or usefulness for identifying devices.
+  tokenizer, template and runtime work together, Rust 1.99.1 compatibility (Candle declares
+  no MSRV), CPU latency and RAM, or usefulness for identifying devices.
 - Alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
@@ -307,13 +363,31 @@ supports, and anything unsupported is shown as unavailable, never faked.
 - History is never deleted automatically: warn once the saved file passes 100 MB; past
   256 MB the save fails clearly and the previous file stays.
 
+### Projects and review
+
+These extend the product brief's wording, which needs updating first (BLK-010).
+
+- Launch opens an empty, unsaved project. New, Open, Save and Save As sit in the header with
+  the project name and an unsaved mark; the sample network leaves the production path. The
+  empty map points to Scan and Add device.
+- Remove device replaces Forget device: after confirmation it removes the device with its
+  cards and guests from the project and keeps its scan history; a later scan may find it
+  again as New.
+- Ignore is saved and applies to the same identity in the same network context on later
+  runs. Ignored hosts have an Ignored filter, are never auto-added and can be un-ignored.
+- Result confidence is Strong, Some or Weak, worked out from the evidence (a MAC on the same
+  link plus a name is Strong; an IP alone is Weak), with the evidence shown on hover. No
+  percentage until one is measured.
+- Restrained choices, not asked: the AI automation controls live on the Settings page, per
+  network context; Arrange and the Automatic/Free toggle replace Reset layout beside Fit.
+
 ## IDs and maintenance
 
 | Item | Format | Next unused ID |
 | --- | --- | --- |
 | Milestone | `M-001` | `M-021` |
-| Task or backlog need | `BE-0001` | `BE-0107` |
-| Blocker (in the backlog) | `BLK-001` | `BLK-010` |
+| Task or backlog need | `BE-0001` | `BE-0108` |
+| Blocker (in the backlog) | `BLK-001` | `BLK-011` |
 
 Take the next ID from this table and advance it in the same edit. Never reuse an ID, even after
 its item is deleted. Splitting a task keeps the original ID for what remains.
@@ -365,9 +439,9 @@ Live checks need user-approved targets.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0007 | Qualify a stock netscli-core release: features, full dependency graph, licences (including bundled probe/signature data) and fit with the protected Rust 1.94 on all three OSes. Record the chosen version/features, or bring the toolchain decision to the user. | — |
-| BE-0008 | Trace the selected scanner, interface, DNS, neighbour and ICMP paths for child processes, capture/native libraries, safe API access and privileges. Produce a per-OS method matrix; qualify only necessary supplementary crates; get approval for any unavoidable exception. | BE-0007 |
-| BE-0009 | Exercise incremental results, pause (no new probes), stop/close task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
+| BE-0007 | Confirm netscli-core 0.3.4 (`default-features = false`, `mdns`) builds and links on Linux and macOS with Rust 1.99.1, with no native capture library. | — |
+| BE-0008 | Turn the static trace (Findings) into a per-OS method matrix confirmed on each OS. Qualify only necessary supplementary crates: unprivileged ICMP on Linux/macOS, the macOS neighbour table and per-destination routes/source interface. Bring the macOS MAC gap to the user as a decision if no safe in-process route exists. | BE-0007 |
+| BE-0009 | Exercise incremental results, pause (the app withholds new host and ≤4,096-port calls; upstream has none), stop/close by dropping futures with task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
 | BE-0010 | Qualify native dialogs and one safe save/replace route on all three OSes, including Linux in-process dialogs, ACL/link/metadata behaviour and failed replacement. No helper executable or separately installed runtime. | — |
 | BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3/Candle is the first candidate, not a foregone choice. | — |
 | BE-0012 | Consolidate the qualified versions, features, assets and approvals; confirm each M-002 blocker in the backlog is resolved or still honestly open. | BE-0007, BE-0008, BE-0009, BE-0010, BE-0011 |
@@ -383,9 +457,9 @@ Goal: extend the current pure model rather than create a second inventory.
 | --- | --- | --- |
 | BE-0013 | Replace static-only metadata with owned runtime values while preserving existing device/card/edit behaviour. | — |
 | BE-0014 | Non-reused device/card/run/result keys with a saved allocator; bounded Slint handles kept separate. Check exhaustion and save/reopen continuity. | BE-0013 |
-| BE-0015 | Named network contexts and scoped address associations. Equal private IPs in different contexts stay distinct; a missing remote MAC or prefix is valid. | BE-0014 |
-| BE-0016 | Keep device → card and VM/container ownership with validated references; reject cycles. Never infer guest ownership from vendor or IP. | BE-0015 |
-| BE-0017 | Service endpoints keyed by context/address/transport/port with typed outcomes (not tested, denied, no response…). TCP and UDP on one port stay distinct. | BE-0015 |
+| BE-0015 | Named network contexts and scoped address associations; the card editor's uniqueness rule and hint become per context. Equal private IPs in different contexts stay distinct; a missing remote MAC or prefix is valid. | BE-0014 |
+| BE-0016 | Keep device → card and VM/container ownership with validated references; reject cycles. Move network card (guests following) uses the same validation. Never infer guest ownership from vendor or IP. | BE-0015 |
+| BE-0017 | Service endpoints keyed by context/address/transport/port with typed outcomes (not tested, denied, no response…). TCP and UDP on one port stay distinct; the edit page's manual ports gain a transport (TCP by default) and keep their description. | BE-0015 |
 | BE-0018 | Route manual mutations through model validation; test duplicate keys, invalid references, address edits and ownership changes. | BE-0016, BE-0017 |
 
 Exit: runtime data fits the existing model, stays free of Slint, and cannot bypass invariants
@@ -399,7 +473,7 @@ Goal: make evidence and user intent distinguishable before network results arriv
 | --- | --- | --- |
 | BE-0019 | Store field/source/context/time evidence separately from manual values and suggestions; keep meaningful unavailable/unknown states. | BE-0018 |
 | BE-0020 | Apply manual → observation → labelled inference → unknown precedence through shared edit/reconciliation logic. Clearing an override falls back explicitly. | BE-0019 |
-| BE-0021 | Record last success separately from the latest method outcome; show last-observed time without treating a timeout or old evidence as Offline. | BE-0019 |
+| BE-0021 | Record last success separately from the latest method outcome; show the last-observed time in place of the relative "At last scan"/"n minutes ago", without treating a timeout or old evidence as Offline; a card outside the scanned scope stays Not seen. | BE-0019 |
 | BE-0022 | Represent manual/detected conflicts with both values, source/time and acknowledgement keyed to the differing value. | BE-0020 |
 | BE-0023 | Test manual edits during delayed observations, conflict acknowledgement/reappearance, missing data and transport-specific outcomes, with no live traffic. | BE-0021, BE-0022 |
 
@@ -428,9 +502,9 @@ Goal: keep the user's map across edits, scans and file operations.
 | --- | --- | --- |
 | BE-0029 | Store committed icon centres, arrangement, placement mode and layout parameters in Rust; keep pointer previews and spring state transient. | BE-0028 |
 | BE-0030 | Free positioning with simple derived connectors; one committed move for a displayed parent and all descendants; Cancel restores the branch. | BE-0029 |
-| BE-0031 | Keep automatic tree/snap/order/animation; implement the agreed mode switch and an explicit layout action. Remove the prototype's Reset layout. | BE-0030 |
+| BE-0031 | Keep automatic tree/snap/order/animation; add the agreed Automatic/Free toggle and an Arrange action beside zoom and Fit, replacing Reset layout. | BE-0030 |
 | BE-0032 | Place new cards in a clear area without moving established positions; refresh and ordinary edits keep placement and display parentage. | BE-0031 |
-| BE-0033 | Capture view centre, zoom, panels, filters, selection and display options into the document; restore after the viewport exists without the initial fit overriding them. | BE-0032 |
+| BE-0033 | Capture view centre, zoom, panel widths, list filter and search, collapsed card groups, selection and the View menu's display options into the document; restore after the viewport exists without the initial fit overriding them. | BE-0032 |
 
 Exit: branch offsets survive movement, and a snapshot taken mid-drag holds the last committed
 placement.
@@ -441,8 +515,8 @@ Goal: the complete save contract before native file controls.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0034 | Define the `.rhopper.json` schema/version and complete-state checklist (IDs, contexts, inventory, relationships, layout/view, manual data, scan settings/results/history/logs, AI state/model identity). | BE-0023, BE-0033 |
-| BE-0035 | Embed custom SVG icons with stable identifiers, validated size/content and built-in fallbacks; no absolute paths. | BE-0034 |
+| BE-0034 | Define the `.rhopper.json` schema/version and complete-state checklist (IDs, contexts, inventory, cards with name/icon, guests, manual ports, roles with icons/groups/detected-icon choice and deleted standard roles, groups with colour/line style, relationships, layout/view, manual data, ignored identities, scan settings/results/history/logs, AI state/model identity). | BE-0023, BE-0033 |
+| BE-0035 | Embed custom SVG icons chosen from the `icons` folder with stable identifiers, validated size/content and built-in fallbacks, so a project opens without that folder; no absolute paths. | BE-0034 |
 | BE-0036 | Serialise immutable revisioned snapshots off the UI thread; keep all history while bounding working buffers; clear failure past an approved file limit. | BE-0035 |
 | BE-0037 | Parse Open into a separate candidate and validate schema, counts/strings, references, ownership/display cycles, placement and finite coordinates/zoom before installing it. | BE-0036 |
 | BE-0038 | Supported migrations; reject unknown newer versions and failed migrations without touching the current project. | BE-0037 |
@@ -457,11 +531,11 @@ Goal: explicit saves that protect the previous file.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0040 | Connect the qualified native dialogs; cancelling a picker changes neither document nor path. | BE-0039, BE-0010 |
+| BE-0040 | Add New, Open, Save and Save As to the header and connect the qualified native dialogs; cancelling a picker changes neither document nor path. | BE-0039, BE-0010 |
 | BE-0041 | Write a complete sibling temporary file, commit via the qualified replacement route, keep the old file on failure and report errors visibly. | BE-0040 |
 | BE-0042 | One writer per file; detect external changes before replacing, as agreed. Test races and access failures. | BE-0041 |
 | BE-0043 | Serialise writes per destination with generation/revision/path receipts; Save As changes the active path only on success. | BE-0042 |
-| BE-0044 | Dirty indicator and Save/Discard/Cancel before close or replacement; invalid Open keeps the project; a document switch invalidates old callbacks. | BE-0043 |
+| BE-0044 | Project name and unsaved mark in the header, replacing the "Sample data only" status; Save/Discard/Cancel before close, New or Open; invalid Open keeps the project; a document switch invalidates old callbacks. | BE-0043 |
 | BE-0045 | Restore full state with motion at rest and old observations as last-known; a saved active run reopens as history; nothing starts traffic or AI on Open. | BE-0044 |
 
 Exit: save failure, picker cancel, external edits and stale receipts all keep the right file
@@ -473,8 +547,9 @@ Goal: a useful persistent manual project before real scanning.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0046 | An empty real project supports manual devices, cards, contexts, roles/groups and icons without sample data. | BE-0045 |
-| BE-0047 | List/map selection, search, filters, editors, guest/card edits and custom roles all work against the one document, keeping drafts and selection. | BE-0046 |
+| BE-0046 | Launch opens an empty, unsaved project whose empty map points to Scan and Add device; it supports manual devices, cards, contexts, roles/groups and icons without sample data. | BE-0045 |
+| BE-0107 | Replace Forget device with the agreed Remove device: confirmation, removes the device with its cards and guests, keeps its scan history, saved on the next Save. Test guests, selection and undo by not saving. | BE-0046 |
+| BE-0047 | List/map selection, search, filters, editors, guest/card edits, card moves and custom roles all work against the one document, keeping drafts and selection. | BE-0107 |
 | BE-0048 | Demonstrate save/reopen, free branch moves and automatic arrangement with several cards and contexts; report source checks separately from approved visual checks. | BE-0047 |
 | BE-0049 | Remove simulation-only persistence assumptions; check the foundation against the product brief. | BE-0048 |
 
@@ -484,9 +559,9 @@ Goal: truthful run settings before any network traffic.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0050 | Enumerate interfaces, addresses and routes through qualified APIs so an empty project can scan; distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
+| BE-0050 | Enumerate interfaces, addresses and routes through qualified APIs so an empty project can scan; the discovery page's Network choice offers these, not mapped prefixes; distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
 | BE-0051 | Validate IPv4 addresses/CIDRs/exclusions lazily, including /31 and /32; show the source interface; mapped prefixes never grant permission. | BE-0050 |
-| BE-0052 | TCP lists/ranges, named UDP protocols and supported identification depth; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
+| BE-0052 | Replace the Ping sweep / Port scan / Service detection checkboxes with the agreed TCP port field and presets, named UDP methods, depth and pace; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
 | BE-0053 | Show available/unavailable methods with reasons, estimated work and limits before Start; reject invalid or oversized work without probing. | BE-0052, BE-0009 |
 | BE-0054 | Freeze context, targets, exclusions, ports, methods and limits into an immutable run configuration. | BE-0053 |
 
@@ -500,7 +575,7 @@ Goal: real run states without blocking the event loop.
 | BE-0056 | Bounded non-blocking command/result flow, coalesced progress and UI drain budgets; Stop independent of a full queue; report coverage loss rather than dropping findings. | BE-0055 |
 | BE-0057 | Preparing/running/pausing/paused/cancelling and completed/cancelled/failed/partial outcomes, using upstream pause/cancel rather than a new scheduler. | BE-0056, BE-0009 |
 | BE-0058 | Reject stale run/generation events; apply accepted observations before the terminal outcome; Stop keeps valid partial results. | BE-0057 |
-| BE-0059 | Runs survive navigation; close or confirmed project replacement cancels and accounts for owned work. | BE-0058, BE-0044 |
+| BE-0059 | Runs survive navigation, with the header showing Scanning…; close or confirmed project replacement cancels and accounts for owned work. | BE-0058, BE-0044 |
 | BE-0060 | Test monotonic elapsed time, stage counters, indeterminate work, partial method failure, full queues and bounded shutdown. | BE-0059 |
 
 ## M-012: Connect real scanner observations
@@ -511,7 +586,7 @@ Goal: replace fabricated answers with the qualified library's probes.
 | --- | --- | --- |
 | BE-0061 | Integrate the qualified netscli-core with capture off and only approved features; remove the fake status refresh and timer answers from the real Start path. | BE-0060, BE-0007 |
 | BE-0062 | Convert incremental TCP and identification results into scoped endpoint observations with typed outcomes, provenance and timestamps; never copy whole fixture devices. | BE-0061 |
-| BE-0063 | Add qualified named UDP/discovery methods (and supplementary crates only where the engine lacks them); stop subscriptions at run end; record overload/disconnect/permission failures. | BE-0062, BE-0008 |
+| BE-0063 | Add qualified named UDP/discovery methods (and supplementary crates only where the engine lacks them); stop subscriptions at run end; record overload/disconnect/permission failures. Method chips name only offered methods (drop SNMP, ONVIF and LLDP). | BE-0062, BE-0008 |
 | BE-0064 | Bound untrusted reply sizes, parser depth, timeouts and description URL redirects; redact credentials; replies cannot run commands or widen targets. | BE-0063 |
 | BE-0065 | Test local and routed/no-MAC cases, denied optional methods and partial failure with deterministic fixtures; a live smoke run only with approved targets. | BE-0064 |
 
@@ -521,7 +596,7 @@ Goal: repeat scans update the right card and device without overriding the user.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0066 | Reconcile scoped evidence in the agreed matching order; IP, name, OUI or AI alone never establish identity; ambiguous candidates stay in review. | BE-0065, BE-0023 |
+| BE-0066 | Reconcile scoped evidence in the agreed matching order; IP, name, OUI or AI alone never establish identity; ambiguous candidates stay in review. A manual card move between devices is a user-confirmed association later runs honour. | BE-0065, BE-0023 |
 | BE-0067 | Keep identity across DHCP changes; isolate IP reuse, MAC randomisation, overlapping contexts and conflicting evidence. | BE-0066 |
 | BE-0068 | Upsert repeated findings and services under stable keys, including multi-card devices; missing MAC/prefix stays unknown. | BE-0067 |
 | BE-0069 | Revalidate review/Add against the latest revision and selected endpoint/context; admit only supported cards; reject stale candidates. | BE-0068 |
@@ -534,8 +609,8 @@ Goal: reuse existing pages and forms for real results.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0072 | Results, counts/filters, stable result selection and details driven by real evidence, labelled with method, age, uncertainty and possible duplicates. | BE-0071 |
-| BE-0073 | Keep pre-Add name/role/icon/notes editing and Add/Ignore/leave-unadded; pre-Add edits become protected manual values. | BE-0072 |
+| BE-0072 | Results, counts/filters, stable result selection and details driven by real evidence, labelled with method, age, the agreed Strong/Some/Weak confidence and possible duplicates ("Same MAC as"). | BE-0071 |
+| BE-0073 | Keep pre-Add name/role/icon/notes editing and Add/leave-unadded; moving a found card onto a mapped device resolves a duplicate; Ignore is saved per identity and context, with an Ignored filter and a way to stop ignoring. Pre-Add edits become protected manual values. | BE-0072 |
 | BE-0074 | Reuse mapped-device editing and Show on map; discovery and inventory share the device; drafts survive result batches. | BE-0073 |
 | BE-0075 | Real progress, pause/in-flight, terminal/partial states and per-method issues in the existing controls and log; remove "simulated" wording from the real path. | BE-0074 |
 | BE-0076 | Check start/stop/navigation, review/edit/Add, keyboard focus and translations; record approved GUI checks separately from source checks. | BE-0075 |
@@ -570,7 +645,7 @@ Goal: the agreed opt-ins without giving AI authority over user data.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0087 | Separate "Fill missing inferred fields" and "Automatically add new devices" controls, both off by default, with the agreed scope and explanations. | BE-0086 |
+| BE-0087 | Separate "Fill missing inferred fields" and "Automatically add new devices" controls on the Settings page, per network context, both off by default, with explanations. | BE-0086 |
 | BE-0088 | Apply missing-field suggestions only after revision/policy/manual checks, keeping source/model identity and a way to reverse them. | BE-0087 |
 | BE-0089 | Auto-add only with valid scoped evidence, resolved identity and the agreed thresholds; ambiguous or possible-duplicate findings stay in review. | BE-0088 |
 | BE-0090 | Save policy, suggestions, accepted provenance and model identity; Open runs nothing and does not trust imported consent. | BE-0089, BE-0079 |
@@ -586,7 +661,7 @@ Goal: combined behaviour under realistic load.
 | BE-0093 | Stress queues and work limits; Stop stays responsive and late results are handled while AI or file work is busy; nothing collects after close. | BE-0092 |
 | BE-0094 | Measure about 250 devices by real card/service/history counts, including animation, projection, save snapshots and AI memory; optimise only measured bottlenecks. | BE-0093 |
 | BE-0095 | Keyboard/focus/error feedback, readable provenance and conflicts, no dead controls and complete translations across map, discovery, files and AI. | BE-0094 |
-| BE-0096 | Remove remaining production simulation paths and the Forget/Reset controls; update the README; any kept demo mode needs the user's decision. | BE-0095 |
+| BE-0096 | Remove remaining production simulation paths and the sample network (no demo mode); update the README. | BE-0095 |
 
 ## M-019: Self-contained builds on three platforms
 

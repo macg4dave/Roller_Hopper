@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn a_run_reveals_each_host_on_its_subnet_once_in_address_order() {
         let (mut discovery, _) = started(ScanOptions::default());
-        assert!(discovery.found().is_empty());
+        assert_eq!(discovery.found(), []);
         discovery.step();
         let early = discovery.found().len();
         run_to_end(&mut discovery);
@@ -396,7 +396,7 @@ mod tests {
         let (mut discovery, _) = started(options);
         run_to_end(&mut discovery);
         let found = discovery.found();
-        assert!(!found.is_empty());
+        assert_ne!(found, []);
         for f in found {
             assert!(
                 f.device

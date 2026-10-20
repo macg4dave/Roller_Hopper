@@ -200,7 +200,7 @@ mod tests {
             right: vec![SWITCH, ACCESS_POINT],
         };
         assert_eq!(tiers, [expected]);
-        assert!(Arrangement::default().tiers(&network, PC).is_empty());
+        assert_eq!(Arrangement::default().tiers(&network, PC), [] as [Tier; 0]);
     }
 
     #[test]

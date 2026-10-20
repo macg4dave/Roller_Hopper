@@ -88,7 +88,7 @@ fn prohibited_commands_return_actionable_denials() -> io::Result<()> {
                 .unwrap();
             assert!(reason.contains("cargo tool --help"), "{command}");
             assert!(reason.contains("smallest tested Rust command"));
-            assert!(output.stderr.is_empty());
+            assert_eq!(output.stderr, b"");
         }
     }
     Ok(())
@@ -139,8 +139,8 @@ fn malformed_events_fail_without_an_allow_decision() -> io::Result<()> {
     ] {
         let output = invoke(input)?;
         assert!(!output.status.success(), "{input}");
-        assert!(output.stdout.is_empty());
-        assert!(!output.stderr.is_empty());
+        assert_eq!(output.stdout, b"");
+        assert_ne!(output.stderr, b"");
     }
     Ok(())
 }

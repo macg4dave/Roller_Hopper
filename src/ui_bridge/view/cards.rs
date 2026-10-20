@@ -123,7 +123,7 @@ mod tests {
             .filter(|d| network.host(d.id) == Some(DOCKER_HOST))
             .map(|d| convert::ui_id(d.id))
             .collect();
-        assert!(!on_docker.is_empty());
+        assert_ne!(on_docker, [] as [i32; 0]);
         assert_eq!(ids(DOCKER_HOST).collect::<Vec<_>>(), on_docker);
         let on_linux_server: Vec<i32> = ids(network.host(DOCKER_HOST).unwrap()).collect();
         assert!(on_linux_server.contains(&convert::ui_id(DOCKER_HOST)));

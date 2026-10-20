@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(network.nodes().len(), cards);
         let behind = |card| network.behind(card).collect::<Vec<_>>();
         assert_eq!(behind(ROUTER_LAN), [NAS, SWITCH, ACCESS_POINT]);
-        assert!(behind(ROUTER_WAN).is_empty());
+        assert_eq!(behind(ROUTER_WAN), [] as [CardId; 0]);
         assert!(network.uplink(ROUTER_WAN).is_none(), "heads its own tree");
     }
 

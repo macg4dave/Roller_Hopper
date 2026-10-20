@@ -2,7 +2,7 @@
 name = "network-mapper"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.99"
 description = "UI prototype of a local network mapper (mock data only)"
 license = "MIT"
 publish = false

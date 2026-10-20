@@ -169,7 +169,7 @@ mod tests {
             .filter(|d| network.host(d.id) == Some(DOCKER_HOST))
             .map(|d| d.id)
             .collect();
-        assert!(!on_docker.is_empty());
+        assert_ne!(on_docker, [] as [DeviceId; 0]);
         let forgotten = network.remove_device(LINUX_SERVER);
         assert!(forgotten.contains(&DOCKER_HOST));
         assert!(on_docker.iter().all(|id| forgotten.contains(id)));
