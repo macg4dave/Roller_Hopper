@@ -136,6 +136,19 @@ export component TopologyCanvas inherits Rectangle {
             opacity: device.dimmed ? 0.3 : 1;
         }
 
+        // From a device to its ghost, while it or the device the ghost hangs from is selected.
+        if Bridge.jump != "": Path {
+            width: parent.width;
+            height: parent.height;
+            viewbox-x: Bridge.bounds.x;
+            viewbox-y: Bridge.bounds.y;
+            viewbox-width: Bridge.bounds.width;
+            viewbox-height: Bridge.bounds.height;
+            commands: Bridge.jump;
+            stroke: Theme.accent;
+            stroke-width: Theme.line-width / zoom;
+        }
+
         if Bridge.strand.commands != "": Path {
             width: parent.width;
             height: parent.height;
@@ -152,6 +165,17 @@ export component TopologyCanvas inherits Rectangle {
             strand: Bridge.strand;
             origin-x: Bridge.bounds.x;
             origin-y: Bridge.bounds.y;
+        }
+
+        // Ghosts select the device they stand for; only the device itself can be dragged.
+        for ghost in Bridge.ghosts: MapNode {
+            device: ghost;
+            ghost: true;
+            zoom: zoom;
+            selected: ghost.id == Bridge.selected-id;
+            x: (ghost.x - Bridge.bounds.x) * 1px - self.width / 2;
+            y: (ghost.y - Bridge.bounds.y) * 1px - (self.icon-size + 14px) / 2;
+            clicked => { Bridge.select(ghost.id); }
         }
 
         // Positions come from Bridge.places, so moving a node leaves its labels untouched.

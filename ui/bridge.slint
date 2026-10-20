@@ -63,6 +63,12 @@ export struct NodePlace {
     root-y: float,
 }
 
+/// A further address of the selected device, and the device it is attached behind.
+export struct OtherAddress {
+    ip: string,
+    via-name: string,
+}
+
 /// Read-only details of the selected device. Empty strings are not shown.
 export struct DeviceDetails {
     // What the device was detected as, and the icon it is shown with.
@@ -149,13 +155,21 @@ export struct MapBounds {
 export global Bridge {
     in property <[DeviceView]> devices;
     in property <[NodePlace]> places;
+    // A device's further interfaces, each drawn as a faded ghost of the device in the branch it
+    // is attached to: the device with the interface's address and MAC, at the spot where the
+    // ghost is drawn right now.
+    in property <[DeviceView]> ghosts;
     in property <[DeviceView]> list;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
     in property <Strand> strand;
+    // While a device with a ghost, or the device a ghost hangs from, is selected: the line from
+    // the device to its ghost, as SVG path commands in map units. Empty otherwise.
+    in property <string> jump;
     in property <MapBounds> bounds;
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
+    in property <[OtherAddress]> other-addresses;
     in property <[PortView]> ports;
     in property <[string]> roles;
     in property <[RoleView]> role-list;

@@ -2,13 +2,18 @@
 //! device each line hangs from.
 
 use super::convert;
-use crate::model::{Connection, ConnectionKind, DeviceId, GroupColour, LineStyle, Network, Point};
+use crate::model::{
+    Connection, ConnectionKind, DeviceId, Ghost, GroupColour, LineStyle, Network, Point, Positions,
+};
 use crate::ui;
 
 /// How far apart the zigzag and wavy styles swing to each side, and how far off the route,
 /// in map units.
 const BEND_LENGTH: f32 = 5.0;
 const BEND_DEPTH: f32 = 2.5;
+/// How far a jump line stays clear of the icon centres at its ends, just outside the circle
+/// drawn round a selected icon, in map units.
+const ICON_CLEARANCE: f32 = 28.0;
 /// The short line each style is previewed on in the style dropdown; its box in the UI is
 /// 48 × 12 map units.
 const SAMPLE: [Point; 2] = [Point { x: 0.0, y: 6.0 }, Point { x: 48.0, y: 6.0 }];
@@ -61,6 +66,35 @@ pub(super) fn lines(
             thick: style == LineStyle::Thick,
         });
     sets.collect()
+}
+
+/// SVG path commands for the dashed jump from each device at `shown` to its ghost, for the
+/// ghosts whose device, or the device they hang from, is `selected`. Empty when there are none.
+pub(super) fn jumps(shown: &Positions, ghosts: &[Ghost], selected: Option<DeviceId>) -> String {
+    let lit = ghosts.iter().filter(|g| {
+        let ends = [g.interface.device, g.interface.upstream];
+        selected.is_some_and(|id| ends.contains(&id))
+    });
+    let lines = lit.filter_map(|g| {
+        let from = shown.get(&g.interface.device)?;
+        clear_of_icons(*from, g.at).map(|line| path(LineStyle::Dashed, &line))
+    });
+    lines.collect::<Vec<_>>().join(" ")
+}
+
+/// The straight line from `a` to `b`, less its ends under the icons there; `None` when the icons
+/// are so close that nothing is left.
+fn clear_of_icons(a: Point, b: Point) -> Option<[Point; 2]> {
+    let length = (b.x - a.x).hypot(b.y - a.y);
+    if length <= 2.0 * ICON_CLEARANCE {
+        return None;
+    }
+    let along = |t: f32| Point {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+    };
+    let clearance = ICON_CLEARANCE / length;
+    Some([along(clearance), along(1.0 - clearance)])
 }
 
 /// A preview of every line style, in the order the style dropdown lists them.
@@ -263,6 +297,32 @@ mod tests {
     }
 
     #[test]
+    fn a_ghost_is_joined_to_its_device_only_while_either_end_is_selected() {
+        let network = crate::mock_data::network();
+        let (positions, _) = routed(&network);
+        let ghosts = crate::model::ghosts(&network, &positions);
+        let interface = ghosts.first().map(|g| g.interface).unwrap();
+        assert_eq!(jumps(&positions, &ghosts, None), "");
+        assert_eq!(jumps(&positions, &ghosts, Some(DeviceId(4))), "", "the NAS");
+        for end in [interface.device, interface.upstream] {
+            let jump = jumps(&positions, &ghosts, Some(end));
+            assert!(jump.matches('M').count() > 1, "dashed: {jump}");
+        }
+    }
+
+    #[test]
+    fn a_jump_stays_clear_of_the_icons_at_its_ends() {
+        let a = Point { x: 0.0, y: 0.0 };
+        let [start, end] = clear_of_icons(a, Point { x: 100.0, y: 0.0 }).unwrap();
+        assert_eq!((start.x, end.x), (ICON_CLEARANCE, 100.0 - ICON_CLEARANCE));
+        assert_eq!(
+            clear_of_icons(a, Point { x: 50.0, y: 0.0 }),
+            None,
+            "too close"
+        );
+    }
+
+    #[test]
     fn lines_take_the_colour_and_style_of_the_device_they_hang_from() {
         let mut network = crate::mock_data::network();
         let (positions, links) = routed(&network);
@@ -282,10 +342,12 @@ mod tests {
             .collect();
         assert!(red.iter().all(|s| s.thick), "the group's style");
         let known = red.iter().find(|s| !s.inferred);
+        // Every router's links, as the role is in the group, but only the trunk passed in.
+        let is_router = |id| network.device(id).is_some_and(|d| d.role == Role::Router);
         let router_links = network
             .connections()
             .iter()
-            .filter(|c| c.upstream == router);
+            .filter(|c| is_router(c.upstream));
         let expected = router_links
             .filter(|c| c.kind == ConnectionKind::Known)
             .count()
@@ -293,7 +355,7 @@ mod tests {
         assert_eq!(
             known.map(|s| s.commands.matches('M').count()),
             Some(expected),
-            "the router's links and trunk, and only those"
+            "the routers' links and trunk, and only those"
         );
     }
 }

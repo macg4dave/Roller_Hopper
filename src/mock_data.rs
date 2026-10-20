@@ -3,9 +3,13 @@
 use std::net::Ipv4Addr;
 
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LastSeen,
-    LineStyle, MacAddr, Network, Role, Services, Status,
+    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Interface,
+    LastSeen, LineStyle, MacAddr, Network, Role, Services, Status,
 };
+
+/// The home network's /24, and that of the separate lab network behind the Lab Router.
+const HOME: [u8; 3] = [192, 168, 1];
+const LAB: [u8; 3] = [10, 0, 0];
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
 const FLAKY_DEVICE: DeviceId = DeviceId(13);
@@ -24,6 +28,7 @@ struct Spec {
     kind: DeviceKind,
     role: Role,
     status: Status,
+    subnet: [u8; 3],
     host: u8,
     mac: [u8; 6],
     manufacturer: Option<&'static str>,
@@ -47,7 +52,7 @@ impl Spec {
             role: self.role,
             icon: None,
             status: self.status,
-            ip: Ipv4Addr::new(192, 168, 1, self.host),
+            ip: address(self.subnet, self.host),
             mac: MacAddr(self.mac),
             manufacturer: self.manufacturer,
             model: self.model,
@@ -61,7 +66,11 @@ impl Spec {
     }
 }
 
-/// Shorthand for the many devices that share most defaults.
+fn address([a, b, c]: [u8; 3], host: u8) -> Ipv4Addr {
+    Ipv4Addr::new(a, b, c, host)
+}
+
+/// Shorthand for the many devices that share most defaults, on the home network.
 fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -> Spec {
     Spec {
         id,
@@ -69,6 +78,7 @@ fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -
         kind,
         role: kind.default_role(),
         status: Status::Online,
+        subnet: HOME,
         host,
         mac,
         manufacturer: None,
@@ -353,6 +363,36 @@ fn devices() -> Vec<Device> {
                 [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x05],
             )
         },
+        // The lab network: seen only through the Docker Host's second interface.
+        Spec {
+            manufacturer: Some("MikroTik"),
+            model: Some("hAP ax²"),
+            hostname: Some("lab-router"),
+            subnet: LAB,
+            services: &[(22, "SSH"), (80, "WebFig"), (8291, "Winbox")],
+            notes: "Separate lab network for testing.",
+            ..spec(
+                22,
+                "Lab Router",
+                K::Router,
+                1,
+                [0x48, 0xA9, 0x8A, 0x21, 0x5C, 0x90],
+            )
+        },
+        Spec {
+            manufacturer: Some("Raspberry Pi"),
+            model: Some("Raspberry Pi 5"),
+            hostname: Some("lab-pi"),
+            subnet: LAB,
+            services: &[(22, "SSH")],
+            ..spec(
+                23,
+                "Lab Pi",
+                K::Server,
+                50,
+                [0xD8, 0x3A, 0xDD, 0x4C, 0x71, 0x0A],
+            )
+        },
     ]
     .into_iter()
     .map(Spec::build)
@@ -382,6 +422,7 @@ fn connections() -> Vec<Connection> {
         (6, 19, Known),
         (6, 20, Known),
         (6, 21, Known),
+        (22, 23, Known),
     ]
     .into_iter()
     .map(|(up, down, kind)| Connection {
@@ -392,8 +433,19 @@ fn connections() -> Vec<Connection> {
     .collect()
 }
 
+/// The Docker Host's second virtual network card, on the lab network.
+fn interfaces() -> Vec<Interface> {
+    vec![Interface {
+        device: DeviceId(19),
+        upstream: DeviceId(22),
+        ip: address(LAB, 23),
+        mac: MacAddr([0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x13]),
+        kind: ConnectionKind::Known,
+    }]
+}
+
 pub(crate) fn network() -> Network {
-    let mut network = Network::new(devices(), connections());
+    let mut network = Network::new(devices(), connections(), interfaces());
     // Custom roles as if the user had added them: no standard role has the TV or console icon,
     // and a virtual machine is told apart from the host it runs on.
     let custom: [(&[u32], _, _); 3] = [
@@ -500,16 +552,42 @@ mod tests {
     fn ids_ips_and_macs_are_unique() {
         let network = network();
         let devices = network.devices();
-        let unique = |values: HashSet<String>| values.len() == devices.len();
+        let interfaces = network.interfaces();
+        let addresses = devices.len() + interfaces.len();
+        let unique =
+            |values: Vec<String>, count| values.iter().collect::<HashSet<_>>().len() == count;
         assert!(unique(
-            devices.iter().map(|d| format!("{:?}", d.id)).collect()
+            devices.iter().map(|d| format!("{:?}", d.id)).collect(),
+            devices.len()
         ));
-        assert!(unique(devices.iter().map(|d| d.ip.to_string()).collect()));
-        assert!(unique(devices.iter().map(|d| d.mac.to_string()).collect()));
+        let ips = devices
+            .iter()
+            .map(|d| d.ip)
+            .chain(interfaces.iter().map(|i| i.ip));
+        assert!(unique(ips.map(|ip| ip.to_string()).collect(), addresses));
+        let macs = devices
+            .iter()
+            .map(|d| d.mac)
+            .chain(interfaces.iter().map(|i| i.mac));
+        assert!(unique(macs.map(|mac| mac.to_string()).collect(), addresses));
     }
 
     #[test]
-    fn connections_reference_existing_devices_and_form_a_tree() {
+    fn an_interface_joins_its_device_to_another_subnet() {
+        let network = network();
+        assert!(!network.interfaces().is_empty());
+        let subnet = |ip: Ipv4Addr| ip.octets()[..3].to_vec();
+        for interface in network.interfaces() {
+            let device = network.device(interface.device).unwrap();
+            let upstream = network.device(interface.upstream).unwrap();
+            assert_ne!(subnet(interface.ip), subnet(device.ip), "{interface:?}");
+            assert_eq!(subnet(interface.ip), subnet(upstream.ip), "{interface:?}");
+            assert!(!network.is_within(interface.upstream, interface.device));
+        }
+    }
+
+    #[test]
+    fn connections_reference_existing_devices_and_form_trees() {
         let network = network();
         for c in network.connections() {
             assert!(network.device(c.upstream).is_some(), "{c:?}");
@@ -523,8 +601,8 @@ mod tests {
         );
         assert_eq!(
             network.devices().len() - downstream.len(),
-            1,
-            "a single root"
+            2,
+            "the home network and the lab network"
         );
     }
 

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "network-mapper": {
+      "type": "http",
+      "url": "http://localhost:9315/mcp"
+    },
+    "slint-docs": {
+      "type": "http",
+      "url": "https://docs.slint.dev/mcp"
+    }
+  }
+}

@@ -70,6 +70,9 @@ msgstr "Fit to view"
 msgid "map.reset-layout"
 msgstr "Reset layout"
 
+msgid "map.ghost"
+msgstr "{} (other interface)"
+
 # The View button at the top right of the map, and the switches it opens.
 msgid "view.button"
 msgstr "View"
@@ -113,6 +116,12 @@ msgstr "Role"
 
 msgid "details.ip"
 msgstr "IP address"
+
+msgid "details.other-address"
+msgstr "Other address"
+
+msgid "details.other-address.value"
+msgstr "{} via {}"
 
 msgid "details.mac"
 msgstr "MAC address"

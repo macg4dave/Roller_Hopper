@@ -32,5 +32,16 @@ to the UI. Part of the agent rules indexed in [AGENTS.md](../../AGENTS.md).
 - Icons are SVG line art in one consistent style, same stroke width and viewBox, tinted with
   `colorize` rather than duplicated per colour. Icons that are part of the UI are compiled in;
   icons the user may add are read at run time, with a compiled-in fallback.
-- For UI changes, launch the app (`cargo run`) when possible and check the change visually
-  against the design direction in [product.md](product.md).
+- For UI changes, check the change visually against the design direction in
+  [product.md](product.md). The `slint` agent skill can see and drive the running app through
+  Slint's embedded MCP server (screenshots, clicks, drags, typing; the project's `.mcp.json`
+  names it `network-mapper`). Start the app with the server on:
+
+  ```sh
+  SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=9315 cargo run --features slint/mcp
+  ```
+
+  Pass `slint/mcp` on the command line only; MUST NOT add it to `Cargo.toml`.
+- MUST ask the user before running the app, or testing it, through the `slint` skill and its
+  MCP server, and wait for a yes. If the user declines, say the change was not checked
+  visually.

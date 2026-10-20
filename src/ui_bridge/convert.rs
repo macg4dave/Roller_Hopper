@@ -5,8 +5,8 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LineStyle, Network, Point,
-    Positions, Role, Snap, Status, StatusFilter,
+    ConnectionKind, Device, DeviceId, DeviceKind, Ghost, GroupColour, Icon, LineStyle, Network,
+    Point, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -160,6 +160,31 @@ pub(super) fn device_view(
     }
 }
 
+/// The ghost of an interface of the device in `view`: the device with the interface's address
+/// and MAC, where the ghost is shown.
+pub(super) fn ghost_view(view: ui::DeviceView, ghost: &Ghost) -> ui::DeviceView {
+    ui::DeviceView {
+        ip: ghost.interface.ip.to_string().into(),
+        mac: ghost.interface.mac.to_string().into(),
+        x: ghost.at.x,
+        y: ghost.at.y,
+        ..view
+    }
+}
+
+/// The further addresses of `device`, each with the name of the device it is attached behind.
+pub(super) fn other_addresses(network: &Network, device: &Device) -> Vec<ui::OtherAddress> {
+    let addresses = network.interfaces_of(device.id).map(|i| ui::OtherAddress {
+        ip: i.ip.to_string().into(),
+        via_name: network
+            .device(i.upstream)
+            .map(|d| d.name.trim())
+            .unwrap_or_default()
+            .into(),
+    });
+    addresses.collect()
+}
+
 /// A role for the role list, with `label` as shown in the role dropdown.
 pub(super) fn role_view(
     network: &Network,
@@ -245,9 +270,9 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
         .collect()
 }
 
-/// The map area holding every node and its labels.
-pub(super) fn bounds(positions: &Positions) -> ui::MapBounds {
-    let mut points = positions.values();
+/// The map area holding every node (device or ghost) at `points`, and its labels.
+pub(super) fn bounds(points: impl IntoIterator<Item = Point>) -> ui::MapBounds {
+    let mut points = points.into_iter();
     let Some(first) = points.next() else {
         return ui::MapBounds {
             x: 0.0,
@@ -256,7 +281,7 @@ pub(super) fn bounds(positions: &Positions) -> ui::MapBounds {
             height: 1.0,
         };
     };
-    let (min, max) = points.fold((*first, *first), |(min, max), p| {
+    let (min, max) = points.fold((first, first), |(min, max), p| {
         (
             Point {
                 x: min.x.min(p.x),
@@ -338,11 +363,7 @@ mod tests {
 
     #[test]
     fn bounds_leave_room_for_labels_around_every_node() {
-        let positions = Positions::from([
-            (DeviceId(1), Point { x: 100.0, y: 0.0 }),
-            (DeviceId(2), Point { x: 400.0, y: 300.0 }),
-        ]);
-        let b = bounds(&positions);
+        let b = bounds([Point { x: 100.0, y: 0.0 }, Point { x: 400.0, y: 300.0 }]);
         assert_eq!((b.x, b.y), (100.0 - PAD_SIDE, -PAD_TOP));
         assert_eq!(
             (b.width, b.height),

@@ -2,6 +2,8 @@
 //!
 //! Every device has a trunk: a line from below its labels down to a small root circle. The
 //! devices behind it hang off the trunk in tiers, to its left and right (see [`Arrangement`]).
+//! Below its last tier, the ghosts of other devices' interfaces attached to it hang in a row of
+//! their own, to the right (see [`Interface`]).
 //! Positions are in map units (1 unit = 1 logical pixel at 100 % zoom) and mark the centre of a
 //! node's icon; its labels sit below.
 
@@ -9,7 +11,7 @@ use std::collections::HashMap;
 
 use super::arrangement::{Arrangement, Side};
 use super::device::DeviceId;
-use super::network::Network;
+use super::network::{Interface, Network};
 
 const COLUMN_WIDTH: f32 = 150.0;
 pub(super) const ROW_HEIGHT: f32 = 150.0;
@@ -88,26 +90,81 @@ pub(crate) fn link_route(
 }
 
 /// The trunk of `id`: from below its labels down to its root circle, which sits below the lowest
-/// device in its branch, so the trunk runs past every tier hanging off it.
+/// device or ghost in its branch, so the trunk runs past every tier hanging off it.
 pub(crate) fn trunk(network: &Network, positions: &Positions, id: DeviceId) -> Option<[Point; 2]> {
     let top = positions.get(&id)?;
-    let branch = network
-        .devices()
-        .iter()
-        .filter(|d| network.is_within(d.id, id));
-    let lowest = branch
-        .filter_map(|d| positions.get(&d.id))
-        .map(|p| p.y)
-        .fold(top.y, f32::max);
     let start = Point {
         x: top.x,
         y: top.y + LINE_BOTTOM_GAP,
     };
     let root = Point {
         x: top.x,
-        y: lowest + LINE_BOTTOM_GAP + ROOT_GAP,
+        y: lowest(network, positions, id, true) + LINE_BOTTOM_GAP + ROOT_GAP,
     };
     Some([start, root])
+}
+
+/// The ghost of an interface on the map: where it is drawn, and its line from the trunk of the
+/// device it is attached behind.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Ghost {
+    pub(crate) interface: Interface,
+    pub(crate) at: Point,
+    pub(crate) line: [Point; 3],
+}
+
+/// The ghost of every interface whose upstream device is at `positions`, in interface order.
+/// Each sits in the row below the rest of its upstream's branch, side by side to the right of
+/// its trunk, where [`Tree::shape`] made room for them. Derived from the positions, so ghosts
+/// move with their branch.
+pub(crate) fn ghosts(network: &Network, positions: &Positions) -> Vec<Ghost> {
+    let mut beside: HashMap<DeviceId, f32> = HashMap::new();
+    let interfaces = network.interfaces().iter();
+    let placed = interfaces.filter_map(|&interface| {
+        let upstream = positions.get(&interface.upstream)?;
+        let column = beside.entry(interface.upstream).or_insert(0.0);
+        let at = Point {
+            x: upstream.x + (*column + 0.5) * COLUMN_WIDTH,
+            y: lowest(network, positions, interface.upstream, false) + ROW_HEIGHT,
+        };
+        *column += 1.0;
+        Some(Ghost {
+            interface,
+            at,
+            line: route(upstream.x, at),
+        })
+    });
+    placed.collect()
+}
+
+/// How far down the branch of `id` reaches: the lowest of its devices and the ghosts attached to
+/// them, the row of ghosts of `id` itself only `with_own_ghosts`.
+fn lowest(network: &Network, positions: &Positions, id: DeviceId, with_own_ghosts: bool) -> f32 {
+    reach(
+        network,
+        positions,
+        id,
+        with_own_ghosts,
+        network.devices().len(),
+    )
+}
+
+/// [`lowest`], going no more than `depth` devices deeper, which guards against cycles in the
+/// connection data: no real tree is deeper than its size.
+fn reach(network: &Network, positions: &Positions, id: DeviceId, own: bool, depth: usize) -> f32 {
+    let Some(top) = positions.get(&id) else {
+        return f32::MIN;
+    };
+    let behind = network.behind(id).filter(|_| depth > 0);
+    let below = behind
+        .map(|d| reach(network, positions, d, true, depth - 1))
+        .fold(top.y, f32::max);
+    // A device's ghosts hang in a row below everything else in its branch.
+    if own && network.attached(id).next().is_some() {
+        below + ROW_HEIGHT
+    } else {
+        below
+    }
 }
 
 /// How far a device's branch reaches to each side of its trunk, in columns, and how many rows it
@@ -142,6 +199,12 @@ impl Tree<'_> {
             shape.left = shape.left.max(left);
             shape.right = shape.right.max(right);
             shape.rows += left_rows.max(right_rows);
+        }
+        // The row of ghosts below the tiers (see [`ghosts`]), one column each.
+        let ghosts = self.network.attached(id).count();
+        if ghosts > 0 {
+            shape.right = shape.right.max(units(ghosts));
+            shape.rows += 1;
         }
         shape
     }
@@ -295,6 +358,48 @@ mod tests {
         assert!(
             leaf_root.y > positions[&PC].y,
             "a device with none behind it has one too"
+        );
+    }
+
+    #[test]
+    fn a_ghost_hangs_below_its_upstreams_branch_clear_of_every_device() {
+        let network = mock_data::network();
+        let positions = layout(&network);
+        let ghosts = ghosts(&network, &positions);
+        assert_eq!(ghosts.len(), network.interfaces().len());
+        for ghost in &ghosts {
+            let upstream = positions[&ghost.interface.upstream];
+            assert!(ghost.at.x > upstream.x, "right of the trunk");
+            let branch = network.behind(ghost.interface.upstream);
+            assert!(branch.map(|d| positions[&d].y).all(|y| ghost.at.y > y));
+            let clear = |p: &Point| {
+                (p.x - ghost.at.x).abs() >= COLUMN_WIDTH || (p.y - ghost.at.y).abs() >= ROW_HEIGHT
+            };
+            assert!(positions.values().all(clear), "{ghost:?}");
+            let [_, root] = trunk(&network, &positions, ghost.interface.upstream).unwrap();
+            assert!(root.y > ghost.at.y, "the trunk reaches past it");
+            assert_eq!(ghost.line.last().map(|end| end.x), Some(ghost.at.x));
+        }
+    }
+
+    #[test]
+    fn ghosts_move_with_their_branch() {
+        let network = mock_data::network();
+        let mut positions = layout(&network);
+        let before = ghosts(&network, &positions);
+        let ghost = before.first().unwrap();
+        let shift = Point { x: 40.0, y: 25.0 };
+        for (id, at) in &mut positions {
+            if network.is_within(*id, ghost.interface.upstream) {
+                at.x += shift.x;
+                at.y += shift.y;
+            }
+        }
+        let after = ghosts(&network, &positions);
+        let moved = after.first().unwrap().at;
+        assert_eq!(
+            (moved.x, moved.y),
+            (ghost.at.x + shift.x, ghost.at.y + shift.y)
         );
     }
 

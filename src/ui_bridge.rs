@@ -19,8 +19,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, Connection, Device, DeviceId, GroupId, Icon, Level, Network, Point, Positions,
-    Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
+    Arrangement, Connection, Device, DeviceId, Ghost, GroupId, Icon, Level, Network, Point,
+    Positions, Role, Snap, StatusFilter, ghosts, link_route, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -190,7 +190,7 @@ impl AppState {
     }
 
     /// The connections to draw: all but the dragged device's uplink, which [`Self::strand`]
-    /// stands in for.
+    /// stands in for, then the lines to the ghosts.
     /// Each runs along its route as shown, branching off its neighbour's line, with the dragged
     /// device left out of the rows it was in.
     fn links(&self) -> Vec<(Connection, [Point; 3])> {
@@ -199,10 +199,20 @@ impl AppState {
             .arrangement
             .inner_neighbours(&self.network, self.dragging);
         let links = self.network.connections().iter();
+        let ghost_links = self
+            .ghosts()
+            .into_iter()
+            .map(|g| (g.interface.link(), g.line));
         links
             .filter(|c| Some(c.downstream) != self.dragging)
             .filter_map(|&c| Some((c, link_route(shown, &inner, c.upstream, c.downstream)?)))
+            .chain(ghost_links)
             .collect()
+    }
+
+    /// The ghost of every interface, where its branch is shown.
+    fn ghosts(&self) -> Vec<Ghost> {
+        ghosts(&self.network, self.motion.shown())
     }
 
     /// While a device is dragged near a line, how it would join it.

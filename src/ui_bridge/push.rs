@@ -3,7 +3,7 @@
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use super::{AppState, convert, lines};
-use crate::model::{Device, Network, Role, StatusFilter};
+use crate::model::{Device, Ghost, Network, Role, StatusFilter};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
@@ -12,7 +12,6 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     let bridge = ui.global::<Bridge<'_>>();
     let labels = ui.global::<Labels<'_>>();
     let (network, icons) = (&state.network, &state.icons);
-    let on_map = state.motion.shown();
     // Rows carry the settled spot, which changes only when the layout does, so the labels are
     // not redone on every frame of motion; where each device is drawn goes in `places`.
     let settled = |id| state.positions.get(&id).copied().unwrap_or_default();
@@ -21,18 +20,46 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         convert::device_view(network, icons, d, role, settled(d.id))
     };
 
-    let nodes = network.devices().iter().map(|d| {
-        let shown = state.filter.admits(d.status) && d.matches(&state.query);
+    let node = |d: &Device| {
+        let shown = state.filter.admits(d.status) && network.matches(d, &state.query);
         ui::DeviceView {
             dimmed: !shown,
             ..view(d)
         }
-    });
+    };
+    let nodes = network.devices().iter().map(node);
     if let Some(model) = sync(&bridge.get_devices(), nodes.collect()) {
         bridge.set_devices(model);
     }
+    let ghosts = state.ghosts();
+    let ghost_views = ghosts.iter().filter_map(|g| {
+        let device = network.device(g.interface.device)?;
+        Some(convert::ghost_view(node(device), g))
+    });
+    if let Some(model) = sync(&bridge.get_ghosts(), ghost_views.collect()) {
+        bridge.set_ghosts(model);
+    }
+    push_map(&bridge, state, &ghosts);
+    let list = network.filtered(state.filter, &state.query);
+    if let Some(model) = sync(&bridge.get_list(), list.map(view).collect()) {
+        bridge.set_list(model);
+    }
+    push_roles(&bridge, &labels, state);
+    bridge.set_filter(convert::filter_to_ui(state.filter));
+    bridge.set_count_all(count(network, StatusFilter::All));
+    bridge.set_count_online(count(network, StatusFilter::Online));
+    bridge.set_count_offline(count(network, StatusFilter::Offline));
+    bridge.set_scanning(state.scanning);
+    bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
+    push_selection(&bridge, &labels, state);
+}
+
+/// Where each device is drawn right now, the lines between them and to the `ghosts`, and the
+/// area they take up.
+fn push_map(bridge: &Bridge<'_>, state: &AppState, ghosts: &[Ghost]) {
+    let on_map = state.motion.shown();
     let trunks = state.trunks();
-    let places = network.devices().iter().map(|d| {
+    let places = state.network.devices().iter().map(|d| {
         let at = on_map.get(&d.id).copied().unwrap_or_default();
         let root = trunks
             .iter()
@@ -48,14 +75,9 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     if let Some(model) = sync(&bridge.get_places(), places.collect()) {
         bridge.set_places(model);
     }
-    let list = network.filtered(state.filter, &state.query);
-    if let Some(model) = sync(&bridge.get_list(), list.map(view).collect()) {
-        bridge.set_list(model);
-    }
-    push_roles(&bridge, &labels, state);
 
     let highlighted = state.dragging.or(state.selected);
-    let lines = lines::lines(network, &state.links(), &trunks, highlighted);
+    let lines = lines::lines(&state.network, &state.links(), &trunks, highlighted);
     bridge.set_strand(convert::strand(
         state.strand().as_ref(),
         state.motion.bend(),
@@ -63,14 +85,9 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }
-    bridge.set_bounds(convert::bounds(on_map));
-    bridge.set_filter(convert::filter_to_ui(state.filter));
-    bridge.set_count_all(count(network, StatusFilter::All));
-    bridge.set_count_online(count(network, StatusFilter::Online));
-    bridge.set_count_offline(count(network, StatusFilter::Offline));
-    bridge.set_scanning(state.scanning);
-    bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
-    push_selection(&bridge, &labels, state);
+    bridge.set_jump(lines::jumps(on_map, ghosts, highlighted).into());
+    let nodes_at = on_map.values().copied().chain(ghosts.iter().map(|g| g.at));
+    bridge.set_bounds(convert::bounds(nodes_at));
 }
 
 /// The role dropdown's names, the role list's rows and the groups they can be in.
@@ -127,6 +144,12 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let ports = selected.map(convert::port_views).unwrap_or_default();
     if let Some(model) = sync(&bridge.get_ports(), ports) {
         bridge.set_ports(model);
+    }
+    let addresses = selected
+        .map(|d| convert::other_addresses(&state.network, d))
+        .unwrap_or_default();
+    if let Some(model) = sync(&bridge.get_other_addresses(), addresses) {
+        bridge.set_other_addresses(model);
     }
     bridge.set_selected_id(id);
 }

@@ -1,6 +1,8 @@
 //! The network as a whole: devices, how they connect, the roles on offer and their groups.
 
-use super::device::{Device, DeviceId, Icon, Role, Status};
+use std::net::Ipv4Addr;
+
+use super::device::{Device, DeviceId, Icon, MacAddr, Role, Status};
 use super::groups::{GroupColour, GroupId, Groups, LineStyle};
 use super::roles::Roles;
 
@@ -17,6 +19,29 @@ pub(crate) struct Connection {
     pub(crate) upstream: DeviceId,
     pub(crate) downstream: DeviceId,
     pub(crate) kind: ConnectionKind,
+}
+
+/// A further network interface of `device`, besides the one at its own address: it has its own
+/// address and is attached behind `upstream`, often on another subnet. The map shows it as a
+/// ghost of the device in `upstream`'s branch, so the tree of uplinks stays a tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct Interface {
+    pub(crate) device: DeviceId,
+    pub(crate) upstream: DeviceId,
+    pub(crate) ip: Ipv4Addr,
+    pub(crate) mac: MacAddr,
+    pub(crate) kind: ConnectionKind,
+}
+
+impl Interface {
+    /// The link from `upstream` to the interface, as the lines draw it.
+    pub(crate) fn link(&self) -> Connection {
+        Connection {
+            upstream: self.upstream,
+            downstream: self.device,
+            kind: self.kind,
+        }
+    }
 }
 
 /// The device list filter tabs.
@@ -44,16 +69,22 @@ pub(crate) struct Network {
     connections: Vec<Connection>,
     /// The connections as first found, which [`Self::restore_connections`] brings back.
     detected: Vec<Connection>,
+    interfaces: Vec<Interface>,
     roles: Roles,
     groups: Groups,
 }
 
 impl Network {
-    pub(crate) fn new(devices: Vec<Device>, connections: Vec<Connection>) -> Self {
+    pub(crate) fn new(
+        devices: Vec<Device>,
+        connections: Vec<Connection>,
+        interfaces: Vec<Interface>,
+    ) -> Self {
         Self {
             devices,
             detected: connections.clone(),
             connections,
+            interfaces,
             roles: Roles::default(),
             groups: Groups::default(),
         }
@@ -71,6 +102,20 @@ impl Network {
         &self.connections
     }
 
+    pub(crate) fn interfaces(&self) -> &[Interface] {
+        &self.interfaces
+    }
+
+    /// The further interfaces of `id`, in the order they were found.
+    pub(crate) fn interfaces_of(&self, id: DeviceId) -> impl Iterator<Item = &Interface> {
+        self.interfaces.iter().filter(move |i| i.device == id)
+    }
+
+    /// The interfaces of other devices attached behind `id`, in the order they were found.
+    pub(crate) fn attached(&self, id: DeviceId) -> impl Iterator<Item = &Interface> {
+        self.interfaces.iter().filter(move |i| i.upstream == id)
+    }
+
     pub(crate) fn device(&self, id: DeviceId) -> Option<&Device> {
         self.devices.iter().find(|d| d.id == id)
     }
@@ -79,12 +124,15 @@ impl Network {
         self.devices.iter_mut().find(|d| d.id == id)
     }
 
-    /// Forgets a device and its links. Devices behind it stay, as separate branches of the map.
+    /// Forgets a device and its links, its own interfaces and those attached behind it. Devices
+    /// behind it stay, as separate branches of the map.
     pub(crate) fn remove_device(&mut self, id: DeviceId) {
         self.devices.retain(|d| d.id != id);
         for links in [&mut self.connections, &mut self.detected] {
             links.retain(|c| c.upstream != id && c.downstream != id);
         }
+        self.interfaces
+            .retain(|i| i.device != id && i.upstream != id);
     }
 
     /// The connection leading from `id` towards the router, if any.
@@ -148,7 +196,17 @@ impl Network {
     ) -> impl Iterator<Item = &'a Device> {
         self.devices
             .iter()
-            .filter(move |d| filter.admits(d.status) && d.matches(query))
+            .filter(move |d| filter.admits(d.status) && self.matches(d, query))
+    }
+
+    /// Whether the search `query` finds `device` (see [`Device::matches`]), also by the address
+    /// of one of its further interfaces.
+    pub(crate) fn matches(&self, device: &Device, query: &str) -> bool {
+        let query = query.trim();
+        device.matches(query)
+            || self
+                .interfaces_of(device.id)
+                .any(|i| i.ip.to_string().contains(query))
     }
 
     pub(crate) fn count(&self, filter: StatusFilter) -> usize {
@@ -437,6 +495,30 @@ mod tests {
                 .iter()
                 .all(|c| c.upstream != switch && c.downstream != switch)
         );
+    }
+
+    #[test]
+    fn forgetting_either_end_of_an_interface_drops_it() {
+        let mut network = mock_data::network();
+        let interface = network.interfaces().first().copied().unwrap();
+        for id in [interface.device, interface.upstream] {
+            let mut forgetful = network.clone();
+            forgetful.remove_device(id);
+            assert!(forgetful.interfaces().is_empty(), "{id:?}");
+        }
+        network.remove_device(DeviceId(2));
+        assert_eq!(network.interfaces(), [interface], "unrelated device");
+    }
+
+    #[test]
+    fn search_finds_a_device_by_the_address_of_another_interface() {
+        let network = mock_data::network();
+        let interface = network.interfaces().first().copied().unwrap();
+        let found: Vec<_> = network
+            .filtered(StatusFilter::All, &format!(" {} ", interface.ip))
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(found, [interface.device]);
     }
 
     #[test]
