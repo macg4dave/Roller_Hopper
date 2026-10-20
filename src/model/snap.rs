@@ -255,10 +255,10 @@ mod tests {
     fn a_trunk_reaches_further_to_the_side_than_up_or_down() {
         let (network, arrangement, positions) = map();
         let [top, root] = trunk(&network, &positions, SWITCH).unwrap();
-        let mid = f32::midpoint(top.y, root.y);
+        // Beside the bare stretch of trunk below its row of devices, clear of their lines.
         let beside = Point {
             x: top.x + 100.0,
-            y: mid + LINE_TOP_GAP,
+            y: root.y - ROW_HEIGHT / 2.0 + LINE_TOP_GAP,
         };
         let joined = snap_target(&network, &arrangement, &positions, NAS, beside);
         assert_eq!(joined.map(|s| s.upstream), Some(SWITCH));

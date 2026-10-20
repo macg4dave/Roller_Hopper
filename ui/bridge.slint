@@ -100,15 +100,20 @@ export struct RoleView {
 export struct GroupView {
     name: string,
     colour: GroupColour,
+    // Index in the group editor's line style dropdown.
+    line-style: int,
 }
 
-/// Connection lines drawn alike, as SVG path commands in map units. A line takes the colour of
-/// the device it hangs from; the selected device's lines are highlighted instead.
+/// Connection lines drawn alike, as SVG path commands in map units. A line takes the colour and
+/// line style of the device it hangs from; the selected device's lines are highlighted instead.
+/// The style is already in the commands, apart from its width.
 export struct LineSet {
     commands: string,
     colour: GroupColour,
+    // Inferred links are drawn faded.
     inferred: bool,
     selected: bool,
+    thick: bool,
 }
 
 /// The stretchy strand from a dragged device to the line it would join, as SVG path commands in
@@ -196,6 +201,8 @@ export global Bridge {
     callback add-group(string);
     callback rename-group(int, string);
     callback set-group-colour(int, GroupColour);
+    // A group and its index in the line style dropdown.
+    callback set-group-line-style(int, int);
     // The group's roles are left in no group.
     callback delete-group(int);
     // Dragging a device previews the line it would join; dropping it joins that line, or leaves
@@ -210,5 +217,4 @@ export global Bridge {
 /// Purely visual map preferences from the Settings menu.
 export global MapSettings {
     in-out property <bool> show-addresses: true;
-    in-out property <bool> show-inferred: true;
 }

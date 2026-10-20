@@ -5,14 +5,11 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Network, Point,
+    ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LineStyle, Network, Point,
     Positions, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
-/// Dash and gap lengths of inferred links, in map units.
-const DASH: f32 = 6.0;
-const GAP: f32 = 4.0;
 /// Room around the outermost icons for their labels and root circles, in map units.
 const PAD_SIDE: f32 = 80.0;
 const PAD_TOP: f32 = 40.0;
@@ -107,7 +104,7 @@ pub(super) fn role_label(labels: &Labels<'_>, network: &Network, role: &Role) ->
     labels.invoke_role(standard)
 }
 
-fn colour(colour: Option<GroupColour>) -> ui::GroupColour {
+pub(super) fn colour(colour: Option<GroupColour>) -> ui::GroupColour {
     match colour {
         None => ui::GroupColour::None,
         Some(GroupColour::Red) => ui::GroupColour::Red,
@@ -117,6 +114,11 @@ fn colour(colour: Option<GroupColour>) -> ui::GroupColour {
         Some(GroupColour::Blue) => ui::GroupColour::Blue,
         Some(GroupColour::Purple) => ui::GroupColour::Purple,
     }
+}
+
+/// A line style picked in the UI, by its index in the style dropdown.
+pub(super) fn line_style_from_ui(choice: i32) -> Option<LineStyle> {
+    LineStyle::ALL.get(index(choice)).copied()
 }
 
 /// A colour picked in the UI; `None` takes the group's colour away.
@@ -230,60 +232,16 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
     let groups = network.groups();
     groups
         .iter()
-        .map(|(id, name)| ui::GroupView {
-            name: name.into(),
-            colour: colour(groups.colour(id)),
+        .map(|(id, name)| {
+            let style = groups.line_style(id);
+            let choice = LineStyle::ALL.iter().position(|&s| s == style);
+            ui::GroupView {
+                name: name.into(),
+                colour: colour(groups.colour(id)),
+                line_style: choice.and_then(|c| i32::try_from(c).ok()).unwrap_or(0),
+            }
         })
         .collect()
-}
-
-/// How a line is drawn: its parent's group colour, dashed or not, highlighted or not.
-type LineStyle = (Option<GroupColour>, ConnectionKind, bool);
-
-/// SVG path commands for the `links`, each drawn along its route, and the `trunks`, one set per
-/// line style, highlighted sets last.
-pub(super) fn lines(
-    network: &Network,
-    links: &[(Connection, [Point; 3])],
-    trunks: &[(DeviceId, [Point; 2])],
-    selected: Option<DeviceId>,
-) -> Vec<ui::LineSet> {
-    let is_selected = |id| selected == Some(id);
-    // Every line hangs from a device: a link from its upstream device, a trunk from its own.
-    let link_lines = links.iter().map(|&(link, route)| {
-        let highlighted = is_selected(link.upstream) || is_selected(link.downstream);
-        (link.upstream, link.kind, highlighted, route.to_vec())
-    });
-    let trunk_lines = trunks
-        .iter()
-        .map(|&(id, trunk)| (id, ConnectionKind::Known, is_selected(id), trunk.to_vec()));
-    let mut sets: Vec<(LineStyle, Vec<String>)> = Vec::new();
-    for (parent, kind, highlighted, points) in link_lines.chain(trunk_lines) {
-        // A line takes the group colour of the device it hangs from, unless it is highlighted.
-        let colour = network
-            .device(parent)
-            .filter(|_| !highlighted)
-            .and_then(|d| network.colour(d));
-        let path = match kind {
-            ConnectionKind::Known => solid(&points),
-            ConnectionKind::Inferred => dashed(&points),
-        };
-        let style = (colour, kind, highlighted);
-        match sets.iter_mut().find(|(s, _)| *s == style) {
-            Some((_, paths)) => paths.push(path),
-            None => sets.push((style, vec![path])),
-        }
-    }
-    sets.sort_by_key(|((_, _, highlighted), _)| *highlighted);
-    let sets = sets
-        .into_iter()
-        .map(|((group, kind, highlighted), paths)| ui::LineSet {
-            commands: paths.join(" ").into(),
-            colour: colour(group),
-            inferred: kind == ConnectionKind::Inferred,
-            selected: highlighted,
-        });
-    sets.collect()
 }
 
 /// The map area holding every node and its labels.
@@ -341,37 +299,6 @@ pub(super) fn strand(snap: Option<&Snap>, bend: Option<Point>) -> ui::Strand {
     }
 }
 
-/// A polyline as SVG path commands.
-fn solid(points: &[Point]) -> String {
-    let commands = points.iter().enumerate().map(|(i, p)| {
-        let command = if i == 0 { 'M' } else { 'L' };
-        format!("{command}{:.1} {:.1}", p.x, p.y)
-    });
-    commands.collect::<Vec<_>>().join(" ")
-}
-
-/// A polyline as a series of short dashes, each its own SVG sub-path.
-fn dashed(points: &[Point]) -> String {
-    let mut dashes = Vec::new();
-    for pair in points.windows(2) {
-        let [a, b] = pair else { continue };
-        let length = (b.x - a.x).hypot(b.y - a.y);
-        let along = |distance: f32| {
-            let t = distance / length;
-            Point {
-                x: a.x + (b.x - a.x) * t,
-                y: a.y + (b.y - a.y) * t,
-            }
-        };
-        let mut start = 0.0;
-        while start < length {
-            dashes.push(solid(&[along(start), along((start + DASH).min(length))]));
-            start += DASH + GAP;
-        }
-    }
-    dashes.join(" ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,13 +336,6 @@ mod tests {
     }
 
     #[test]
-    fn dashed_line_breaks_into_dashes_that_stay_on_the_line() {
-        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 0.0, y: 25.0 }];
-        let expected = "M0.0 0.0 L0.0 6.0 M0.0 10.0 L0.0 16.0 M0.0 20.0 L0.0 25.0";
-        assert_eq!(dashed(&line), expected);
-    }
-
-    #[test]
     fn bounds_leave_room_for_labels_around_every_node() {
         let positions = Positions::from([
             (DeviceId(1), Point { x: 100.0, y: 0.0 }),
@@ -429,77 +349,11 @@ mod tests {
         );
     }
 
-    /// Whether some line set has the given look.
-    fn has(sets: &[ui::LineSet], colour: ui::GroupColour, inferred: bool, selected: bool) -> bool {
-        sets.iter()
-            .any(|s| (s.colour, s.inferred, s.selected) == (colour, inferred, selected))
-    }
-
-    /// Every link of the sample network, routed as laid out.
-    fn routed(network: &Network) -> (Positions, Vec<(Connection, [Point; 3])>) {
-        let arrangement = crate::model::Arrangement::default();
-        let positions = crate::model::tree_layout(network, &arrangement);
-        let inner = arrangement.inner_neighbours(network, None);
-        let links = network.connections().iter().map(|&c| {
-            let route = crate::model::link_route(&positions, &inner, c.upstream, c.downstream);
-            (c, route.unwrap())
-        });
-        let links = links.collect();
-        (positions, links)
-    }
-
     #[test]
-    fn selection_highlights_its_links_and_draws_them_last() {
-        let network = crate::mock_data::network();
-        let (_, links) = routed(&network);
-        let plain = lines(&network, &links, &[], None);
-        assert!(plain.iter().all(|s| !s.selected));
-
-        let access_point = DeviceId(3);
-        let highlighted = lines(&network, &links, &[], Some(access_point));
-        let none = ui::GroupColour::None;
-        assert!(has(&highlighted, none, false, true), "uplink to the router");
-        assert!(has(&highlighted, none, true, true), "wireless clients");
-        let first_highlighted = highlighted.iter().position(|s| s.selected);
-        let last_plain = highlighted.iter().rposition(|s| !s.selected);
-        assert!(last_plain < first_highlighted);
-
-        // A device with none behind it lights up only its own stretch of line.
-        let pc = lines(&network, &links, &[], Some(DeviceId(5)));
-        let lit = pc.iter().filter(|s| s.selected);
-        let paths: usize = lit.map(|s| s.commands.matches('M').count()).sum();
-        assert_eq!(paths, 1);
-    }
-
-    #[test]
-    fn lines_take_the_colour_of_the_device_they_hang_from() {
-        let mut network = crate::mock_data::network();
-        let (positions, links) = routed(&network);
-        // A colour of its own, so other groups' lines cannot be mistaken for the router's.
-        let group = network.add_group("Gateway").unwrap();
-        network.set_group_colour(group, Some(GroupColour::Red));
-        network.set_role_group(&Role::Router, Some(group));
-
-        let router = DeviceId(1);
-        let trunks = [router, DeviceId(2)]
-            .map(|id| (id, crate::model::trunk(&network, &positions, id).unwrap()));
-        let sets = lines(&network, &links, &trunks, None);
-        let red = sets
-            .iter()
-            .find(|s| s.colour == ui::GroupColour::Red && !s.inferred);
-        let router_links = network
-            .connections()
-            .iter()
-            .filter(|c| c.upstream == router);
-        let known = router_links
-            .filter(|c| c.kind == ConnectionKind::Known)
-            .count();
-        let drawn = red.map(|s| s.commands.matches('M').count());
-        let expected = known + 1;
-        assert_eq!(
-            drawn,
-            Some(expected),
-            "the router's links and trunk, and only those"
-        );
+    fn a_line_style_is_picked_by_its_place_in_the_dropdown() {
+        assert_eq!(line_style_from_ui(0), Some(LineStyle::Solid));
+        assert_eq!(line_style_from_ui(7), Some(LineStyle::Wavy));
+        assert_eq!(line_style_from_ui(8), None);
+        assert_eq!(line_style_from_ui(-1), None);
     }
 }

@@ -3,8 +3,8 @@
 use std::net::Ipv4Addr;
 
 use crate::model::{
-    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, LastSeen, MacAddr,
-    Network, Role, Services, Status,
+    Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, LastSeen, LineStyle,
+    MacAddr, Network, Role, Services, Status,
 };
 
 /// The device whose status flips on each simulated scan, so a refresh visibly changes something.
@@ -12,6 +12,9 @@ const FLAKY_DEVICE: DeviceId = DeviceId(13);
 
 /// Minutes added to "last seen" of devices that do not answer a simulated scan.
 const SCAN_INTERVAL_MINUTES: u32 = 30;
+
+/// The custom role the sample virtual machines share.
+const VIRTUAL_MACHINE: &str = "Virtual machine";
 
 struct Spec {
     id: u32,
@@ -146,8 +149,8 @@ fn devices() -> Vec<Device> {
             manufacturer: Some("HP"),
             model: Some("ProDesk 600 G4"),
             hostname: Some("linux-server"),
-            services: &[(22, "SSH"), (80, "HTTP"), (443, "HTTPS")],
-            notes: "Runs Home Assistant and Pi-hole.",
+            services: &[(22, "SSH"), (8006, "Proxmox")],
+            notes: "Proxmox host for the virtual machines.",
             ..spec(
                 6,
                 "Linux Server",
@@ -283,6 +286,71 @@ fn devices() -> Vec<Device> {
                 [0x9A, 0x3F, 0x0C, 0x55, 0xD1, 0x08],
             )
         },
+        // Virtual machines on the Linux Server; BC:24:11 is the Proxmox MAC prefix.
+        Spec {
+            manufacturer: Some("Proxmox"),
+            hostname: Some("homeassistant"),
+            services: &[(8123, "Home Assistant")],
+            ..spec(
+                17,
+                "Home Assistant",
+                K::Server,
+                21,
+                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x01],
+            )
+        },
+        Spec {
+            manufacturer: Some("Proxmox"),
+            hostname: Some("pihole"),
+            services: &[(53, "DNS"), (80, "HTTP")],
+            notes: "Blocks adverts for the whole network.",
+            ..spec(
+                18,
+                "Pi-hole",
+                K::Server,
+                22,
+                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x02],
+            )
+        },
+        Spec {
+            manufacturer: Some("Proxmox"),
+            hostname: Some("docker"),
+            services: &[(22, "SSH"), (9443, "Portainer")],
+            ..spec(
+                19,
+                "Docker Host",
+                K::Server,
+                23,
+                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x03],
+            )
+        },
+        Spec {
+            manufacturer: Some("Proxmox"),
+            hostname: Some("win11-vm"),
+            services: &[(3389, "RDP")],
+            status: Status::Offline,
+            minutes_ago: 5 * 60,
+            notes: "Started only when needed.",
+            ..spec(
+                20,
+                "Windows 11 VM",
+                K::Desktop,
+                24,
+                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x04],
+            )
+        },
+        Spec {
+            manufacturer: Some("Proxmox"),
+            hostname: Some("ubuntu-dev"),
+            services: &[(22, "SSH")],
+            ..spec(
+                21,
+                "Ubuntu Dev",
+                K::Server,
+                25,
+                [0xBC, 0x24, 0x11, 0x4A, 0x0E, 0x05],
+            )
+        },
     ]
     .into_iter()
     .map(Spec::build)
@@ -307,6 +375,11 @@ fn connections() -> Vec<Connection> {
         (3, 10, Inferred),
         (3, 15, Inferred),
         (3, 13, Inferred),
+        (6, 17, Known),
+        (6, 18, Known),
+        (6, 19, Known),
+        (6, 20, Known),
+        (6, 21, Known),
     ]
     .into_iter()
     .map(|(up, down, kind)| Connection {
@@ -319,14 +392,21 @@ fn connections() -> Vec<Connection> {
 
 pub(crate) fn network() -> Network {
     let mut network = Network::new(devices(), connections());
-    // Custom roles as if the user had added them: no standard role has the TV or console icon.
-    for (id, name, kind) in [
-        (10, "TV", DeviceKind::Tv),
-        (11, "Games console", DeviceKind::Console),
-    ] {
-        let role = network.add_custom_role(name, kind.icon());
-        if let (Some(role), Some(device)) = (role, network.device_mut(DeviceId(id))) {
-            device.role = role;
+    // Custom roles as if the user had added them: no standard role has the TV or console icon,
+    // and a virtual machine is told apart from the host it runs on.
+    let custom: [(&[u32], _, _); 3] = [
+        (&[10], "TV", DeviceKind::Tv),
+        (&[11], "Games console", DeviceKind::Console),
+        (&[17, 18, 19, 20, 21], VIRTUAL_MACHINE, DeviceKind::Server),
+    ];
+    for (ids, name, kind) in custom {
+        let Some(role) = network.add_custom_role(name, kind.icon()) else {
+            continue;
+        };
+        for &id in ids {
+            if let Some(device) = network.device_mut(DeviceId(id)) {
+                device.role = role.clone();
+            }
         }
     }
     add_groups(&mut network);
@@ -334,39 +414,51 @@ pub(crate) fn network() -> Network {
 }
 
 /// Example groups, as if the user had made them. They follow how devices connect, so the lines
-/// from the router, the switch and the access point each show in their own colour.
+/// from the router, the switch and the access point each show in their own colour; Wi-Fi lines
+/// wave.
 fn add_groups(network: &mut Network) {
     let tv = Role::Custom("TV".into());
     let console = Role::Custom("Games console".into());
+    let virtual_machine = Role::Custom(VIRTUAL_MACHINE.into());
     let groups = [
-        ("Network core", GroupColour::Purple, vec![Role::Router]),
+        (
+            "Network core",
+            GroupColour::Purple,
+            LineStyle::Solid,
+            vec![Role::Router],
+        ),
         (
             "Wired",
             GroupColour::Blue,
+            LineStyle::Solid,
             vec![
                 Role::Switch,
                 Role::Desktop,
                 Role::Server,
                 Role::Nas,
                 Role::Printer,
+                virtual_machine,
             ],
         ),
         (
             "Wi-Fi",
             GroupColour::Green,
+            LineStyle::Wavy,
             vec![Role::AccessPoint, Role::Laptop, Role::Phone],
         ),
         (
             "Smart home",
             GroupColour::Orange,
+            LineStyle::Solid,
             vec![Role::Camera, Role::Iot, tv, console],
         ),
     ];
-    for (name, colour, roles) in groups {
+    for (name, colour, style, roles) in groups {
         let Some(group) = network.add_group(name) else {
             continue;
         };
         network.set_group_colour(group, Some(colour));
+        network.set_group_line_style(group, style);
         for role in &roles {
             network.set_role_group(role, Some(group));
         }
@@ -438,6 +530,22 @@ mod tests {
         assert!(parents.iter().all(Option::is_some), "{parents:?}");
         let distinct: HashSet<_> = parents.iter().collect();
         assert_eq!(distinct.len(), 3, "{parents:?}");
+    }
+
+    #[test]
+    fn virtual_machines_share_a_role_and_hang_off_their_host() {
+        let network = network();
+        let role = Role::Custom(VIRTUAL_MACHINE.into());
+        let vms: Vec<_> = network
+            .devices()
+            .iter()
+            .filter(|d| d.role == role)
+            .collect();
+        assert_eq!(vms.len(), 5);
+        for vm in vms {
+            let uplink = network.connections().iter().find(|c| c.downstream == vm.id);
+            assert_eq!(uplink.map(|c| c.upstream), Some(DeviceId(6)), "{}", vm.name);
+        }
     }
 
     #[test]

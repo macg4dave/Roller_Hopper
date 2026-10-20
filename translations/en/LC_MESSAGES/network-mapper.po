@@ -36,9 +36,6 @@ msgstr "Map display"
 msgid "settings.show-addresses"
 msgstr "Show IP addresses"
 
-msgid "settings.show-inferred"
-msgstr "Show inferred links"
-
 # Device list. filter.button: {0} is the filter name, {1} the number of devices.
 msgid "filter.all"
 msgstr "All"
@@ -254,6 +251,34 @@ msgstr "Purple"
 
 msgid "groups.colour.none"
 msgstr "No colour"
+
+# The dropdown beside each group's colours; its devices' lines are drawn in the style chosen.
+msgid "groups.line-style"
+msgstr "Line style"
+
+msgid "groups.line-style.solid"
+msgstr "Solid"
+
+msgid "groups.line-style.thick"
+msgstr "Thick"
+
+msgid "groups.line-style.dashed"
+msgstr "Dashed"
+
+msgid "groups.line-style.long-dashes"
+msgstr "Long dashes"
+
+msgid "groups.line-style.dotted"
+msgstr "Dotted"
+
+msgid "groups.line-style.dash-dot"
+msgstr "Dash and dot"
+
+msgid "groups.line-style.zigzag"
+msgstr "Zigzag"
+
+msgid "groups.line-style.wavy"
+msgstr "Wavy"
 
 msgid "groups.add"
 msgstr "Add group"

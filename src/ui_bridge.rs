@@ -5,6 +5,7 @@
 mod convert;
 mod i18n;
 mod icons;
+mod lines;
 mod motion;
 mod push;
 
@@ -448,6 +449,15 @@ fn connect_group_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         });
     });
     bridge.on_set_group_colour(move |index, colour| set_colour((index, colour)));
+    let set_style = handler(ui, state, |st, (index, choice)| {
+        let Some(style) = convert::line_style_from_ui(choice) else {
+            return;
+        };
+        st.edit_group(convert::index(index), |n, group| {
+            n.set_group_line_style(group, style);
+        });
+    });
+    bridge.on_set_group_line_style(move |index, choice| set_style((index, choice)));
     bridge.on_delete_group(handler(ui, state, |st, index| {
         st.edit_group(convert::index(index), Network::remove_group);
     }));

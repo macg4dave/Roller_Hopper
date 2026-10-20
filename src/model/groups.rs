@@ -1,7 +1,7 @@
 //! Groups the user sorts roles into. A role is in at most one group; groups are optional.
 //!
 //! Group names are the user's own words, kept unique ignoring case. A group may have a colour,
-//! which its roles' devices are shown in.
+//! which its roles' devices are shown in, and a line style their lines are drawn in.
 
 /// Identifies a group, so renaming it does not lose the roles that are in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -18,11 +18,40 @@ pub(crate) enum GroupColour {
     Purple,
 }
 
+/// How the lines from a group's devices are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub(crate) enum LineStyle {
+    #[default]
+    Solid,
+    Thick,
+    Dashed,
+    LongDashes,
+    Dotted,
+    DashDot,
+    Zigzag,
+    Wavy,
+}
+
+impl LineStyle {
+    /// Every style, in the order the style dropdown lists them.
+    pub(crate) const ALL: [Self; 8] = [
+        Self::Solid,
+        Self::Thick,
+        Self::Dashed,
+        Self::LongDashes,
+        Self::Dotted,
+        Self::DashDot,
+        Self::Zigzag,
+        Self::Wavy,
+    ];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Group {
     id: GroupId,
     name: String,
     colour: Option<GroupColour>,
+    line_style: LineStyle,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -60,6 +89,7 @@ impl Groups {
             id,
             name: name.to_owned(),
             colour: None,
+            line_style: LineStyle::default(),
         });
         Some(id)
     }
@@ -90,6 +120,21 @@ impl Groups {
     pub(crate) fn set_colour(&mut self, id: GroupId, colour: Option<GroupColour>) {
         if let Some(group) = self.list.iter_mut().find(|g| g.id == id) {
             group.colour = colour;
+        }
+    }
+
+    /// The group's line style; solid for a group that does not exist.
+    pub(crate) fn line_style(&self, id: GroupId) -> LineStyle {
+        self.list
+            .iter()
+            .find(|g| g.id == id)
+            .map(|g| g.line_style)
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn set_line_style(&mut self, id: GroupId, style: LineStyle) {
+        if let Some(group) = self.list.iter_mut().find(|g| g.id == id) {
+            group.line_style = style;
         }
     }
 }
@@ -136,6 +181,21 @@ mod tests {
         assert_eq!(groups.colour(home), None, "other groups unchanged");
         groups.set_colour(office, None);
         assert_eq!(groups.colour(office), None);
+    }
+
+    #[test]
+    fn a_group_starts_solid_and_keeps_the_style_it_is_given() {
+        let mut groups = Groups::default();
+        let office = groups.add("Office").unwrap();
+        let home = groups.add("Home").unwrap();
+        assert_eq!(groups.line_style(office), LineStyle::Solid);
+        groups.set_line_style(office, LineStyle::Wavy);
+        assert_eq!(groups.line_style(office), LineStyle::Wavy);
+        assert_eq!(
+            groups.line_style(home),
+            LineStyle::Solid,
+            "others unchanged"
+        );
     }
 
     #[test]

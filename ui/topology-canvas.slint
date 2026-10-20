@@ -114,10 +114,10 @@ export component TopologyCanvas inherits Rectangle {
             viewbox-width: Bridge.bounds.width;
             viewbox-height: Bridge.bounds.height;
             commands: set.commands;
-            visible: !set.inferred || MapSettings.show-inferred;
+            opacity: set.inferred ? Theme.inferred-opacity : 1;
             stroke: set.selected ? Theme.accent : Theme.group-colour(set.colour, Theme.line);
             // Keep lines thin on screen at any zoom.
-            stroke-width: Theme.line-width / zoom;
+            stroke-width: (set.thick ? Theme.line-width-thick : Theme.line-width) / zoom;
         }
 
         // Root circles at the foot of each trunk, drawn like the device's lines.
@@ -169,7 +169,7 @@ export component TopologyCanvas inherits Rectangle {
         }
     }
 
-    // Legend for the two line styles.
+    // Legend for known and inferred links; line styles belong to groups and are not listed.
     Rectangle {
         x: Theme.space-l;
         y: root.height - self.height - Theme.space-l;
@@ -184,8 +184,8 @@ export component TopologyCanvas inherits Rectangle {
             padding: Theme.space-s;
             spacing: Theme.space-s;
             for entry in [
-                { label: @tr("legend.known"), commands: "M 0 5 L 24 5" },
-                { label: @tr("legend.inferred"), commands: "M 0 5 L 5 5 M 9.5 5 L 14.5 5 M 19 5 L 24 5" },
+                { label: @tr("legend.known"), opacity: 1 },
+                { label: @tr("legend.inferred"), opacity: Theme.inferred-opacity },
             ]: HorizontalLayout {
                 spacing: Theme.space-xs;
                 Path {
@@ -193,7 +193,8 @@ export component TopologyCanvas inherits Rectangle {
                     height: 10px;
                     viewbox-width: 24;
                     viewbox-height: 10;
-                    commands: entry.commands;
+                    commands: "M 0 5 L 24 5";
+                    opacity: entry.opacity;
                     stroke: Theme.line;
                     stroke-width: Theme.line-width;
                 }

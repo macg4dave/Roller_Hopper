@@ -1,7 +1,7 @@
 //! The network as a whole: devices, how they connect, the roles on offer and their groups.
 
 use super::device::{Device, DeviceId, Icon, Role, Status};
-use super::groups::{GroupColour, GroupId, Groups};
+use super::groups::{GroupColour, GroupId, Groups, LineStyle};
 use super::roles::Roles;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
@@ -256,6 +256,17 @@ impl Network {
         self.role_group(&device.role)
             .and_then(|group| self.groups.colour(group))
     }
+
+    pub(crate) fn set_group_line_style(&mut self, group: GroupId, style: LineStyle) {
+        self.groups.set_line_style(group, style);
+    }
+
+    /// How the lines from a device are drawn: in its role's group's style, solid in no group.
+    pub(crate) fn line_style(&self, device: &Device) -> LineStyle {
+        self.role_group(&device.role)
+            .map(|group| self.groups.line_style(group))
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
@@ -393,6 +404,25 @@ mod tests {
         assert_eq!(network.colour(&printer), Some(GroupColour::Orange));
         network.remove_group(office);
         assert_eq!(network.colour(&printer), None, "group deleted");
+    }
+
+    #[test]
+    fn a_device_takes_the_line_style_of_its_roles_group() {
+        let mut network = mock_data::network();
+        let printer = network
+            .devices()
+            .iter()
+            .find(|d| d.role == Role::Printer)
+            .cloned()
+            .unwrap();
+        let office = network.add_group("Print room").unwrap();
+        network.set_group_line_style(office, LineStyle::Dotted);
+        network.set_role_group(&Role::Printer, None);
+        assert_eq!(network.line_style(&printer), LineStyle::Solid, "no group");
+        network.set_role_group(&Role::Printer, Some(office));
+        assert_eq!(network.line_style(&printer), LineStyle::Dotted);
+        network.remove_group(office);
+        assert_eq!(network.line_style(&printer), LineStyle::Solid, "deleted");
     }
 
     #[test]
