@@ -18,13 +18,13 @@ export global FoundColumns {
 
 // One row of the discovery results. As in the device list, a host heads a group, with each of
 // its network cards after it on a guide line down from its icon, and a guest follows its host,
-// indented under it. A card the run did not see, off the subnet scanned, is greyed. Clicking
-// any row shows the host in the details. An ignored host is faded with its cards.
+// indented under it. A card the run did not see, off the subnet scanned, is greyed. Clicking a
+// row shows the host or the card in the details. An ignored host is faded with its cards.
 export component FoundRow inherits Rectangle {
     in property <FoundView> found;
 
     property <bool> card: found.card-index >= 0;
-    property <bool> selected: !card && found.index == Bridge.selected-found;
+    property <bool> selected: found.index == Bridge.selected-found && found.card-index == Bridge.selected-found-card;
     property <length> step: FoundColumns.icon + Theme.space-m;
     // Where the host's icon sits; a card's guide line runs down from its centre.
     property <length> host-icon-x: Theme.space-s + found.depth * step;
@@ -54,7 +54,13 @@ export component FoundRow inherits Rectangle {
     }
 
     touch := TouchArea {
-        clicked => { Bridge.select-found(found.index); }
+        clicked => {
+            if card {
+                Bridge.select-found-card(found.index, found.card-index);
+            } else {
+                Bridge.select-found(found.index);
+            }
+        }
     }
 
     HorizontalLayout {

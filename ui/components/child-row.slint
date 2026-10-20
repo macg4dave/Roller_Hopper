@@ -1,11 +1,14 @@
 import { IconChoice } from "../bridge.slint";
 import { Theme } from "../theme.slint";
+import { DeviceIcon } from "device-icon.slint";
 import { IconChooser } from "icon-chooser.slint";
 
-// A network card or guest of the device being edited: its icon, which can be changed in place,
-// with its name and a line about it. Clicking the rest of the row opens it in its own editor.
+// A network card or guest of the device being edited: its icon, which can be changed in place
+// unless the row is read-only, with its name and a line about it. Clicking the rest of the row
+// opens it on its own.
 export component ChildRow inherits Rectangle {
     in property <IconChoice> icon;
+    in property <bool> read-only;
     // The category the icon picker opens on (see IconChooser).
     in property <int> start-category: -1;
     in property <color> tint: Theme.accent;
@@ -30,13 +33,19 @@ export component ChildRow inherits Rectangle {
         spacing: Theme.space-m;
 
         // Declared after the row's TouchArea, so a click on the icon opens the picker instead.
-        IconChooser {
+        if !read-only: IconChooser {
             width: 30px;
             height: 30px;
             icon: root.icon;
             start-category: root.start-category;
             tint: root.tint;
             picked(icon) => { root.picked(icon); }
+        }
+        if read-only: DeviceIcon {
+            width: 30px;
+            height: 30px;
+            icon: root.icon.image;
+            colorize: root.tint;
         }
         VerticalLayout {
             alignment: center;

@@ -49,13 +49,16 @@ impl AppState {
         }
     }
 
-    /// Shows a found host in the details. One on the map is selected there too, so the details
-    /// edit the device on the map.
-    fn select_found(&mut self, index: Option<usize>) {
+    /// Shows a found host in the details, or the card at `card` among its cards. One on the map
+    /// is selected there too, or that card of it, so the details edit it on the map.
+    fn select_found(&mut self, index: Option<usize>, card: Option<usize>) {
         self.discovery.selected = index;
+        self.discovery.selected_card = card;
         let found = index.and_then(|i| self.discovery.found().get(i));
         if let Some(id) = found.and_then(Found::on_map) {
-            self.selected = Some(Selection::Device(id));
+            let card = card.and_then(|at| self.network.device(id)?.cards.get(at));
+            let card = card.map(|c| Selection::Card(c.id));
+            self.selected = Some(card.unwrap_or(Selection::Device(id)));
         }
     }
 
@@ -129,12 +132,18 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     connect_found(ui, state);
 }
 
-/// Selecting a found host, editing one not on the map, and adding or ignoring it.
+/// Selecting a found host or one of its cards, editing one not on the map, and adding or
+/// ignoring it.
 fn connect_found(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     bridge.on_select_found(handler(ui, state, |st, index| {
-        st.select_found(usize::try_from(index).ok());
+        st.select_found(usize::try_from(index).ok(), None);
     }));
+    let select_card = handler(ui, state, |st, (index, card): (i32, i32)| {
+        st.select_found(usize::try_from(index).ok(), usize::try_from(card).ok());
+    });
+    bridge.on_select_found_card(move |index, card| select_card((index, card)));
+    connect_found_cards(ui, state);
     let set_role = handler(ui, state, |st, (index, role)| {
         st.set_found_role(convert::index(index), convert::index(role));
     });
@@ -164,6 +173,31 @@ fn connect_found(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_ignore_found(handler(ui, state, |st, index| {
         st.discovery.ignore(convert::index(index));
     }));
+}
+
+/// Renaming and re-iconing the cards of a found host not on the map.
+fn connect_found_cards(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    let rename = handler(
+        ui,
+        state,
+        |st, (index, card, name): (i32, i32, SharedString)| {
+            let (index, card) = (convert::index(index), convert::index(card));
+            st.discovery
+                .edit_card(index, card, |c| c.name = name.into());
+        },
+    );
+    bridge.on_rename_found_card(move |index, card, name| rename((index, card, name)));
+    let set_icon = handler(
+        ui,
+        state,
+        |st, (index, card, icon): (i32, i32, SharedString)| {
+            let (index, card) = (convert::index(index), convert::index(card));
+            let icon = convert::icon_from_ui(&icon);
+            st.discovery.edit_card(index, card, |c| c.icon = icon);
+        },
+    );
+    bridge.on_set_found_card_icon(move |index, card, icon| set_icon((index, card, icon)));
 }
 
 /// Steps the run on until it stops running: finished, paused or stopped (or the window closed).
@@ -251,10 +285,31 @@ mod tests {
         let at = |name| found.iter().position(|f| f.device.name == name);
         let (nas, laptop) = (at("NAS"), at("Guest Laptop"));
         let nas_id = found[nas.unwrap()].on_map().unwrap();
-        state.select_found(nas);
+        state.select_found(nas, None);
         assert_eq!(state.selected, Some(Selection::Device(nas_id)));
-        state.select_found(laptop);
+        state.select_found(laptop, None);
         assert_eq!(state.discovery.selected, laptop);
         assert_eq!(state.selected, Some(Selection::Device(nas_id)));
+    }
+
+    #[test]
+    fn a_found_card_of_a_host_on_the_map_selects_that_card_there() {
+        let mut state = AppState::new(mock_data::network());
+        finished(&mut state);
+        let found = state.discovery.found();
+        let docker = found.iter().position(|f| f.device.name == "Docker Host");
+        let id = found[docker.unwrap()].on_map().unwrap();
+        let lab = state.network.device(id).unwrap().cards[1].id;
+        state.select_found(docker, Some(1));
+        assert_eq!(state.selected, Some(Selection::Card(lab)));
+        assert_eq!(state.discovery.selected_card, Some(1));
+        state.select_found(docker, Some(9));
+        assert_eq!(
+            state.selected,
+            Some(Selection::Device(id)),
+            "no such card: the host"
+        );
+        state.select_found(docker, None);
+        assert_eq!(state.discovery.selected_card, None);
     }
 }

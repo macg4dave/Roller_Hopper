@@ -21,6 +21,10 @@ New answers establish manual precedence over AI, manual scans with optional ligh
 refresh, scans continuing across pages and cancelling on close, and separate crash recovery.
 Custom-icon saving is deferred. The proposed mismatch warning still needs review; these
 answers do not approve implementation or settle the remaining resource/accuracy questions.
+The scanner approach is now upstream nrev through ordinary Cargo upgrades, with no fork or
+custom engine. Phase 0 must resolve [stock-release packaging and lifecycle gaps](backend-scanner-engine.md),
+including the Windows Packet dependency; Phase 2 integrates the qualified library rather
+than implementing its probes. The user's latest instruction limits this session to documents.
 
 | Phase | Intended outcome after approval | Entry dependency | Evidence required before proceeding |
 | --- | --- | --- | --- |

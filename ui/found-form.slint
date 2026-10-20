@@ -1,0 +1,149 @@
+import { Button, ComboBox, TextEdit } from "std-widgets.slint";
+import { Bridge, FoundDecision, FoundView } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+import { FlagChip } from "components/chip.slint";
+import { ChildRow } from "components/child-row.slint";
+import { DetailField } from "components/detail-field.slint";
+import { DeviceIcon } from "components/device-icon.slint";
+import { IconChooser } from "components/icon-chooser.slint";
+import { NameBox } from "components/name-box.slint";
+import { FoundFacts } from "found-facts.slint";
+
+// The discovery details for a host not on the map, laid out like the device editor: its icon,
+// name and role, what the run found out about it, its network cards, each opened from its row,
+// and notes. A host that can still be added is edited here and added to the map with it, or
+// ignored; one added and since forgotten from the map is only shown.
+export component FoundForm inherits VerticalLayout {
+    in property <FoundView> found;
+    in property <bool> addable;
+
+    alignment: start;
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        spacing: Theme.space-m;
+        padding-bottom: Theme.space-m;
+        if addable: IconChooser {
+            width: 52px;
+            height: 52px;
+            icon: found.icon;
+            icon-size: 36px;
+            tint: found.unidentified ? Theme.unknown : Theme.accent;
+            reset-text: @tr("edit.icon-from-role");
+            can-reset: found.custom-icon;
+            picked(icon) => { Bridge.set-found-icon(found.index, icon.id); }
+            reset => { Bridge.reset-found-icon(found.index); }
+        }
+        if !addable: DeviceIcon {
+            icon: found.icon.image;
+            width: 44px;
+            height: 44px;
+            colorize: found.unidentified ? Theme.unknown : Theme.accent;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+            horizontal-stretch: 1;
+            if addable: NameBox {
+                name: found.name;
+                placeholder: Labels.found-name("");
+                font-size: Theme.font-title;
+                font-weight: 600;
+                field-label: @tr("details.name");
+                commit(text) => { Bridge.rename-found(found.index, text); }
+            }
+            if !addable: Text {
+                text: Labels.found-name(found.name);
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space-s;
+                Text {
+                    text: found.ip;
+                    font-size: Theme.font-body;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+                FlagChip {
+                    finding: found.finding;
+                    decision: found.decision;
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                icon: @image-url("icons/close.svg");
+                colorize-icon: true;
+                accessible-label: @tr("details.close");
+                clicked => { Bridge.select-found(-1); }
+            }
+        }
+    }
+
+    DetailField {
+        label: @tr("details.role");
+        value: addable ? "" : found.role;
+        if addable: ComboBox {
+            // Picking a role replaces the binding, so keep it following Rust's state.
+            property <int> role-index: found.role-index;
+            changed role-index => { self.current-index = self.role-index; }
+            horizontal-stretch: 1;
+            model: Bridge.roles;
+            current-index: found.role-index;
+            selected => { Bridge.set-found-role(found.index, self.current-index); }
+        }
+    }
+    FoundFacts { found: found; }
+    DetailField {
+        label: @tr("edit.cards");
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            for card in Bridge.found-cards: ChildRow {
+                icon: card.card-icon;
+                read-only: !addable;
+                start-category: Bridge.card-icon-category;
+                name: Labels.card-name(card.card-name, card.card-index);
+                detail: card.seen ? card.ip : @tr("discovery.not-seen");
+                picked(icon) => { Bridge.set-found-card-icon(found.index, card.card-index, icon.id); }
+                clicked => { Bridge.select-found-card(found.index, card.card-index); }
+            }
+        }
+    }
+    if addable: DetailField {
+        label: @tr("details.notes");
+        TextEdit {
+            // Typing replaces the binding, so take another host's notes by hand.
+            property <int> host: found.index;
+            changed host => { self.text = found.notes; }
+            height: 96px;
+            wrap: word-wrap;
+            placeholder-text: @tr("details.notes-placeholder");
+            text: found.notes;
+            edited(text) => { Bridge.edit-found-notes(found.index, text); }
+        }
+    }
+    if !addable && found.notes != "": DetailField { label: @tr("details.notes"); value: found.notes; }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space-s;
+        padding-top: Theme.space-m;
+        if addable: Button {
+            text: @tr("discovery.add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            primary: true;
+            clicked => { Bridge.add-found(found.index); }
+        }
+        if addable && found.decision == FoundDecision.pending: Button {
+            text: @tr("discovery.ignore");
+            clicked => { Bridge.ignore-found(found.index); }
+        }
+    }
+}

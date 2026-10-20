@@ -1,0 +1,92 @@
+import { Button } from "std-widgets.slint";
+import { Bridge, FoundView } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+import { DetailField } from "components/detail-field.slint";
+import { DeviceIcon } from "components/device-icon.slint";
+import { IconChooser } from "components/icon-chooser.slint";
+import { NameBox } from "components/name-box.slint";
+
+// The discovery details for a network card of a host not on the map: its name and icon, which
+// it is added with, over what the run found of it. Its settings are the scan's until the host
+// is on the map, where the card editor changes them. A card is a child of its host, which it
+// leads back to.
+export component FoundCardDetails inherits VerticalLayout {
+    in property <FoundView> host;
+    in property <FoundView> card;
+    // The host can still be added, so its card can be renamed and re-iconed.
+    in property <bool> editable;
+
+    alignment: start;
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        alignment: start;
+        padding-bottom: Theme.space-s;
+        Button {
+            text: Labels.found-name(host.name);
+            icon: @image-url("icons/chevron-left.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.card-back");
+            clicked => { Bridge.select-found(host.index); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.space-m;
+        padding-bottom: Theme.space-m;
+        if editable: IconChooser {
+            width: 52px;
+            height: 52px;
+            icon: card.card-icon;
+            start-category: Bridge.card-icon-category;
+            icon-size: 36px;
+            tint: Theme.accent;
+            picked(icon) => { Bridge.set-found-card-icon(host.index, card.card-index, icon.id); }
+        }
+        if !editable: DeviceIcon {
+            icon: card.card-icon.image;
+            width: 44px;
+            height: 44px;
+            colorize: Theme.accent;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+            horizontal-stretch: 1;
+            if editable: NameBox {
+                name: card.card-name;
+                placeholder: Labels.card-name("", card.card-index);
+                font-size: Theme.font-title;
+                font-weight: 600;
+                field-label: @tr("details.name");
+                commit(text) => { Bridge.rename-found-card(host.index, card.card-index, text); }
+            }
+            if !editable: Text {
+                text: Labels.card-name(card.card-name, card.card-index);
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            Text {
+                text: @tr("edit.card-of", Labels.found-name(host.name));
+                font-size: Theme.font-body;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+        }
+    }
+
+    if !card.seen: Text {
+        text: @tr("discovery.card-not-seen");
+        font-size: Theme.font-small;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+    DetailField { label: @tr("details.ip"); value: card.ip == "" ? @tr("card.no-address") : card.ip; }
+    if card.mask != "": DetailField { label: @tr("details.mask"); value: card.mask; }
+    if card.gateway != "": DetailField { label: @tr("details.gateway"); value: card.gateway; }
+    if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
+    if card.services != "": DetailField { label: @tr("details.open-ports"); value: card.services; }
+}

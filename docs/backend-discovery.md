@@ -8,6 +8,11 @@ All collection executes inside the app. External scanners, helper executables, l
 backends and separately installed services/drivers are excluded. Selected devices and normal
 network discovery/name services are data sources, not hosting for the application's backend.
 
+The selected engine approach is [upstream nrev through Cargo](backend-scanner-engine.md),
+without a fork or copied scanner. Methods below describe desired evidence and coverage, not
+instructions to implement the probes ourselves. Stock-release Windows packaging and run
+control remain qualification gaps; no source integration is authorised in this documentation task.
+
 ## Plan each run explicitly
 
 Enumerate local interfaces, addresses and routes before offering targets. Show which interface

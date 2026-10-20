@@ -27,6 +27,9 @@ The questions already asked in the conversation have been incorporated here.
 | Q6b | Continue scans across pages; cancel on app close | Run lifetime belongs to the app, not the discovery page. Retain partial findings, handle unsaved changes, and never resume traffic automatically after restart. |
 | Q13a | Keep a separate crash-recovery copy | Explicit Save still controls the user's file; recovery is labelled unsaved, separate and subject to validation. Cadence/retention remain open. |
 | Q22c | Do not worry about custom-icon saving | Defer embedded icons and companion-folder packaging. Save safe icon identifiers and use a built-in fallback when unavailable; missing artwork must not prevent Open. |
+| Q23 | Use upstream nrev in the normal Cargo dependency workflow; no maintained fork | Reuse the embedded library and ordinary dependency upgrades; no copied scanner, local patches, submodule or custom scanning engine. Keep supported backend options broader than the initial GUI. See [integration and qualification](backend-scanner-engine.md). |
+| Q23a | Users only run the app; no external software, services or servers | Preserve Q21, including no extra capture-driver setup. Published nrev 0.7.0 has a Windows Packet-link dependency obstacle; selection of the library does not establish standalone compatibility. |
+| Q24 | This work is documents only; read code to understand direction, do not edit it | Record the chosen approach and compatibility gaps. Do not add dependencies, modify the discovery workflow or create implementation tasks in this session. |
 
 For Q9, the user is unsure of conflict resolution and asked for a way to alert them. The
 proposed answer is an inline, persistent comparison warning with source/time and explicit
@@ -78,6 +81,10 @@ in groups; implementation should not start by guessing the answers.
 
 ## Research decisions still open
 
+- Stock upstream nrev must satisfy standalone packaging and the required scan lifecycle before
+  integration can be approved; the confirmed Windows Packet-link obstacle is recorded in
+  [the engine note](backend-scanner-engine.md#confirmed-windows-dependency-issue). No fork or
+  external-driver workaround is authorised.
 - A maintained safe neighbour-table/ICMP path must be qualified on each OS under the existing
   no-unsafe rule; current candidates are not a verified drop-in solution.
 - Embedded model and Rust runtime must be selected together. Off-the-shelf does not mean

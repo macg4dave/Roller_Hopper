@@ -234,7 +234,7 @@ export struct DiscoveryView {
 }
 
 /// A host the run found, or in the results one of its network cards, which follow it as in the
-/// device list; the details show the host itself. `index` is the host's place among all found
+/// device list, and in the details. `index` is the host's place among all found
 /// hosts, which the callbacks take, for a card too.
 export struct FoundView {
     index: int,
@@ -258,6 +258,9 @@ export struct FoundView {
     // Of the card it answered at, or of the card itself.
     ip: string,
     mac: string,
+    // Of a card's row only: its subnet mask and gateway, empty when it has none.
+    mask: string,
+    gateway: string,
     hostname: string,
     manufacturer: string,
     model: string,
@@ -340,11 +343,14 @@ export global Bridge {
     in property <DiscoveryView> discovery;
     // The subnets the network's cards are on, for the discovery page's network dropdown.
     in property <[string]> discovery-targets;
-    // The found hosts the result filter lets through, in address order.
+    // The found hosts the result filter lets through, each followed by its cards' rows.
     in property <[FoundView]> found;
-    // The found host shown in the discovery details (index in FoundView), -1 for none.
+    // The found host shown in the discovery details (index in FoundView), -1 for none; the rows
+    // of its cards; and which of them is shown instead (card-index), -1 for the host itself.
     in property <int> selected-found: -1;
     in property <FoundView> found-details;
+    in property <[FoundView]> found-cards;
+    in property <int> selected-found-card: -1;
     // Newest first.
     in property <[LogView]> discovery-log;
     // Every icon in the icon folder, for the icon picker.
@@ -444,6 +450,12 @@ export global Bridge {
     // device too, which is edited like any other. A host not on the map can be renamed, given a
     // role (index in roles), an icon (by id) or notes, then added to the map or ignored.
     callback select-found(int);
+    // A card of a found host, by the host's index and the card's card-index. One on the map is
+    // selected there and gets the card editor; one not on the map can be renamed or given an
+    // icon (by id), which it is added with.
+    callback select-found-card(int, int);
+    callback rename-found-card(int, int, string);
+    callback set-found-card-icon(int, int, string);
     callback set-found-role(int, int);
     callback rename-found(int, string);
     callback set-found-icon(int, string);

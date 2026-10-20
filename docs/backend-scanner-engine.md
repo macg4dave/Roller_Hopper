@@ -1,15 +1,18 @@
-# Reuse a scanner engine
+# Upstream nrev integration
 
-Research: 20 October 2026. Documentation only; no dependencies added, builds, tests,
-scanner installations or network scans performed. This is a focused engine-selection
-addendum to [the discovery strategy](backend-discovery.md), not an approved implementation
-roadmap. Existing planning documents had uncommitted edits and were left untouched.
+Updated 20 October 2026. Documentation only; no application source, manifest or lockfile
+changed, and no scanner installed or run. Published crate sources were downloaded through
+`cargo info` and inspected. An upstream build attempt was cancelled after the user clarified
+the documentation-only scope; it produced no compatibility result. No application gate,
+GUI or live-network acceptance is claimed.
 
 ## Direction confirmed in this discussion
 
-Reuse an existing scanner implementation from a crate, library or repository. Roller Hopper
-should provide a powerful scan backend with more options than the initial GUI exposes.
-Do not build a new scanner out of socket primitives simply because the GUI is small.
+Use **upstream nrev as a normal Cargo library dependency**, updated through ordinary Cargo
+dependency upgrades and `Cargo.lock`. The user rejected maintaining a fork. Do not copy its
+source into Roller Hopper, maintain local patches, add a Git submodule or create a replacement
+scanner. The backend should retain supported options beyond those exposed by the initial GUI.
+This decision selects the integration approach, not proof that nrev meets every requirement.
 
 The user clarified: everything must work by running the app, with no external software,
 services or servers. Dependencies compiled into the app or packaged as its libraries are
@@ -17,13 +20,12 @@ acceptable; a Cargo-installable command is not automatically an embeddable libra
 No plan may depend on users installing Nmap, Npcap, a collector service or another runtime.
 Bundling an executable or silently installing a driver does not satisfy that boundary.
 
-## What the present plan would leave us building
+## Keep the application's responsibilities small
 
-The current [crate shortlist](backend-crates.md) supplies Tokio, interface enumeration,
-DNS and individual discovery protocols. These are useful components, but Tokio is an I/O
-runtime, not a complete scanner. Using them alone still leaves us owning probe scheduling,
-port-state interpretation, retries and service interrogation. That is substantially more
-scanner implementation than the user wants.
+Use nrev's existing scanning, probes and result types. Tokio supplies the runtime around the
+engine; it is not a reason to implement our own probe scheduler, retry engine, TCP scanner or
+service fingerprinting. Supplement an essential missing protocol only through an established
+library after confirming that nrev does not already provide it.
 
 The actual app has no real scanner to preserve. Its
 [scan options](../src/model/discovery.rs) are three booleans, and its
@@ -32,50 +34,89 @@ The actual app has no real scanner to preserve. Its
 Keep the map, editing and review workflow; do not adopt these mock limitations as the engine
 contract. The existing documents' in-process requirement remains applicable.
 
-## Engine comparison
+## Normal Cargo usage after compatibility is established
 
-These are researched candidates, not validated integrations. Repository manifests and source
-were inspected as well as project descriptions. Versions identify inspected artifacts;
-repository HEAD and published crates can differ.
+The inspected published release is **nrev 0.7.0**, MIT, with an actual library target as well
+as a CLI target. The intended dependency declaration is `nrev = "0.7.0"` under the app's
+existing `[dependencies]`. This is a plan, not a manifest edit made in this task. Cargo's
+version requirement permits compatible 0.7 updates; the application lockfile records the
+resolved release and dependency graph. Update deliberately and rerun the required gate.
+Users need neither Cargo nor a separate nrev installation.
 
-| Candidate | Reusable functionality | Fit under the confirmed packaging requirement |
-| --- | --- | --- |
-| **nrev**, repository 0.7.0 | Public Rust library modules as well as CLI; TCP/UDP/SYN/QUIC scanning, service observations, host discovery, neighbour discovery, traceroute, configurable probes and structured results | Strongest first candidate from this pass for breadth plus an embedded API. **Conditional**, not selected: raw/capture operations require privileges and Npcap on Windows. Establish whether ordinary socket paths and their complete dependency graph run without that installation. Its source includes configuration, a scanner API and a socket connector, so evaluation need not start by copying the CLI. |
-| **netscan**, repository 0.30.0 | Actual Rust library; TCP connect/SYN scans, ICMP/TCP/UDP host probes and service detection; settings for targets, interface, concurrency and timing | Smaller fallback candidate. README documents raw privileges and Windows Npcap/WinPcap; the TCP-connect source has a distinct ordinary-socket path, but that does not prove a clean driver-free Windows build/runtime. Less broad than nrev; no assumption of full Nmap-equivalent service identification. |
-| **pistol**, published documentation 4.0.18 | Rust library with many discovery/port-scan methods, OS detection and service/version detection | Broad API, but documented Windows capture dependencies conflict with the requirement. It also ships Nmap-derived databases requiring separate provenance/licence examination. Repository HEAD inspected separately identifies itself as 5.0.0; do not combine that manifest with 4.x API assumptions. Not the first choice here. |
-| **Nmap** | Established broad host/port discovery, service/version detection, OS fingerprinting and substantial configuration | Capability benchmark. Its publisher recommends executable invocation with XML output; that approach is excluded here. Incorporating source is discussed by the publisher, but is not evidence of a supported drop-in Rust library or a small integration. Redistribution terms also need qualification. Do not promise embedded Nmap as an easy solution. |
-| **RustScan** | Existing fast port scanner with configurable inputs and scripting/integration | Its documented broader workflow delegates to Nmap or other scripts. It does not remove the packaging problem or supply the complete embedded discovery/identification backend wanted here. |
+Call `Scanner` with `ScanConfig`, `DataRegistry` and `SocketConnector` on an owned background
+runtime. Convert its results into the existing pure network model through the current Rust
+bridge. Keep `Rc<RefCell<AppState>>` and Slint model mutation on the UI thread. Runtime type
+names describe existing upstream APIs; they are not instructions to add another adapter
+framework or a replacement inventory. The app's integration should only validate settings,
+control the run, interpret coverage and admit observations while protecting manual edits.
 
-Primary sources:
+Use the full configuration supported by the qualified upstream release where applicable.
+The GUI's three switches must not become the entire backend contract. Do not invent unused
+engine options or promise features that the selected release cannot supply.
 
-- nrev: [overview](https://github.com/shellrow/nrev),
-  [inspected library exports](https://github.com/shellrow/nrev/blob/d2d4e231a0fb5228c5294d29d318d88249d6ccac/src/lib.rs),
-  [scanner API](https://github.com/shellrow/nrev/blob/d2d4e231a0fb5228c5294d29d318d88249d6ccac/src/scanner.rs),
-  [configuration](https://github.com/shellrow/nrev/blob/d2d4e231a0fb5228c5294d29d318d88249d6ccac/src/config.rs),
-  [transport implementation](https://github.com/shellrow/nrev/blob/d2d4e231a0fb5228c5294d29d318d88249d6ccac/src/transport.rs),
-  [usage](https://github.com/shellrow/nrev/blob/d2d4e231a0fb5228c5294d29d318d88249d6ccac/docs/USAGE.md).
-- netscan: [overview and Windows requirements](https://github.com/shellrow/netscan),
-  [settings](https://github.com/shellrow/netscan/blob/361dc17f2a2999259a0ac0f7b9e6788af2fb3bc7/src/scan/setting.rs),
-  [scanner implementation](https://github.com/shellrow/netscan/blob/361dc17f2a2999259a0ac0f7b9e6788af2fb3bc7/src/scan/scanner.rs).
-- pistol: [published 4.0.18 documentation and database statement](https://docs.rs/crate/pistol/4.0.18),
-  [repository](https://github.com/rikonaka/pistol-rs).
-- Nmap: [capabilities](https://nmap.org/book/man.html),
-  [publisher integration guidance](https://nmap.org/oem/),
-  [licence](https://nmap.org/npsl/), [Npcap distribution](https://npcap.com/oem/).
-- RustScan: [maintainer README](https://github.com/bee-san/RustScan).
+For defects, record a minimal reproduction for upstream; do not maintain a patched release
+in this product. Reporting an issue or publishing any upstream contribution requires an
+explicit instruction. An upstream fix becomes available through a normal dependency upgrade.
+If a required capability cannot work in stock upstream, report the gap for a product decision
+rather than installing a driver, creating a fork or silently replacing the engine.
 
-Maintenance evidence is limited: inspected nrev HEAD is a 0.7.0 release commit dated
-4 April 2026, and netscan HEAD is a 0.30.0 release commit dated 15 February 2026.
-These are smaller projects than Nmap; release activity and an advertised platform list do
-not establish reliability or compatibility with this app's Rust 1.94 toolchain.
+Sources: [published package](https://docs.rs/crate/nrev/0.7.0),
+[library exports](https://docs.rs/crate/nrev/0.7.0/source/src/lib.rs),
+[scanner](https://docs.rs/crate/nrev/0.7.0/source/src/scanner.rs),
+[configuration](https://docs.rs/crate/nrev/0.7.0/source/src/config.rs),
+[Cargo dependency requirements](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html),
+[Cargo.lock](https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html).
 
-## Recommendation and qualification gaps
+## Confirmed Windows dependency issue
 
-Evaluate **nrev's embedded library first**, with netscan as the narrower alternative. Neither
-is approved as a driver-free solution by this review. Reject any candidate whose usable path
-requires external software; do not turn rejection into permission to write our own engine.
-A small upstream improvement may be preferable to a permanent fork, but maintaining a large
-fork would defeat the reuse objective.
+Published sources inspected through `cargo info nrev`, `cargo info nex@0.26.0` and
+`cargo info nex-datalink@0.26.0` show the chain:
+
+`nrev 0.7.0 → nex 0.26.0 → nex-datalink 0.26.0 → Windows Packet library`.
+
+The Windows backend and bindings are selected by `cfg(windows)`. In
+`nex-datalink/src/bindings/windows.rs`, `#[link(name = "Packet")]` declares the native link.
+The crate's optional `pcap` feature controls a separate backend; disabling it does not remove
+the normal Windows WinPcap/Npcap bindings. nrev 0.7.0 declares no feature to exclude that
+dependency. Its TCP connector uses ordinary Tokio sockets, but choosing TCP at runtime does
+not change the Cargo dependency graph or remove native link metadata.
+
+This is a **confirmed source-level packaging obstacle**, not a reproduced linker failure or
+proof of the exact DLL imports retained by a final application. Standalone Windows linking
+and normally launched packaged-app behaviour still need compatibility evidence. Do not mark
+stock nrev 0.7.0 as qualified for a machine without Npcap, or offer an unverified feature-flag
+workaround. The user's no-extra-software and no-fork requirements both remain in force.
+
+Sources: [nrev manifest](https://docs.rs/crate/nrev/0.7.0/source/Cargo.toml),
+[nex manifest](https://docs.rs/crate/nex/0.26.0/source/Cargo.toml),
+[datalink features](https://docs.rs/crate/nex-datalink/0.26.0/source/Cargo.toml),
+[Windows backend selection](https://docs.rs/crate/nex-datalink/0.26.0/source/src/lib.rs),
+[native bindings](https://docs.rs/crate/nex-datalink/0.26.0/source/src/bindings/windows.rs).
+
+### Extra drivers are not a universal scanner requirement
+
+The nrev dependency issue must not be described as a requirement of all network scanning.
+A scanner can use the operating system's ordinary sockets and supported native APIs.
+
+| Capability on Windows | Extra capture driver intrinsically required? |
+| --- | --- |
+| TCP connect scanning, including selected ranges or all TCP ports | No; the OS establishes connections and returns outcomes |
+| Service interrogation over ordinary TCP/UDP, such as HTTP/TLS or DNS | No; protocol responses supply evidence without arbitrary packet capture |
+| ICMP echo through Windows `IcmpSendEcho2` | No; Windows supplies the API, although a particular cross-platform library may use a different mechanism |
+| On-link IPv4 MAC resolution through Windows `SendARP` | No; Windows supplies the API. This does not reveal MAC addresses across routers |
+| Raw TCP SYN probing, packet-level OS fingerprints or arbitrary link-layer capture | Typically needs a capture/injection driver such as Npcap on Windows; ordinary Winsock raw sockets have restrictions |
+
+Therefore a capable driver-free mapper is possible, but that does not establish that the
+chosen nrev release packages or implements those paths appropriately. Port connections and
+service replies also cannot replace every observation available from raw packets. Keep
+engine packaging, administrator permissions and method coverage as separate questions.
+
+Sources: [TCP connect scan semantics](https://nmap.org/book/man-port-scanning-techniques.html),
+[Windows raw-socket restrictions](https://learn.microsoft.com/en-us/windows/win32/winsock/tcp-ip-raw-sockets-2),
+[Windows ICMP API](https://learn.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpsendecho2),
+[Windows ARP API](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-sendarp).
+
+## Remaining qualification gaps
 
 The following questions must be resolved through source/dependency review and, in a separately
 authorised implementation exercise, actual compatibility checks:
@@ -94,7 +135,7 @@ authorised implementation exercise, actual compatibility checks:
 5. Does normal packaged-app launch work with OS network permissions, including denied access?
    A developer terminal run cannot establish the user's installation experience.
 
-No inspected candidate is yet demonstrated to provide all desired capabilities under the
+Stock nrev is not yet demonstrated to provide all desired capabilities under the
 no-external-software boundary. Raw SYN scanning and active TCP/IP OS fingerprints must not be
 promised across platforms. Reused service protocols can still provide rich identification.
 Additional libraries such as mdns-sd can complement the engine where it lacks an essential
@@ -125,6 +166,6 @@ Map relationships remain a separate inference: finding an endpoint or a route do
 a direct physical link. A router/controller API can enrich results where equipment supports
 it, but an off-device API is not a replacement for locally reaching private network targets.
 
-The next design decision is the engine's qualified capability set, especially driver-free
-packaging and run control. Do not approve a socket-by-socket implementation roadmap before
-that decision, and do not expand the GUI merely to demonstrate every engine option.
+The dependency approach is settled: ordinary upstream Cargo usage. Driver-free packaging
+and run control remain qualification gaps. This task is documentation only; no source
+integration, protected-guide amendment or implementation backlog is authorised by this note.

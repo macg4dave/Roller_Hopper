@@ -8,12 +8,15 @@ file tree or a request for one trait per component.
 ## Retain the current application boundary
 
 Use one Rust desktop process. Keep Slint, the existing `Bridge`, reusable forms, card-based map,
-selection and pure network model. Add concrete discovery functions around those boundaries;
+selection and pure network model. Integrate the upstream nrev library around those boundaries;
 do not introduce a web service, plugin framework, generic repository layer or second inventory.
 The user's hard boundary also excludes bundled child executables, external scanner/model
 programs, localhost servers and separately installed helper services. Rust/native dependencies
 must execute in process and ship within the app. Normal OS APIs and communication with selected
 network targets remain the collection boundary, not an externally hosted application backend.
+Use normal Cargo dependency updates, with no maintained fork or copied scanner. See
+[the engine contract and Windows dependency obstacle](backend-scanner-engine.md). The app
+owns run lifetime and observation admission; nrev supplies implemented scanning and probes.
 
 ```mermaid
 flowchart LR
@@ -22,7 +25,7 @@ flowchart LR
     R --> D[One authoritative in-memory document]
     D -->|existing view projection| UI
     B -->|frozen run commands| W[Bounded background coordinator]
-    W --> P[OS and protocol collectors]
+    W --> P[Upstream nrev library and required supplementary collectors]
     P -->|owned observation batches| B
     W -->|terminal outcome| B
     D -->|immutable save snapshot| S[Background document file I/O]

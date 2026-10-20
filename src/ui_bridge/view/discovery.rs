@@ -37,6 +37,22 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         count_duplicates: count(FoundFilter::Duplicates),
     });
 
+    push_found(bridge, labels, state);
+
+    let log = discovery
+        .log()
+        .iter()
+        .rev()
+        .map(|entry| log_view(state, entry));
+    if let Some(model) = sync(&bridge.get_discovery_log(), log.collect()) {
+        bridge.set_discovery_log(model);
+    }
+    bridge.set_scanning(discovery.busy());
+}
+
+/// The results, each host followed by its cards, and the host or card shown in the details.
+fn push_found(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let discovery = &state.discovery;
     let shown = discovery.shown().into_iter().filter_map(|(index, depth)| {
         let found = discovery.found().get(index)?;
         let row = ui::FoundView {
@@ -53,18 +69,16 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         .selected
         .and_then(|index| Some((index, discovery.found().get(index)?)));
     let details = selected.map(|(index, f)| found_view(state, labels, index, f));
+    let cards = selected
+        .zip(details.as_ref())
+        .map(|((_, f), row)| card_rows(state, row, f));
+    if let Some(model) = sync(&bridge.get_found_cards(), cards.unwrap_or_default()) {
+        bridge.set_found_cards(model);
+    }
+    let card = selected.and_then(|(_, f)| selected_card(state, f));
+    bridge.set_selected_found_card(card.map_or(-1, int));
     bridge.set_found_details(details.unwrap_or_default());
     bridge.set_selected_found(selected.map_or(-1, |(index, _)| int(index)));
-
-    let log = discovery
-        .log()
-        .iter()
-        .rev()
-        .map(|entry| log_view(state, entry));
-    if let Some(model) = sync(&bridge.get_discovery_log(), log.collect()) {
-        bridge.set_discovery_log(model);
-    }
-    bridge.set_scanning(discovery.busy());
 }
 
 fn int(n: usize) -> i32 {
@@ -131,6 +145,19 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
     }
 }
 
+/// The place among `found`'s cards of the one shown in the details. For a host on the map, that
+/// is the card selected there, which its editor may have moved on from.
+fn selected_card(state: &AppState, found: &Found) -> Option<usize> {
+    let network = &state.network;
+    match found.on_map().and_then(|id| network.device(id)) {
+        Some(device) => {
+            let card = state.selected_card()?;
+            device.cards.iter().position(|c| c.id == card)
+        }
+        None => state.discovery.selected_card,
+    }
+}
+
 /// The row of each of `found`'s cards, made from `row`, the row of the host: all its cards, as
 /// in the device list, with whether the run saw each.
 fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::FoundView> {
@@ -142,6 +169,8 @@ fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::Fo
         seen: found.seen(card),
         last: at + 1 == cards.len(),
         ip: convert::ip(card),
+        mask: convert::mask(card),
+        gateway: convert::gateway(card),
         mac: convert::mac(card),
         services: card.services.to_string().into(),
         ..row.clone()

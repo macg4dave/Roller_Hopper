@@ -10,7 +10,7 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-use super::card::{CardId, MacAddr};
+use super::card::{CardId, MacAddr, NetworkCard};
 use super::device::{Device, DeviceId, DeviceKind, LastSeen, Status};
 use super::network::{ConnectionKind, Network};
 
@@ -84,6 +84,8 @@ pub(crate) struct Discovery {
     pub(crate) filter: FoundFilter,
     /// The found host shown in the details, by its place in [`Self::found`].
     pub(crate) selected: Option<usize>,
+    /// The card of that host shown instead, by its place among the host's cards.
+    pub(crate) selected_card: Option<usize>,
     phase: Phase,
     /// Every host the run will find, in address order; the first `revealed` have been reached.
     hosts: Vec<Found>,
@@ -254,6 +256,21 @@ impl Discovery {
         if let Some(found) = self.found_mut(index).filter(|f| f.addable()) {
             edit(&mut found.device);
         }
+    }
+
+    /// Edits the card at `card` among the cards of a host not on the map (its name or icon),
+    /// which it will be added with.
+    pub(crate) fn edit_card(
+        &mut self,
+        index: usize,
+        card: usize,
+        edit: impl FnOnce(&mut NetworkCard),
+    ) {
+        self.edit(index, |device| {
+            if let Some(card) = device.cards.get_mut(card) {
+                edit(card);
+            }
+        });
     }
 
     /// Leaves a host off the map; it can still be added later.
@@ -434,8 +451,12 @@ mod tests {
             d.role = Role::Other;
             d.notes = "On the fridge".into();
         });
+        discovery.edit_card(index, 0, |c| c.name = "Wi-Fi".into());
+        discovery.edit_card(index, 9, |c| c.name = "Nowhere".into());
         let id = discovery.add(index, &mut network).unwrap();
         let added = network.device(id).unwrap();
+        let names: Vec<_> = added.cards.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["Wi-Fi"], "its card as edited");
         assert_eq!(
             (added.name.as_str(), &added.role, added.notes.as_str()),
             ("Kitchen", &Role::Other, "On the fridge")
@@ -452,6 +473,8 @@ mod tests {
         assert_eq!(uplink.kind, ConnectionKind::Inferred);
         assert_eq!(discovery.found()[index].on_map(), Some(id));
         assert_eq!(discovery.add(index, &mut network), None, "only once");
+        discovery.edit_card(index, 0, |c| c.name = "Changed".into());
+        assert_eq!(discovery.found()[index].device.cards[0].name, "Wi-Fi");
 
         let (known, _) = named(&discovery, "NAS");
         let before = network.devices().len();

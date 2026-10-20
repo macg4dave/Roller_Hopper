@@ -9,7 +9,8 @@ import { NameBox } from "components/name-box.slint";
 
 // The selected device's editable fields: icon, name, role, its network cards and guests with
 // adding more, notes, and forgetting it. Used on the edit page, in the details panel's edit
-// mode and in the discovery details for a host on the map.
+// mode and in the discovery details for a host on the map, which puts what the run found out
+// under the role as this form's children.
 export component DeviceForm inherits VerticalLayout {
     // Forgetting asks first; a new selection drops the question.
     property <bool> confirm-forget;
@@ -88,6 +89,7 @@ export component DeviceForm inherits VerticalLayout {
             selected => { Bridge.set-guest-kind(self.current-index == 1 ? GuestKind.container : GuestKind.virtual-machine); }
         }
     }
+    @children
     // Cards and guests are each edited on their own, opened from their row. A new one is blank
     // and selected, so it can be filled in.
     DetailField {

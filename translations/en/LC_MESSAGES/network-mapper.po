@@ -713,6 +713,10 @@ msgstr "{}%"
 msgid "discovery.not-seen"
 msgstr "Not seen"
 
+# In the details of such a card.
+msgid "discovery.card-not-seen"
+msgstr "Not on the network scanned, so this scan did not see it."
+
 msgid "discovery.empty.idle"
 msgstr "Pick a network and start a scan to look for devices."
 

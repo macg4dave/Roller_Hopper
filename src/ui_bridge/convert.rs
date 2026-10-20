@@ -50,6 +50,17 @@ pub(super) fn ip(card: &NetworkCard) -> SharedString {
     ip.unwrap_or_default().into()
 }
 
+/// The subnet mask of the card's address, dotted; empty when it has no address.
+pub(super) fn mask(card: &NetworkCard) -> SharedString {
+    let mask = card.address.map(|net| net.netmask().to_string());
+    mask.unwrap_or_default().into()
+}
+
+pub(super) fn gateway(card: &NetworkCard) -> SharedString {
+    let gateway = card.gateway.map(|g| g.to_string());
+    gateway.unwrap_or_default().into()
+}
+
 /// The MAC address as shown; empty when there is none.
 pub(super) fn mac(card: &NetworkCard) -> SharedString {
     let mac = card.mac.map(|mac| mac.to_string());

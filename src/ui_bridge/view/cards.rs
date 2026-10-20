@@ -66,16 +66,8 @@ pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> V
             index: index_of(device, card.id),
             name: card.name.trim().into(),
             ip: convert::ip(card),
-            mask: card
-                .address
-                .map(|n| n.netmask().to_string())
-                .unwrap_or_default()
-                .into(),
-            gateway: card
-                .gateway
-                .map(|g| g.to_string())
-                .unwrap_or_default()
-                .into(),
+            mask: convert::mask(card),
+            gateway: convert::gateway(card),
             mac: convert::mac(card),
             via_name: via.map(|(_, d)| d.name.trim()).unwrap_or_default().into(),
             via_card: via_card.map(|c| c.name.trim()).unwrap_or_default().into(),
