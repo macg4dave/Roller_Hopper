@@ -12,7 +12,7 @@ mod snap;
 pub(crate) use arrangement::Arrangement;
 pub(crate) use device::{Device, DeviceId, DeviceKind, Icon, LastSeen, MacAddr, Role, Status};
 pub(crate) use groups::{GroupColour, GroupId};
-pub(crate) use layout::{Point, Positions, route, tree_layout, trunk};
+pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};
 pub(crate) use network::{Connection, ConnectionKind, Network, StatusFilter};
 pub(crate) use services::Services;
 pub(crate) use snap::{Snap, snap_target};

@@ -43,7 +43,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_roles(&bridge, &labels, state);
 
     let highlighted = state.dragging.or(state.selected);
-    let lines = convert::lines(network, &state.links(), &trunks, on_map, highlighted);
+    let lines = convert::lines(network, &state.links(), &trunks, highlighted);
     bridge.set_strand(convert::strand(
         state.strand().as_ref(),
         state.motion.bend(),

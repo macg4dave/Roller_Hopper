@@ -6,7 +6,7 @@ use slint::SharedString;
 use super::icons::Icons;
 use crate::model::{
     Connection, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, Network, Point,
-    Positions, Role, Snap, Status, StatusFilter, route,
+    Positions, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -240,21 +240,19 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
 /// How a line is drawn: its parent's group colour, dashed or not, highlighted or not.
 type LineStyle = (Option<GroupColour>, ConnectionKind, bool);
 
-/// SVG path commands for the `links`, one set per line style, highlighted sets last.
+/// SVG path commands for the `links`, each drawn along its route, and the `trunks`, one set per
+/// line style, highlighted sets last.
 pub(super) fn lines(
     network: &Network,
-    links: &[Connection],
+    links: &[(Connection, [Point; 3])],
     trunks: &[(DeviceId, [Point; 2])],
-    positions: &Positions,
     selected: Option<DeviceId>,
 ) -> Vec<ui::LineSet> {
-    let at = |id| positions.get(&id).copied().unwrap_or_default();
     let is_selected = |id| selected == Some(id);
     // Every line hangs from a device: a link from its upstream device, a trunk from its own.
-    let link_lines = links.iter().map(|link| {
+    let link_lines = links.iter().map(|&(link, route)| {
         let highlighted = is_selected(link.upstream) || is_selected(link.downstream);
-        let points = route(at(link.upstream), at(link.downstream));
-        (link.upstream, link.kind, highlighted, points.to_vec())
+        (link.upstream, link.kind, highlighted, route.to_vec())
     });
     let trunk_lines = trunks
         .iter()
@@ -437,33 +435,46 @@ mod tests {
             .any(|s| (s.colour, s.inferred, s.selected) == (colour, inferred, selected))
     }
 
+    /// Every link of the sample network, routed as laid out.
+    fn routed(network: &Network) -> (Positions, Vec<(Connection, [Point; 3])>) {
+        let arrangement = crate::model::Arrangement::default();
+        let positions = crate::model::tree_layout(network, &arrangement);
+        let inner = arrangement.inner_neighbours(network, None);
+        let links = network.connections().iter().map(|&c| {
+            let route = crate::model::link_route(&positions, &inner, c.upstream, c.downstream);
+            (c, route.unwrap())
+        });
+        let links = links.collect();
+        (positions, links)
+    }
+
     #[test]
     fn selection_highlights_its_links_and_draws_them_last() {
         let network = crate::mock_data::network();
-        let positions = crate::model::tree_layout(&network, &crate::model::Arrangement::default());
-        let plain = lines(&network, network.connections(), &[], &positions, None);
+        let (_, links) = routed(&network);
+        let plain = lines(&network, &links, &[], None);
         assert!(plain.iter().all(|s| !s.selected));
 
         let access_point = DeviceId(3);
-        let highlighted = lines(
-            &network,
-            network.connections(),
-            &[],
-            &positions,
-            Some(access_point),
-        );
+        let highlighted = lines(&network, &links, &[], Some(access_point));
         let none = ui::GroupColour::None;
         assert!(has(&highlighted, none, false, true), "uplink to the router");
         assert!(has(&highlighted, none, true, true), "wireless clients");
         let first_highlighted = highlighted.iter().position(|s| s.selected);
         let last_plain = highlighted.iter().rposition(|s| !s.selected);
         assert!(last_plain < first_highlighted);
+
+        // A device with none behind it lights up only its own stretch of line.
+        let pc = lines(&network, &links, &[], Some(DeviceId(5)));
+        let lit = pc.iter().filter(|s| s.selected);
+        let paths: usize = lit.map(|s| s.commands.matches('M').count()).sum();
+        assert_eq!(paths, 1);
     }
 
     #[test]
     fn lines_take_the_colour_of_the_device_they_hang_from() {
         let mut network = crate::mock_data::network();
-        let positions = crate::model::tree_layout(&network, &crate::model::Arrangement::default());
+        let (positions, links) = routed(&network);
         // A colour of its own, so other groups' lines cannot be mistaken for the router's.
         let group = network.add_group("Gateway").unwrap();
         network.set_group_colour(group, Some(GroupColour::Red));
@@ -472,7 +483,7 @@ mod tests {
         let router = DeviceId(1);
         let trunks = [router, DeviceId(2)]
             .map(|id| (id, crate::model::trunk(&network, &positions, id).unwrap()));
-        let sets = lines(&network, network.connections(), &trunks, &positions, None);
+        let sets = lines(&network, &links, &trunks, None);
         let red = sets
             .iter()
             .find(|s| s.colour == ui::GroupColour::Red && !s.inferred);

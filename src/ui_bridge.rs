@@ -19,7 +19,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 use crate::mock_data;
 use crate::model::{
     Arrangement, Connection, Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role,
-    Snap, StatusFilter, snap_target, tree_layout, trunk,
+    Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -190,10 +190,18 @@ impl AppState {
 
     /// The connections to draw: all but the dragged device's uplink, which [`Self::strand`]
     /// stands in for.
-    fn links(&self) -> Vec<Connection> {
-        let mut links = self.network.connections().to_vec();
-        links.retain(|c| Some(c.downstream) != self.dragging);
+    /// Each runs along its route as shown, branching off its neighbour's line, with the dragged
+    /// device left out of the rows it was in.
+    fn links(&self) -> Vec<(Connection, [Point; 3])> {
+        let shown = self.motion.shown();
+        let inner = self
+            .arrangement
+            .inner_neighbours(&self.network, self.dragging);
+        let links = self.network.connections().iter();
         links
+            .filter(|c| Some(c.downstream) != self.dragging)
+            .filter_map(|&c| Some((c, link_route(shown, &inner, c.upstream, c.downstream)?)))
+            .collect()
     }
 
     /// While a device is dragged near a line, how it would join it.
@@ -688,7 +696,7 @@ mod tests {
         };
         state.drag_to(nas, between);
         assert!(
-            state.links().iter().all(|c| c.downstream != nas),
+            state.links().iter().all(|(c, _)| c.downstream != nas),
             "old line hidden"
         );
         assert!(state.strand().is_some());
@@ -720,7 +728,7 @@ mod tests {
                 y: -1000.0,
             },
         );
-        assert!(state.links().iter().all(|c| c.downstream != pc));
+        assert!(state.links().iter().all(|(c, _)| c.downstream != pc));
         assert_eq!(state.strand(), None);
         state.drop_dragged();
         assert!(state.network.uplink(pc).is_none());

@@ -1,9 +1,11 @@
 //! Where a dragged device would join the map: the nearest trunk, root circle or line, and the
 //! place on that trunk it was dropped at.
 
+use std::collections::HashMap;
+
 use super::arrangement::{Arrangement, Level, Side, Slot, Tier};
 use super::device::DeviceId;
-use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, route, trunk};
+use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, link_route, trunk};
 use super::network::Network;
 
 /// How near a line a dragged device's own line must end for it to join that line, above or
@@ -49,8 +51,16 @@ pub(crate) fn snap_target(
         x: at.x,
         y: at.y - LINE_TOP_GAP,
     };
+    let inner = arrangement.inner_neighbours(network, Some(dragged));
     let candidates = others.keys().copied();
-    let near = candidates.filter_map(|id| Some((id, nearest_on(network, &others, id, end)?)));
+    let near = candidates.filter_map(|id| {
+        let lines = Lines {
+            network,
+            positions: &others,
+            inner: &inner,
+        };
+        Some((id, lines.nearest_on(id, end)?))
+    });
     near.filter(|&(_, joins)| distance(end, joins) <= SNAP_DISTANCE)
         .min_by(|a, b| distance(end, a.1).total_cmp(&distance(end, b.1)))
         .map(|(upstream, joins)| {
@@ -65,22 +75,28 @@ pub(crate) fn snap_target(
         })
 }
 
-/// The point nearest `end` on what belongs to `id`: its trunk down to its root circle, and its
-/// lines to the devices behind it.
-fn nearest_on(network: &Network, positions: &Positions, id: DeviceId, end: Point) -> Option<Point> {
-    let origin = positions.get(&id).copied()?;
-    let [top, root] = trunk(network, positions, id)?;
-    let lines = network
-        .behind(id)
-        .filter_map(|other| positions.get(&other))
-        .flat_map(|&p| {
-            let [a, b, c, d] = route(origin, p);
-            [(a, b), (b, c), (c, d)]
-        });
-    let segments = lines.chain([(top, root)]);
-    segments
-        .map(|(a, b)| nearest(end, a, b))
-        .min_by(|a, b| distance(end, *a).total_cmp(&distance(end, *b)))
+/// The trunks and lines of the map without the dragged branch, as drawn.
+struct Lines<'a> {
+    network: &'a Network,
+    positions: &'a Positions,
+    inner: &'a HashMap<DeviceId, DeviceId>,
+}
+
+impl Lines<'_> {
+    /// The point nearest `end` on what belongs to `id`: its trunk down to its root circle, and
+    /// its lines to the devices behind it.
+    fn nearest_on(&self, id: DeviceId, end: Point) -> Option<Point> {
+        let [top, root] = trunk(self.network, self.positions, id)?;
+        let lines = self
+            .network
+            .behind(id)
+            .filter_map(|other| link_route(self.positions, self.inner, id, other))
+            .flat_map(|[a, b, c]| [(a, b), (b, c)]);
+        let segments = lines.chain([(top, root)]);
+        segments
+            .map(|(a, b)| nearest(end, a, b))
+            .min_by(|a, b| distance(end, *a).total_cmp(&distance(end, *b)))
+    }
 }
 
 /// Where a device dropped at `at` goes among the `tiers` hanging off a trunk at `trunk_x`: level

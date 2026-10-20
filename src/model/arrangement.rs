@@ -101,6 +101,36 @@ impl Arrangement {
         tiers
     }
 
+    /// For every device with another beside it nearer its upstream device's trunk, that other
+    /// device: its line branches off that one's. Leaves out `without`, as if it were not there.
+    pub(crate) fn inner_neighbours(
+        &self,
+        network: &Network,
+        without: Option<DeviceId>,
+    ) -> HashMap<DeviceId, DeviceId> {
+        let mut inner = HashMap::new();
+        for parent in network.devices().iter().map(|d| d.id) {
+            let tiers = match without {
+                Some(id) => self.tiers_without(network, parent, id),
+                None => self.tiers(network, parent),
+            };
+            for tier in tiers {
+                // Left of the trunk the next one inwards is to the right; right of it, the left.
+                for pair in tier.left.windows(2) {
+                    if let [outer, inward] = pair {
+                        inner.insert(*outer, *inward);
+                    }
+                }
+                for pair in tier.right.windows(2) {
+                    if let [inward, outer] = pair {
+                        inner.insert(*outer, *inward);
+                    }
+                }
+            }
+        }
+        inner
+    }
+
     /// The tiers under `parent` as they are without `id`, with any tier it leaves empty gone.
     pub(crate) fn tiers_without(
         &self,
@@ -214,6 +244,22 @@ mod tests {
             tiers.first().map(|t| t.right.clone()),
             Some(vec![ACCESS_POINT, SWITCH])
         );
+    }
+
+    #[test]
+    fn each_device_branches_off_its_neighbour_nearer_the_trunk() {
+        let network = mock_data::network();
+        let arrangement = Arrangement::default();
+        // The router: the NAS left of its trunk; the switch, then the access point, right of it.
+        let inner = arrangement.inner_neighbours(&network, None);
+        assert_eq!(inner.get(&ACCESS_POINT), Some(&SWITCH));
+        assert_eq!(inner.get(&SWITCH), None, "straight off the trunk");
+        assert_eq!(inner.get(&DeviceId(4)), None, "alone on its side");
+        // The switch's first three hang left of its trunk, so the PC, leftmost, is outermost.
+        assert_eq!(inner.get(&PC), Some(&DeviceId(6)));
+
+        let without_switch = arrangement.inner_neighbours(&network, Some(SWITCH));
+        assert_eq!(without_switch.get(&ACCESS_POINT), None);
     }
 
     #[test]

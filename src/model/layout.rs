@@ -53,27 +53,38 @@ pub(crate) fn tree_layout(network: &Network, arrangement: &Arrangement) -> Posit
     positions
 }
 
-/// An orthogonal route between two nodes: down the upstream node's trunk, across just above
-/// the downstream node, then down to it.
-pub(crate) fn route(upstream: Point, downstream: Point) -> [Point; 4] {
-    let start = Point {
-        x: upstream.x,
-        y: upstream.y + LINE_BOTTOM_GAP,
-    };
+/// The line to `downstream` from `from_x`: across just above it, then down to it. It starts at
+/// the upstream device's trunk, which runs past every tier, or at the line of the device next to
+/// it nearer the trunk (see [`Arrangement::inner_neighbours`]), so the lines on one side of a
+/// tier join into one and each device adds only its own stretch.
+fn route(from_x: f32, downstream: Point) -> [Point; 3] {
     let end = Point {
         x: downstream.x,
         y: downstream.y - LINE_TOP_GAP,
     };
     let bus_y = end.y - BUS_GAP;
     [
-        start,
         Point {
-            x: start.x,
+            x: from_x,
             y: bus_y,
         },
         Point { x: end.x, y: bus_y },
         end,
     ]
+}
+
+/// The line from `upstream` to `downstream` as shown at `positions`, branching off the line of
+/// the device `inner` gives as next to it nearer the trunk, if that one is on the map (see
+/// [`route`]). `None` while either end is off the map.
+pub(crate) fn link_route(
+    positions: &Positions,
+    inner: &HashMap<DeviceId, DeviceId>,
+    upstream: DeviceId,
+    downstream: DeviceId,
+) -> Option<[Point; 3]> {
+    let neighbour = inner.get(&downstream).and_then(|n| positions.get(n));
+    let from = neighbour.or_else(|| positions.get(&upstream))?;
+    Some(route(from.x, *positions.get(&downstream)?))
 }
 
 /// The trunk of `id`: from below its labels down to its root circle, which sits below the lowest
@@ -288,9 +299,9 @@ mod tests {
     }
 
     #[test]
-    fn route_is_orthogonal_and_joins_both_nodes() {
-        let [a, b, c, d] = route(Point { x: 0.0, y: 0.0 }, Point { x: 300.0, y: 140.0 });
-        assert_eq!((a.x, b.x, c.y, d.x), (0.0, 0.0, b.y, 300.0));
-        assert!(a.y < b.y && c.y < d.y);
+    fn a_route_runs_across_just_above_a_device_then_down() {
+        let [a, b, c] = route(0.0, Point { x: 300.0, y: 140.0 });
+        assert_eq!((a.x, a.y, b.x, c.x), (0.0, b.y, 300.0, 300.0));
+        assert!(b.y < c.y && c.y < 140.0);
     }
 }
