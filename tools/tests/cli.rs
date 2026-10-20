@@ -1,5 +1,8 @@
 //! Exercise the public CLI using isolated fixtures, never the live icon library.
 
+#[path = "cli/edits.rs"]
+mod edits;
+
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -62,7 +65,7 @@ fn tool() -> Command {
 fn gate_plan_keeps_required_order_and_scope() -> io::Result<()> {
     for scope in ["all", "tools", "app"] {
         let output = tool()
-            .args(["repo", "gate", "--scope", scope, "--dry-run"])
+            .args(["checks", "gate", "--scope", scope, "--dry-run"])
             .output()?;
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -91,16 +94,25 @@ fn gate_plan_keeps_required_order_and_scope() -> io::Result<()> {
 #[test]
 fn invalid_arguments_fail_with_help() -> io::Result<()> {
     let output = tool()
-        .args(["repo", "gate", "--scope", "invalid"])
+        .args(["checks", "gate", "--scope", "invalid"])
         .output()?;
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid"));
     for arguments in [
         vec!["--help"],
-        vec!["repo", "gate", "--help"],
+        vec!["checks", "--help"],
+        vec!["checks", "gate", "--help"],
+        vec!["text", "--help"],
+        vec!["text", "normalize-eol", "--help"],
+        vec!["text", "replace-text", "--help"],
+        vec!["icons", "--help"],
         vec!["icons", "audit", "--help"],
     ] {
-        assert!(tool().args(arguments).output()?.status.success());
+        let help = tool().args(&arguments).output()?;
+        assert!(help.status.success());
+        if arguments.len() == 3 {
+            assert!(String::from_utf8_lossy(&help.stdout).contains("Examples:"));
+        }
     }
     Ok(())
 }

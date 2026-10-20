@@ -29,13 +29,12 @@ component NodeLabel inherits HorizontalLayout {
     }
 }
 
-// A device on the topology map, or the ghost of one of its network cards: faded, and named
-// after the device and the card. Laid out at 100% and scaled with the rest of the map by the
-// canvas; the icon centre is the anchor point.
+// A network card on the topology map, drawn with its device's icon and name, and the card's
+// short name and address underneath. Laid out at 100% and scaled with the rest of the map by
+// the canvas; the icon centre is the anchor point.
 export component MapNode inherits Rectangle {
+    // The card's row (see DeviceView).
     in property <DeviceView> device;
-    property <bool> ghost: device.card-id >= 0;
-    property <string> name: ghost ? Labels.card-of(device.name, device.card-name, device.card-index) : Labels.device-name(device.name);
     // The map zoom, used only to keep the icon crisp under the canvas's scale transform.
     in property <float> zoom: 1;
     in property <bool> selected;
@@ -48,9 +47,9 @@ export component MapNode inherits Rectangle {
 
     width: Theme.map-label-width;
     height: layout.preferred-height;
-    opacity: device.dimmed ? 0.3 : ghost && !selected ? Theme.ghost-opacity : 1;
+    opacity: device.dimmed ? 0.3 : 1;
     accessible-role: button;
-    accessible-label: name;
+    accessible-label: Labels.card-of(device.name, device.card-name, device.card-index);
 
     touch := TouchArea {
         mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.pointer;
@@ -101,13 +100,15 @@ export component MapNode inherits Rectangle {
 
         // What the View menu turns on, in the order of the details panel.
         if MapSettings.show-names: NodeLabel {
-            text: name;
+            text: Labels.device-name(device.name);
             strong: true;
         }
-        // A ghost's address and MAC are its card's; the device's role and hostname stay with it.
-        if MapSettings.show-roles && !ghost: NodeLabel { text: device.role; }
-        if MapSettings.show-addresses: NodeLabel { text: device.ip; }
+        // The card, with its address when addresses are shown.
+        NodeLabel {
+            text: MapSettings.show-addresses ? Labels.card-label(device.card-name, device.card-index, device.ip) : Labels.card-short(device.card-name, device.card-index);
+        }
+        if MapSettings.show-roles: NodeLabel { text: device.role; }
         if MapSettings.show-macs && device.mac != "": NodeLabel { text: device.mac; }
-        if MapSettings.show-hostnames && !ghost && device.hostname != "": NodeLabel { text: device.hostname; }
+        if MapSettings.show-hostnames && device.hostname != "": NodeLabel { text: device.hostname; }
     }
 }

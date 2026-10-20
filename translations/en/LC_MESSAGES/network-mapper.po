@@ -154,6 +154,16 @@ msgstr "{0} · {1}"
 msgid "card.no-address"
 msgstr "No IP address"
 
+# A network card's short name on the map, for a card the user has not named; {} is its place
+# among its device's cards.
+msgid "card.short"
+msgstr "NC{}"
+
+# Under a device's name on the map: {0} is the card's short name (its name, or card.short),
+# {1} its IP address.
+msgid "card.label"
+msgstr "{0}: {1}"
+
 msgid "details.mac"
 msgstr "MAC address"
 
@@ -171,9 +181,6 @@ msgstr "Hostname"
 
 msgid "details.last-seen"
 msgstr "Last seen"
-
-msgid "details.connected-to"
-msgstr "Connected to"
 
 msgid "details.open-ports"
 msgstr "Open ports"

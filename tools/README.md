@@ -1,27 +1,34 @@
 # Development tools
 
-This standalone Rust crate does not import or modify the product. Run commands from the
-repository root:
+One standalone Rust crate, organised by the task each tool performs. Every area keeps its
+CLI, command implementations and README together. Run commands from the repository root:
 
 ```sh
 cargo tool --help
-cargo tool repo gate
-cargo tool repo gate --scope tools
-cargo tool repo gate --scope app --dry-run
-cargo tool icons audit
-cargo tool icons audit --directory path/to/icons
+cargo tool <area> --help
+cargo tool <area> <command> --help
 ```
 
-`repo gate` runs the four required checks in order (fmt check, strict clippy, tests, build),
-first for tools and then for the app. It stops at the first failure and inherits Cargo's output.
-It does not format or repair source files. `--dry-run` prints the plan; it performs no checks.
-Cargo itself may update lock files and build artefacts during a real gate.
+| Task | Folder and documentation | Commands |
+| --- | --- | --- |
+| Text editing | [text/](text/README.md) | `text normalize-eol`, `text replace-text` |
+| Development checks | [checks/](checks/README.md) | `checks gate` |
+| Runtime icon library | [icons/](icons/README.md) | `icons audit` |
 
-`icons audit` reads the library, reports SVG files below the picker's supported depth and
-case-insensitive conflicts in extension-free icon IDs, then fails if it found issues. Icons
-with the same name in different groups are valid. Non-SVG files are ignored; SVG content and
-rendering are not checked. Symbolic links are not followed. An explicit relative directory is
-relative to your current directory; the default always points to this repository's `icons/`.
+```text
+tools/
+  checks/    cli.rs, gate.rs, README.md
+  text/      cli.rs, edit.rs, normalize_eol.rs, replace_text.rs, README.md
+  icons/     cli.rs, audit.rs, README.md
+  src/       main.rs: shared CLI dispatch only
+  tests/     shared CLI integration test harness
+  Cargo.toml / Cargo.lock
+```
 
-Dependencies and build output are separate from the application. `clap` supplies argument
-parsing and help; `walkdir` supplies directory traversal. No product dependencies are added.
+Use installed utilities directly for established tasks, such as `rg` for text search. The
+custom text commands supply checked mechanical edits. Dependencies and build output remain
+separate from the product; the tools do not import product code. `clap` supplies CLI parsing
+and help; `walkdir` supplies icon traversal.
+
+The previous `repo` command group is replaced by `checks` and `text`. See each area's README
+for examples, write behaviour and limitations.

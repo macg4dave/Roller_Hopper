@@ -5,7 +5,7 @@ mod cards;
 mod children;
 mod tree;
 
-pub(crate) use tree::{Connection, Node};
+pub(crate) use tree::Connection;
 
 use super::card::CardId;
 use super::device::{Device, DeviceId, Icon, Role, Status};

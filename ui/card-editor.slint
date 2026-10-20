@@ -4,6 +4,7 @@ import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { NameEdit } from "components/name-edit.slint";
+import { PortEditor } from "port-editor.slint";
 
 // One setting of the selected card. It is kept on Enter or when the field loses focus. A
 // refused value is replaced by the card's own, with a hint saying what is expected.
@@ -37,7 +38,8 @@ component CardSetting inherits VerticalLayout {
 }
 
 // Edit page, right side, while a network card is selected: its name and IPv4 settings, what it
-// is plugged into, and removing it. A card is a child of its device, which it leads back to.
+// is plugged into, its open ports, and removing it. A card is a child of its device, which it
+// leads back to.
 export component CardEditor inherits VerticalLayout {
     alignment: start;
     spacing: Theme.space-xs;
@@ -130,15 +132,17 @@ export component CardEditor inherits VerticalLayout {
     }
     DetailField {
         label: @tr("details.plugged-into");
-        // A guest's first card reaches the network through its host, so it plugs in nowhere.
         ComboBox {
             horizontal-stretch: 1;
             model: Bridge.upstream-choices;
             current-index: Bridge.card-plug-index;
-            enabled: Bridge.card.pluggable;
             accessible-label: @tr("details.plugged-into");
             selected => { Bridge.plug-card(self.current-index); }
         }
+    }
+    DetailField {
+        label: @tr("details.open-ports");
+        PortEditor { }
     }
 
     Rectangle { height: Theme.space-m; }

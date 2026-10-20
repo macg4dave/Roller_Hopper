@@ -1,5 +1,6 @@
 //! Runtime icon-library maintenance.
 
+#[path = "audit.rs"]
 mod audit;
 
 use std::{io, path::Path};

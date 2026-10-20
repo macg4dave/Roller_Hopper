@@ -1,11 +1,13 @@
-//! A device's network cards: each is a child of its device, with its own IPv4 settings, and
-//! plugs into a card of another device on its own.
+//! A device's network cards: each is a child of its device, with its own IPv4 settings and open
+//! ports, and plugs into a card of another device on its own. Cards are what the map shows.
 
 use std::fmt;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 use ipnet::Ipv4Net;
+
+use super::services::Services;
 
 /// Stable identifier of a network card, unique across the network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -44,7 +46,7 @@ impl FromStr for MacAddr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NetworkCard {
     pub(crate) id: CardId,
     /// The user's name for it, such as "LAN"; empty shows a numbered placeholder.
@@ -55,6 +57,8 @@ pub(crate) struct NetworkCard {
     pub(crate) gateway: Option<Ipv4Addr>,
     /// Detected with the card, or typed by the user.
     pub(crate) mac: Option<MacAddr>,
+    /// The ports open at the card's address.
+    pub(crate) services: Services,
 }
 
 impl NetworkCard {
@@ -66,6 +70,7 @@ impl NetworkCard {
             address: None,
             gateway: None,
             mac: None,
+            services: Services::default(),
         }
     }
 

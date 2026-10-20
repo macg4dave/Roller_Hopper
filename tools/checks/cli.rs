@@ -1,5 +1,6 @@
-//! Repository quality checks.
+//! Development quality checks.
 
+#[path = "gate.rs"]
 mod gate;
 
 use std::{io, path::Path};

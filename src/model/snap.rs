@@ -1,11 +1,12 @@
-//! Where a dragged device or ghost would join the map: the nearest trunk, root circle or line, and the
+//! Where a dragged network card would join the map: the nearest trunk, root circle or line, and the
 //! place on that trunk it was dropped at.
 
 use std::collections::HashMap;
 
 use super::arrangement::{Arrangement, Level, Side, Slot, Tier};
+use super::card::CardId;
 use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, link_route, trunk};
-use super::network::{Network, Node};
+use super::network::Network;
 
 /// How near a line a dragged device's own line must end for it to join that line, above or
 /// below it. Rows are close together, so this stays small.
@@ -17,8 +18,8 @@ const SNAP_REACH_SIDEWAYS: f32 = 110.0;
 /// Where a dragged device would join the map if dropped now.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Snap {
-    /// The node whose trunk it would hang from.
-    pub(crate) upstream: Node,
+    /// The card whose trunk it would hang from, which it would be plugged into.
+    pub(crate) upstream: CardId,
     /// Where on that trunk.
     pub(crate) slot: Slot,
     /// A short line showing the join: from the nearest point of the trunk or line it would join
@@ -30,13 +31,13 @@ pub(crate) struct Snap {
 }
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: on the trunk, root circle
-/// or lines of the nearest node it can join (see [`can_join`]), at the place on that trunk where
-/// it was dropped. `None` when nothing is near.
+/// or lines of the nearest card it can be plugged into (see [`Network::can_plug`]), at the place
+/// on that trunk where it was dropped. `None` when nothing is near.
 pub(crate) fn snap_target(
     network: &Network,
     arrangement: &Arrangement,
     positions: &Positions,
-    dragged: Node,
+    dragged: CardId,
     at: Point,
 ) -> Option<Snap> {
     // The map without the dragged branch, whose lines and trunks move with it.
@@ -45,7 +46,7 @@ pub(crate) fn snap_target(
         .filter(|&(&id, _)| !network.is_within(id, dragged))
         .map(|(&id, &p)| (id, p))
         .collect();
-    // Where the dragged device's own line would end.
+    // Where the dragged card's own line would end.
     let end = Point {
         x: at.x,
         y: at.y - LINE_TOP_GAP,
@@ -54,7 +55,7 @@ pub(crate) fn snap_target(
     let candidates = others
         .keys()
         .copied()
-        .filter(|&id| can_join(network, dragged, id));
+        .filter(|&id| network.can_plug(dragged, id));
     let near = candidates.filter_map(|id| {
         let lines = Lines {
             network,
@@ -77,35 +78,17 @@ pub(crate) fn snap_target(
         })
 }
 
-/// Whether `dragged` may hang from `target`. A guest only ever joins its own host. A ghost may
-/// go back under its own device. Anything else joins a node it can plug into, away from every
-/// node of its own device, which would form a loop.
-fn can_join(network: &Network, dragged: Node, target: Node) -> bool {
-    let Some(owner) = network.node_device(dragged) else {
-        return false;
-    };
-    match dragged {
-        Node::Device(_) if owner.guest.is_some() => {
-            network.host(owner.id).map(Node::Device) == Some(target)
-        }
-        Node::Card(_) if target == Node::Device(owner.id) => true,
-        Node::Device(_) | Node::Card(_) => {
-            network.socket(target).is_some() && !network.within_device(target, owner.id)
-        }
-    }
-}
-
 /// The trunks and lines of the map without the dragged branch, as drawn.
 struct Lines<'a> {
     network: &'a Network,
     positions: &'a Positions,
-    inner: &'a HashMap<Node, Node>,
+    inner: &'a HashMap<CardId, CardId>,
 }
 
 impl Lines<'_> {
     /// The point nearest `end` on what belongs to `id`: its trunk down to its root circle, and
-    /// its lines to the devices behind it.
-    fn nearest_on(&self, id: Node, end: Point) -> Option<Point> {
+    /// its lines to the cards plugged into it.
+    fn nearest_on(&self, id: CardId, end: Point) -> Option<Point> {
         let [top, root] = trunk(self.network, self.positions, id)?;
         let lines = self
             .network
@@ -177,14 +160,12 @@ mod tests {
     use crate::mock_data;
     use crate::model::tree_layout;
 
-    use crate::model::{CardId, DeviceId};
-
-    /// The router's LAN card, which the home network hangs from.
-    const ROUTER: Node = Node::Card(CardId(1));
-    const SWITCH: Node = Node::Device(DeviceId(2));
-    const ACCESS_POINT: Node = Node::Device(DeviceId(3));
-    const NAS: Node = Node::Device(DeviceId(4));
-    const PC: Node = Node::Device(DeviceId(5));
+    // Each sample device's first card has its id; the router's first is its LAN card.
+    const ROUTER: CardId = CardId(1);
+    const SWITCH: CardId = CardId(2);
+    const ACCESS_POINT: CardId = CardId(3);
+    const NAS: CardId = CardId(4);
+    const PC: CardId = CardId(5);
 
     fn map() -> (Network, Arrangement, Positions) {
         let network = mock_data::network();
@@ -275,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn a_ghost_joins_where_its_card_can_plug_in_or_goes_back_under_its_device() {
+    fn a_card_joins_any_card_but_its_own_devices() {
         let (network, arrangement, positions) = map();
         let on_root = |id| {
             let [_, root] = trunk(&network, &positions, id).unwrap();
@@ -284,19 +265,14 @@ mod tests {
                 y: root.y + LINE_TOP_GAP,
             }
         };
-        let ghost = Node::Card(CardId(100));
-        let target = |id| snap_target(&network, &arrangement, &positions, ghost, on_root(id));
-        let (lab_pi, docker, portainer) = (
-            Node::Device(DeviceId(23)),
-            Node::Device(DeviceId(19)),
-            Node::Device(DeviceId(24)),
-        );
+        let lab_card = CardId(100);
+        let target = |id| snap_target(&network, &arrangement, &positions, lab_card, on_root(id));
+        let (lab_pi, docker_home) = (CardId(23), CardId(19));
         assert_eq!(target(lab_pi).map(|s| s.upstream), Some(lab_pi));
-        assert_eq!(target(docker).map(|s| s.upstream), Some(docker), "its own");
         assert_ne!(
-            target(portainer).map(|s| s.upstream),
-            Some(portainer),
-            "on its own device"
+            target(docker_home).map(|s| s.upstream),
+            Some(docker_home),
+            "its own device's other card"
         );
     }
 

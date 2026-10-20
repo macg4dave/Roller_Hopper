@@ -1,14 +1,15 @@
 //! Automatic tree layout of the topology, and the routing of its lines and trunks.
 //!
-//! Every device has a trunk: a line from below its labels down to a small root circle. The
-//! devices behind it hang off the trunk in tiers, to its left and right (see [`Arrangement`]).
-//! Positions are in map units (1 unit = 1 logical pixel at 100 % zoom) and mark the centre of a
-//! node's icon; its labels sit below.
+//! The map's nodes are network cards. Every card has a trunk: a line from below its labels down
+//! to a small root circle. The cards plugged into it hang off the trunk in tiers, to its left
+//! and right (see [`Arrangement`]). Positions are in map units (1 unit = 1 logical pixel at
+//! 100 % zoom) and mark the centre of a card's icon; its labels sit below.
 
 use std::collections::HashMap;
 
 use super::arrangement::{Arrangement, Side};
-use super::network::{Connection, Network, Node};
+use super::card::CardId;
+use super::network::{Connection, Network};
 
 const COLUMN_WIDTH: f32 = 150.0;
 pub(super) const ROW_HEIGHT: f32 = 150.0;
@@ -27,7 +28,7 @@ pub(crate) struct Point {
     pub(crate) y: f32,
 }
 
-pub(crate) type Positions = HashMap<Node, Point>;
+pub(crate) type Positions = HashMap<CardId, Point>;
 
 /// Lays the network out as top-down trees, side by side, starting from devices with no uplink.
 pub(crate) fn tree_layout(network: &Network, arrangement: &Arrangement) -> Positions {
@@ -77,9 +78,9 @@ fn route(from_x: f32, downstream: Point) -> [Point; 3] {
 /// [`route`]). `None` while either end is off the map.
 pub(crate) fn link_route(
     positions: &Positions,
-    inner: &HashMap<Node, Node>,
-    upstream: Node,
-    downstream: Node,
+    inner: &HashMap<CardId, CardId>,
+    upstream: CardId,
+    downstream: CardId,
 ) -> Option<[Point; 3]> {
     let neighbour = inner.get(&downstream).and_then(|n| positions.get(n));
     let from = neighbour.or_else(|| positions.get(&upstream))?;
@@ -88,7 +89,7 @@ pub(crate) fn link_route(
 
 /// The trunk of `id`: from below its labels down to its root circle, which sits below the lowest
 /// node in its branch, so the trunk runs past every tier hanging off it.
-pub(crate) fn trunk(network: &Network, positions: &Positions, id: Node) -> Option<[Point; 2]> {
+pub(crate) fn trunk(network: &Network, positions: &Positions, id: CardId) -> Option<[Point; 2]> {
     let top = positions.get(&id)?;
     let start = Point {
         x: top.x,
@@ -102,7 +103,7 @@ pub(crate) fn trunk(network: &Network, positions: &Positions, id: Node) -> Optio
 }
 
 /// How far down the branch of `id` reaches: the lowest of its nodes.
-fn lowest(network: &Network, positions: &Positions, id: Node) -> f32 {
+fn lowest(network: &Network, positions: &Positions, id: CardId) -> f32 {
     // Worked out once here rather than at every node of the branch: this runs every frame.
     let lines = network.connections();
     reach(&lines, positions, id, network.nodes().len())
@@ -110,7 +111,7 @@ fn lowest(network: &Network, positions: &Positions, id: Node) -> f32 {
 
 /// [`lowest`] along the tree's `lines`, going no more than `depth` nodes deeper, which guards
 /// against cycles in the connection data: no real tree is deeper than its size.
-fn reach(lines: &[Connection], positions: &Positions, id: Node, depth: usize) -> f32 {
+fn reach(lines: &[Connection], positions: &Positions, id: CardId, depth: usize) -> f32 {
     let Some(top) = positions.get(&id) else {
         return f32::MIN;
     };
@@ -137,7 +138,7 @@ struct Tree<'a> {
 }
 
 impl Tree<'_> {
-    fn shape(&self, id: Node, depth: usize) -> Shape {
+    fn shape(&self, id: CardId, depth: usize) -> Shape {
         let mut shape = Shape {
             left: 0.5,
             right: 0.5,
@@ -157,7 +158,7 @@ impl Tree<'_> {
     }
 
     /// The width of devices side by side, and the rows the deepest of them takes.
-    fn side_shape(&self, ids: &[Node], depth: usize) -> (f32, usize) {
+    fn side_shape(&self, ids: &[CardId], depth: usize) -> (f32, usize) {
         let shapes = ids.iter().map(|&id| self.shape(id, depth));
         shapes.fold((0.0, 0), |(width, rows), s| {
             (width + s.left + s.right, rows.max(s.rows))
@@ -165,7 +166,7 @@ impl Tree<'_> {
     }
 
     /// Places `id` at `spot`, and its tiers below, each below the deepest branch of the one above.
-    fn place(&self, id: Node, spot: Spot, out: &mut Positions) {
+    fn place(&self, id: CardId, spot: Spot, out: &mut Positions) {
         let at = Point {
             x: spot.trunk * COLUMN_WIDTH,
             y: units(spot.row) * ROW_HEIGHT,
@@ -188,8 +189,8 @@ impl Tree<'_> {
 
     /// Places one side of a tier, side by side going out from the trunk at `tier`, and returns
     /// the rows the deepest of them takes.
-    fn place_side(&self, side: Side, ids: &[Node], tier: Spot, out: &mut Positions) -> usize {
-        let (outward, direction): (Vec<Node>, f32) = match side {
+    fn place_side(&self, side: Side, ids: &[CardId], tier: Spot, out: &mut Positions) -> usize {
+        let (outward, direction): (Vec<CardId>, f32) = match side {
             Side::Left => (ids.iter().rev().copied().collect(), -1.0),
             Side::Right => (ids.to_vec(), 1.0),
         };
@@ -229,12 +230,10 @@ mod tests {
     use crate::mock_data;
     use crate::model::arrangement::{Level, Slot};
 
-    use crate::model::{CardId, DeviceId};
-
-    /// The router's LAN card, which the home network hangs from.
-    const ROUTER: Node = Node::Card(CardId(1));
-    const SWITCH: Node = Node::Device(DeviceId(2));
-    const PC: Node = Node::Device(DeviceId(5));
+    // Each sample device's first card has its id; the router's first is its LAN card.
+    const ROUTER: CardId = CardId(1);
+    const SWITCH: CardId = CardId(2);
+    const PC: CardId = CardId(5);
 
     fn layout(network: &Network) -> Positions {
         tree_layout(network, &Arrangement::default())

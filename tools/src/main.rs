@@ -1,7 +1,11 @@
 //! Development commands, isolated from the application and its dependencies.
 
+#[path = "../checks/cli.rs"]
+mod checks;
+#[path = "../icons/cli.rs"]
 mod icons;
-mod repo;
+#[path = "../text/cli.rs"]
+mod text;
 
 use std::io;
 use std::path::Path;
@@ -17,10 +21,15 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Area {
-    /// Run the repository's required development checks.
-    Repo {
+    /// Run development quality checks.
+    Checks {
         #[command(subcommand)]
-        command: repo::Command,
+        command: checks::Command,
+    },
+    /// Inspect and edit text files with explicit write control.
+    Text {
+        #[command(subcommand)]
+        command: text::Command,
     },
     /// Inspect the runtime icon library without changing it.
     Icons {
@@ -34,7 +43,8 @@ fn main() -> io::Result<()> {
         .parent()
         .ok_or_else(|| io::Error::other("tooling crate has no repository parent"))?;
     match Cli::parse().area {
-        Area::Repo { command } => repo::run(command, root),
+        Area::Checks { command } => checks::run(command, root),
+        Area::Text { command } => text::run(command, root),
         Area::Icons { command } => icons::run(command, root),
     }
 }

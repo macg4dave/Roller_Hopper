@@ -1,14 +1,19 @@
 //! Connection lines as SVG path commands, drawn in the colour and line style of the group of the
-//! device each line hangs from (or whose ghost it hangs from).
+//! device whose card each line hangs from.
 
 use super::convert;
-use crate::model::{Connection, ConnectionKind, GroupColour, LineStyle, Network, Node, Point};
+use crate::model::{
+    CardId, Connection, ConnectionKind, Device, GroupColour, LineStyle, Network, Point, Positions,
+};
 use crate::ui;
 
 /// How far apart the zigzag and wavy styles swing to each side, and how far off the route,
 /// in map units.
 const BEND_LENGTH: f32 = 5.0;
 const BEND_DEPTH: f32 = 2.5;
+/// How far a tie stays clear of the icon centres at its ends, just outside the circle drawn
+/// round a selected icon, in map units.
+const ICON_CLEARANCE: f32 = 28.0;
 /// The short line each style is previewed on in the style dropdown; its box in the UI is
 /// 48 × 12 map units.
 const SAMPLE: [Point; 2] = [Point { x: 0.0, y: 6.0 }, Point { x: 48.0, y: 6.0 }];
@@ -17,43 +22,43 @@ const SAMPLE: [Point; 2] = [Point { x: 0.0, y: 6.0 }, Point { x: 48.0, y: 6.0 }]
 /// inferred, highlighted or not.
 type Look = (Option<GroupColour>, LineStyle, ConnectionKind, bool);
 
-/// SVG path commands for the `links`, each drawn along its route, and the `trunks`, one set
-/// per look, highlighted sets last. With a device `selected`, the lines of its ghosts light up
-/// with its own.
+/// SVG path commands for the `links`, each drawn along its route, the `trunks`, and the dotted
+/// `ties` between the cards of a selected device, one set per look, highlighted sets last.
+/// Lines to and from the `lit` cards are highlighted, and so are the ties.
 pub(super) fn lines(
     network: &Network,
     links: &[(Connection, [Point; 3])],
-    trunks: &[(Node, [Point; 2])],
-    selected: Option<Node>,
+    trunks: &[(CardId, [Point; 2])],
+    lit: &[CardId],
+    ties: &[[Point; 2]],
 ) -> Vec<ui::LineSet> {
-    let is_selected = |node: Node| match selected {
-        Some(Node::Device(id)) => network.node_device(node).is_some_and(|d| d.id == id),
-        Some(card) => card == node,
-        None => false,
-    };
-    // Every line hangs from a node: a link from its upstream node, a trunk from its own.
+    let is_lit = |card: CardId| lit.contains(&card);
+    // Every line hangs from a card: a link from its upstream card, a trunk from its own.
     let link_lines = links.iter().map(|(link, route)| {
-        let highlighted = is_selected(link.upstream) || is_selected(link.downstream);
+        let highlighted = is_lit(link.upstream) || is_lit(link.downstream);
         (link.upstream, link.kind, highlighted, route.to_vec())
     });
     let trunk_lines = trunks
         .iter()
-        .map(|&(id, trunk)| (id, ConnectionKind::Known, is_selected(id), trunk.to_vec()));
+        .map(|&(id, trunk)| (id, ConnectionKind::Known, is_lit(id), trunk.to_vec()));
     let mut sets: Vec<(Look, Vec<String>)> = Vec::new();
+    let mut add = |look: Look, path: String| match sets.iter_mut().find(|(l, _)| *l == look) {
+        Some((_, paths)) => paths.push(path),
+        None => sets.push((look, vec![path])),
+    };
     for (parent, kind, highlighted, points) in link_lines.chain(trunk_lines) {
-        let parent = network.node_device(parent);
+        let parent = network.card_owner(parent);
         // A line takes the group colour of the device it hangs from, unless it is highlighted;
         // it keeps that group's style either way.
         let colour = parent
             .filter(|_| !highlighted)
             .and_then(|d| network.colour(d));
         let style = parent.map(|d| network.line_style(d)).unwrap_or_default();
-        let path = path(style, &points);
-        let look = (colour, style, kind, highlighted);
-        match sets.iter_mut().find(|(l, _)| *l == look) {
-            Some((_, paths)) => paths.push(path),
-            None => sets.push((look, vec![path])),
-        }
+        add((colour, style, kind, highlighted), path(style, &points));
+    }
+    for tie in ties {
+        let look = (None, LineStyle::Dotted, ConnectionKind::Known, true);
+        add(look, path(LineStyle::Dotted, tie));
     }
     sets.sort_by_key(|((_, _, _, highlighted), _)| *highlighted);
     let sets = sets
@@ -66,6 +71,36 @@ pub(super) fn lines(
             thick: style == LineStyle::Thick,
         });
     sets.collect()
+}
+
+/// The ties between the cards of `device` as `shown`, each to the next, so they read as one
+/// device while it is selected. Each stays clear of the icons at its ends.
+pub(super) fn ties(device: &Device, shown: &Positions) -> Vec<[Point; 2]> {
+    let spots: Vec<Point> = device
+        .cards
+        .iter()
+        .filter_map(|c| shown.get(&c.id).copied())
+        .collect();
+    let pairs = spots.windows(2).filter_map(|pair| match pair {
+        [a, b] => clear_of_icons(*a, *b),
+        _ => None,
+    });
+    pairs.collect()
+}
+
+/// The straight line from `a` to `b`, less its ends under the icons there; `None` when the icons
+/// are so close that nothing is left.
+fn clear_of_icons(a: Point, b: Point) -> Option<[Point; 2]> {
+    let length = (b.x - a.x).hypot(b.y - a.y);
+    if length <= 2.0 * ICON_CLEARANCE {
+        return None;
+    }
+    let along = |t: f32| Point {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+    };
+    let clearance = ICON_CLEARANCE / length;
+    Some([along(clearance), along(1.0 - clearance)])
 }
 
 /// A preview of every line style, in the order the style dropdown lists them.
@@ -174,7 +209,7 @@ fn bent(points: &[Point], sharp: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{DeviceId, Positions, Role};
+    use crate::model::{Positions, Role};
 
     const LINE: [Point; 2] = [Point { x: 0.0, y: 0.0 }, Point { x: 20.0, y: 0.0 }];
 
@@ -245,14 +280,13 @@ mod tests {
     }
 
     #[test]
-    fn selection_highlights_its_links_and_draws_them_last() {
+    fn lit_cards_highlight_their_links_and_draw_them_last() {
         let network = crate::mock_data::network();
         let (_, links) = routed(&network);
-        let plain = lines(&network, &links, &[], None);
+        let plain = lines(&network, &links, &[], &[], &[]);
         assert!(plain.iter().all(|s| !s.selected));
 
-        let access_point = Node::Device(DeviceId(3));
-        let highlighted = lines(&network, &links, &[], Some(access_point));
+        let highlighted = lines(&network, &links, &[], &[CardId(3)], &[]);
         let none = ui::GroupColour::None;
         assert!(has(&highlighted, none, false, true), "uplink to the router");
         assert!(has(&highlighted, none, true, true), "wireless clients");
@@ -260,25 +294,28 @@ mod tests {
         let last_plain = highlighted.iter().rposition(|s| !s.selected);
         assert!(last_plain < first_highlighted);
 
-        // A device with none behind it lights up only its own stretch of line.
-        let pc = lines(&network, &links, &[], Some(Node::Device(DeviceId(5))));
+        // A card with none behind it lights up only its own stretch of line.
+        let pc = lines(&network, &links, &[], &[CardId(5)], &[]);
         assert_eq!(lit_paths(&pc), 1);
     }
 
     #[test]
-    fn a_selected_device_lights_up_the_lines_of_its_ghosts_and_a_ghost_only_its_own() {
+    fn a_selected_devices_cards_are_tied_together_clear_of_their_icons() {
         let network = crate::mock_data::network();
-        let (_, links) = routed(&network);
-        let router = lines(&network, &links, &[], Some(Node::Device(DeviceId(1))));
-        // To its LAN and WAN ghosts, and from the LAN ghost to the NAS, switch and access point.
-        assert_eq!(lit_paths(&router), 5);
-        let wan = lines(
-            &network,
-            &links,
-            &[],
-            Some(Node::Card(crate::model::CardId(101))),
+        let (positions, links) = routed(&network);
+        let router = network.device(crate::model::DeviceId(1)).unwrap();
+        let ties = ties(router, &positions);
+        assert_eq!(ties.len(), 1, "LAN to WAN");
+        let [start, _] = ties[0];
+        let lan = positions[&CardId(1)];
+        assert!((start.x - lan.x).hypot(start.y - lan.y) >= ICON_CLEARANCE - 0.01);
+        let with_ties = lines(&network, &links, &[], &[CardId(1), CardId(101)], &ties);
+        let without = lines(&network, &links, &[], &[CardId(1), CardId(101)], &[]);
+        assert!(lit_paths(&with_ties) > lit_paths(&without));
+        assert_eq!(
+            clear_of_icons(Point::default(), Point { x: 50.0, y: 0.0 }),
+            None
         );
-        assert_eq!(lit_paths(&wan), 1);
     }
 
     /// How many lines are highlighted.
@@ -297,10 +334,9 @@ mod tests {
         network.set_group_line_style(group, LineStyle::Thick);
         network.set_role_group(&Role::Router, Some(group));
 
-        let trunks = [DeviceId(1), DeviceId(2)]
-            .map(Node::Device)
+        let trunks = [CardId(1), CardId(2)]
             .map(|id| (id, crate::model::trunk(&network, &positions, id).unwrap()));
-        let sets = lines(&network, &links, &trunks, None);
+        let sets = lines(&network, &links, &trunks, &[], &[]);
         let red: Vec<_> = sets
             .iter()
             .filter(|s| s.colour == ui::GroupColour::Red)
@@ -310,7 +346,7 @@ mod tests {
         // Every router's links, as the role is in the group, but only the trunk passed in.
         let is_router = |id| {
             network
-                .node_device(id)
+                .card_owner(id)
                 .is_some_and(|d| d.role == Role::Router)
         };
         let router_links = network

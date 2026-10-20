@@ -20,7 +20,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, CardId, Connection, Device, DeviceId, GroupId, Icon, Level, Network, Node, Point,
+    Arrangement, CardId, Connection, Device, DeviceId, GroupId, Icon, Level, Network, Point,
     Positions, Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
@@ -33,19 +33,26 @@ const SCAN_DURATION: Duration = Duration::from_millis(1500);
 /// One frame of the map's motion, at about 60 frames a second.
 const FRAME: Duration = Duration::from_millis(16);
 
+/// What is selected: a device, picked in the lists, or one of its network cards, picked in
+/// the lists or on the map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Selection {
+    Device(DeviceId),
+    Card(CardId),
+}
+
 /// Everything the window shows, owned by `main` and shared with the callbacks.
 pub(crate) struct AppState {
     network: Network,
-    /// Where the layout puts each node, and the dragged one at the pointer.
+    /// Where the layout puts each card, and the dragged one at the pointer.
     positions: Positions,
-    /// Where each node is shown, on its way to its spot in `positions`.
+    /// Where each card is shown, on its way to its spot in `positions`.
     motion: Motion,
-    /// How the user arranged nodes down each trunk, until the layout is reset.
+    /// How the user arranged cards down each trunk, until the layout is reset.
     arrangement: Arrangement,
-    /// The device or ghost being dragged on the map, until it is dropped.
-    dragging: Option<Node>,
-    /// A device, or one of its network cards, whether drawn as a ghost or not.
-    selected: Option<Node>,
+    /// The card being dragged on the map, until it is dropped.
+    dragging: Option<CardId>,
+    selected: Option<Selection>,
     filter: StatusFilter,
     query: String,
     scanning: bool,
@@ -75,24 +82,47 @@ impl AppState {
 
     /// The selected device, or the device of the selected card.
     fn selected_device(&self) -> Option<DeviceId> {
-        let selected = self
-            .selected
-            .and_then(|node| self.network.node_device(node));
-        selected.map(|d| d.id)
+        match self.selected? {
+            Selection::Device(id) => Some(id),
+            Selection::Card(card) => self.network.card_owner(card).map(|d| d.id),
+        }
     }
 
     fn selected_card(&self) -> Option<CardId> {
         match self.selected? {
-            Node::Card(card) => Some(card),
-            Node::Device(_) => None,
+            Selection::Card(card) => Some(card),
+            Selection::Device(_) => None,
         }
     }
 
-    /// The node the selection is drawn as on the map: a card without a ghost shows as its device.
-    fn selected_node(&self) -> Option<Node> {
-        match self.selected? {
-            Node::Card(card) => self.network.node_of_card(card),
-            device @ Node::Device(_) => Some(device),
+    /// The cards lit up on the map: the selected card, or every card of the selected device.
+    fn selected_cards(&self) -> Vec<CardId> {
+        match self.selected {
+            Some(Selection::Card(card)) => vec![card],
+            Some(Selection::Device(id)) => {
+                let cards = self
+                    .network
+                    .device(id)
+                    .map(|d| d.cards.iter().map(|c| c.id));
+                cards.into_iter().flatten().collect()
+            }
+            None => Vec::new(),
+        }
+    }
+
+    /// While a device is selected, the dotted ties between its cards as shown on the map.
+    fn ties(&self) -> Vec<[Point; 2]> {
+        let Some(Selection::Device(id)) = self.selected else {
+            return Vec::new();
+        };
+        let device = self.network.device(id);
+        device.map_or_else(Vec::new, |d| lines::ties(d, self.motion.shown()))
+    }
+
+    /// Edits the selected card.
+    fn edit_selected_card(&mut self, edit: impl FnOnce(&mut crate::model::NetworkCard)) {
+        if let Some(card) = self.selected_card().and_then(|c| self.network.card_mut(c)) {
+            edit(card);
         }
     }
 
@@ -167,19 +197,19 @@ impl AppState {
         }
     }
 
-    /// Lists a port on the selected device. False if there is none, or the port number is
-    /// refused or already listed, so the UI can keep what was typed.
+    /// Lists a port on the selected card. False if there is none, or the port number is refused
+    /// or already listed, so the UI can keep what was typed.
     fn add_port(&mut self, port: &str, description: &str) -> bool {
         let Some(port) = convert::port(port) else {
             return false;
         };
         let mut added = false;
-        self.edit_selected(|d| added = d.services.add(port, description));
+        self.edit_selected_card(|c| added = c.services.add(port, description));
         added
     }
 
     /// Forgets the selected device (or the device of the selected card), with what runs on it,
-    /// until restart. Ghosts may come or go with the links it took, so the map is laid out again.
+    /// until restart, and lays the map out again without their cards.
     fn forget_selected(&mut self) {
         if let Some(id) = self.selected_device() {
             self.selected = None;
@@ -188,16 +218,16 @@ impl AppState {
         }
     }
 
-    /// Drags node `id` so its icon is centred on `at`.
-    fn drag_to(&mut self, id: Node, at: Point) {
+    /// Drags card `id` so its icon is centred on `at`.
+    fn drag_to(&mut self, id: CardId, at: Point) {
         self.positions.insert(id, at);
         self.motion.place(id, at);
         self.dragging = Some(id);
     }
 
-    /// Where the dragged device `id` would go if dropped now, judged by the map as shown: on the
+    /// Where the dragged card `id` would go if dropped now, judged by the map as shown: on the
     /// trunk it is near, where it is on that trunk; `None` to stand alone.
-    fn snap(&self, id: Node) -> Option<Snap> {
+    fn snap(&self, id: CardId) -> Option<Snap> {
         let shown = self.motion.shown();
         let at = shown.get(&id).copied()?;
         snap_target(&self.network, &self.arrangement, shown, id, at)
@@ -206,7 +236,7 @@ impl AppState {
     /// The trunk of every node as shown. A dragged branch's trunks are hidden until it is
     /// dropped, and the other trunks do not stretch after it.
     /// In node order, so the lines sent to the UI only change when the map does.
-    fn trunks(&self) -> Vec<(Node, [Point; 2])> {
+    fn trunks(&self) -> Vec<(CardId, [Point; 2])> {
         let shown = self.motion.shown();
         let dragged = |id| self.dragging.is_some_and(|d| self.network.is_within(id, d));
         let still: Positions = shown
@@ -219,7 +249,7 @@ impl AppState {
             .collect()
     }
 
-    /// The connections to draw: all but the dragged device's uplink, which [`Self::strand`]
+    /// The connections to draw: all but the dragged card's uplink, which [`Self::strand`]
     /// stands in for.
     /// Each runs along its route as shown, branching off its neighbour's line, with the dragged
     /// device left out of the rows it was in.
@@ -308,13 +338,13 @@ impl AppState {
             return targets;
         };
         // The row's devices on each side of the pointer, nearest first.
-        let mut beside: Vec<(Node, f32)> = row
+        let mut beside: Vec<(CardId, f32)> = row
             .devices()
             .filter_map(|id| Some((id, self.positions.get(&id)?.x - pointer.x)))
             .collect();
         beside.sort_by(|a, b| a.1.abs().total_cmp(&b.1.abs()));
         let (left, right): (Vec<_>, Vec<_>) = beside.into_iter().partition(|&(_, dx)| dx < 0.0);
-        let away = |side: Vec<(Node, f32)>, sign: f32| {
+        let away = |side: Vec<(CardId, f32)>, sign: f32| {
             let parted = side.into_iter().zip(motion::PARTING);
             parted.map(move |((id, _), shift)| (id, sign * shift))
         };
@@ -340,10 +370,10 @@ impl AppState {
 pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     bridge.on_select(handler(ui, state, |st, id| {
-        st.selected = convert::device_id(id).map(Node::Device);
+        st.selected = convert::device_id(id).map(Selection::Device);
     }));
     bridge.on_select_card(handler(ui, state, |st, id| {
-        st.selected = convert::card_id(id).map(Node::Card);
+        st.selected = convert::card_id(id).map(Selection::Card);
     }));
     bridge.on_search(handler(ui, state, |st, text: SharedString| {
         st.query = text.into();
@@ -389,7 +419,8 @@ fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         reset(());
         reset_settle();
     });
-    // Nodes are identified by their index in Bridge.nodes, which follows Network::nodes.
+    // Cards on the map are identified by their index in Bridge.nodes, which follows
+    // Network::nodes.
     let move_node = handler(ui, state, |st, (index, x, y)| {
         if let Some(&node) = st.network.nodes().get(convert::index(index)) {
             st.drag_to(node, Point { x, y });
@@ -444,7 +475,7 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_forget(move || forget(()));
 }
 
-/// Adding, renumbering, describing and removing the selected device's open ports.
+/// Adding, renumbering, describing and removing the selected card's open ports.
 fn connect_port_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let (add_ui, add_state) = (ui.as_weak(), Rc::clone(state));
@@ -457,16 +488,16 @@ fn connect_port_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     });
     let renumber = handler(ui, state, |st, (index, port): (i32, SharedString)| {
         if let Some(port) = convert::port(&port) {
-            st.edit_selected(|d| d.services.set_port(convert::index(index), port));
+            st.edit_selected_card(|c| c.services.set_port(convert::index(index), port));
         }
     });
     bridge.on_set_port_number(move |index, port| renumber((index, port)));
     let describe = handler(ui, state, |st, (index, text): (i32, SharedString)| {
-        st.edit_selected(|d| d.services.set_description(convert::index(index), &text));
+        st.edit_selected_card(|c| c.services.set_description(convert::index(index), &text));
     });
     bridge.on_set_port_description(move |index, text| describe((index, text)));
     bridge.on_remove_port(handler(ui, state, |st, index| {
-        st.edit_selected(|d| d.services.remove(convert::index(index)));
+        st.edit_selected_card(|c| c.services.remove(convert::index(index)));
     }));
 }
 
@@ -587,11 +618,11 @@ mod tests {
     use super::*;
 
     /// The router's LAN card, which the home network hangs from.
-    const ROUTER_LAN: Node = Node::Card(CardId(1));
+    const ROUTER_LAN: CardId = CardId(1);
 
     fn state_with(selected: u32) -> AppState {
         let mut state = AppState::new(mock_data::network());
-        state.selected = Some(Node::Device(DeviceId(selected)));
+        state.selected = Some(Selection::Device(DeviceId(selected)));
         state
     }
 
@@ -751,29 +782,33 @@ mod tests {
     fn a_port_is_added_to_the_selection_only_with_a_valid_number() {
         let mut state = AppState::new(mock_data::network());
         assert!(!state.add_port("8080", "Web"), "nothing selected");
-        state.selected = Some(Node::Device(DeviceId(10)));
+        state.selected = Some(Selection::Device(DeviceId(10)));
+        assert!(
+            !state.add_port("8080", "Web"),
+            "a device has no ports of its own"
+        );
+        state.selected = Some(Selection::Card(CardId(10)));
         assert!(!state.add_port("70000", "Web"));
         assert!(state.add_port(" 8080 ", "Web"));
         assert!(!state.add_port("8080", "Again"), "already listed");
-        let device = state
+        let card = state
             .network
-            .device(DeviceId(10))
-            .map(|d| d.services.to_string());
-        assert_eq!(device.as_deref(), Some("8001 (SmartView), 8080 (Web)"));
+            .card(CardId(10))
+            .map(|c| c.services.to_string());
+        assert_eq!(card.as_deref(), Some("8001 (SmartView), 8080 (Web)"));
     }
 
     #[test]
-    fn a_guest_dragged_away_stays_on_its_host() {
+    fn a_guests_card_dragged_away_is_unplugged_like_any_other() {
         let mut state = AppState::new(mock_data::network());
-        let (linux_server, docker_host) = (Node::Device(DeviceId(6)), Node::Device(DeviceId(19)));
+        let docker_host = CardId(19);
         let far = Point {
             x: -1000.0,
             y: -1000.0,
         };
         state.drag_to(docker_host, far);
         state.drop_dragged();
-        let host = state.network.uplink(docker_host).map(|c| c.upstream);
-        assert_eq!(host, Some(linux_server));
+        assert!(state.network.uplink(docker_host).is_none());
         assert_eq!(
             state.positions,
             tree_layout(&state.network, &state.arrangement)
@@ -785,28 +820,17 @@ mod tests {
         let mut state = state_with(19);
         state.forget_selected();
         assert_eq!(state.selected, None);
-        for gone in [DeviceId(19), DeviceId(24), DeviceId(25)] {
-            assert!(state.network.device(gone).is_none(), "{gone:?}");
-            assert!(
-                !state.positions.contains_key(&Node::Device(gone)),
-                "{gone:?}"
-            );
+        for gone in [19, 24, 25] {
+            assert!(state.network.device(DeviceId(gone)).is_none(), "{gone}");
+            assert!(!state.positions.contains_key(&CardId(gone)), "{gone}");
         }
-        assert!(
-            !state.positions.contains_key(&Node::Card(CardId(100))),
-            "its lab ghost"
-        );
+        assert!(!state.positions.contains_key(&CardId(100)), "its lab card");
     }
 
     #[test]
     fn a_row_makes_room_for_a_device_dragged_over_it_and_closes_after() {
         let mut state = AppState::new(mock_data::network());
-        let (switch, access_point, nas, pc) = (
-            Node::Device(DeviceId(2)),
-            Node::Device(DeviceId(3)),
-            Node::Device(DeviceId(4)),
-            Node::Device(DeviceId(5)),
-        );
+        let (switch, access_point, nas, pc) = (CardId(2), CardId(3), CardId(4), CardId(5));
         let laid_out = state.positions.clone();
         let between = Point {
             x: f32::midpoint(laid_out[&switch].x, laid_out[&access_point].x),
@@ -845,12 +869,7 @@ mod tests {
     fn a_dropped_device_joins_the_line_it_was_previewing_on() {
         let mut state = AppState::new(mock_data::network());
         // The NAS hangs left of the router's LAN trunk; the switch and access point to its right.
-        let (router, switch, access_point, nas) = (
-            ROUTER_LAN,
-            Node::Device(DeviceId(2)),
-            Node::Device(DeviceId(3)),
-            Node::Device(DeviceId(4)),
-        );
+        let (router, switch, access_point, nas) = (ROUTER_LAN, CardId(2), CardId(3), CardId(4));
         state.drop_dragged();
         assert_eq!(
             state.positions,
@@ -892,7 +911,7 @@ mod tests {
     #[test]
     fn a_device_dropped_far_from_every_line_stands_alone() {
         let mut state = AppState::new(mock_data::network());
-        let pc = Node::Device(DeviceId(5));
+        let pc = CardId(5);
         state.drag_to(
             pc,
             Point {
@@ -909,11 +928,7 @@ mod tests {
     #[test]
     fn a_device_dropped_on_a_trunk_below_a_row_hangs_below_it_until_reset() {
         let mut state = AppState::new(mock_data::network());
-        let (router, switch, nas) = (
-            ROUTER_LAN,
-            Node::Device(DeviceId(2)),
-            Node::Device(DeviceId(4)),
-        );
+        let (router, switch, nas) = (ROUTER_LAN, CardId(2), CardId(4));
         let lowest_of_switch_row = |shown: &AppState| {
             let behind = shown.network.behind(switch).filter(|&d| d != nas);
             behind
@@ -943,31 +958,32 @@ mod tests {
     }
 
     #[test]
-    fn a_selected_card_edits_its_device_and_shows_as_its_ghost_or_its_device() {
+    fn a_selected_card_lights_up_alone_and_a_selected_device_ties_its_cards() {
         let mut state = AppState::new(mock_data::network());
-        state.selected = Some(Node::Card(CardId(101)));
+        state.selected = Some(Selection::Card(CardId(101)));
         assert_eq!(state.selected_device(), Some(DeviceId(1)));
-        assert_eq!(state.selected_node(), Some(Node::Card(CardId(101))));
+        assert_eq!(state.selected_cards(), [CardId(101)]);
+        assert!(state.ties().is_empty());
         state.edit_selected(|d| d.name = "Gateway".into());
         assert_eq!(
             state.network.device(DeviceId(1)).map(|d| d.name.as_str()),
-            Some("Gateway")
+            Some("Gateway"),
+            "edits go to its device"
         );
-        state.selected = Some(Node::Card(CardId(5)));
-        assert_eq!(
-            state.selected_node(),
-            Some(Node::Device(DeviceId(5))),
-            "the PC's only card has no ghost"
-        );
+        state.selected = Some(Selection::Device(DeviceId(1)));
+        assert_eq!(state.selected_cards(), [CardId(1), CardId(101)]);
+        assert_eq!(state.ties().len(), 1, "LAN to WAN");
+        state.selected = Some(Selection::Device(DeviceId(5)));
+        assert!(state.ties().is_empty(), "the PC has one card");
     }
 
     #[test]
-    fn a_ghost_dropped_on_another_trunk_plugs_its_card_in_there() {
+    fn a_card_dropped_on_another_trunk_is_plugged_in_there() {
         let mut state = AppState::new(mock_data::network());
-        let (ghost, lab_pi) = (Node::Card(CardId(100)), Node::Device(DeviceId(23)));
+        let (lab_card, lab_pi) = (CardId(100), CardId(23));
         let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
         state.drag_to(
-            ghost,
+            lab_card,
             Point {
                 y: root.y + 20.0,
                 ..root
@@ -975,10 +991,10 @@ mod tests {
         );
         state.drop_dragged();
         assert_eq!(
-            state.network.uplink(ghost).map(|c| c.upstream),
+            state.network.uplink(lab_card).map(|c| c.upstream),
             Some(lab_pi)
         );
-        assert!(state.positions[&ghost].y > state.positions[&lab_pi].y);
+        assert!(state.positions[&lab_card].y > state.positions[&lab_pi].y);
     }
 
     #[test]

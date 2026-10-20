@@ -35,7 +35,8 @@ impl Network {
         cards.find(|c| c.id == card)
     }
 
-    /// Adds a blank network card to `device`, plugged in nowhere, and returns it.
+    /// Adds a blank network card to `device`, plugged in nowhere (so it heads a tree of its own
+    /// on the map), and returns it.
     pub(crate) fn add_card(&mut self, device: DeviceId) -> Option<CardId> {
         let id = self.next_card_id();
         self.device_mut(device)?.cards.push(NetworkCard::blank(id));
@@ -56,8 +57,7 @@ impl Network {
     }
 
     /// Plugs `card` into the card `upstream`, or into none, as a link that is kept when the
-    /// layout is reset. Refused (false) where it would form a loop, and for a guest's first
-    /// card, which reaches the network through its host.
+    /// layout is reset. Refused (false) into a card of its own device or one behind it.
     pub(crate) fn plug_card(&mut self, card: CardId, upstream: Option<CardId>) -> bool {
         self.plug(card, upstream, true)
     }
@@ -84,30 +84,31 @@ impl Network {
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::network::Node;
 
-    const SWITCH: DeviceId = DeviceId(2);
     const PC: DeviceId = DeviceId(5);
-    const DOCKER_HOST: DeviceId = DeviceId(19);
-    const LAB_ROUTER: DeviceId = DeviceId(22);
+    // Each sample device's first card has the device's id.
+    const PC_CARD: CardId = CardId(5);
+    const SWITCH_CARD: CardId = CardId(2);
+    const LAB_ROUTER_CARD: CardId = CardId(22);
+    const DOCKER_HOME: CardId = CardId(19);
+    const DOCKER_LAB: CardId = CardId(100);
 
     fn net(text: &str) -> Ipv4Net {
         text.parse().unwrap()
     }
 
     #[test]
-    fn a_new_card_is_blank_and_hangs_under_its_device_as_a_ghost() {
+    fn a_new_card_is_blank_and_plugged_in_nowhere() {
         let mut network = mock_data::network();
         assert_eq!(network.add_card(DeviceId(999)), None);
         let card = network.add_card(PC).unwrap();
         assert_eq!(network.card(card), Some(&NetworkCard::blank(card)));
-        assert!(network.has_ghost(card));
-        let uplink = network.uplink(Node::Card(card));
-        assert_eq!(uplink.map(|c| c.upstream), Some(Node::Device(PC)));
+        assert!(network.nodes().contains(&card));
+        assert!(network.uplink(card).is_none());
         assert_eq!(
-            network.uplink(Node::Device(PC)).map(|c| c.upstream),
-            Some(Node::Device(SWITCH)),
-            "the PC stays where it was"
+            network.uplink(PC_CARD).map(|c| c.upstream),
+            Some(SWITCH_CARD),
+            "the PC's first card stays where it was"
         );
     }
 
@@ -131,43 +132,35 @@ mod tests {
     }
 
     #[test]
-    fn a_card_plugged_into_another_device_hangs_there_and_is_kept_on_reset() {
+    fn a_card_plugged_in_hangs_there_and_is_kept_on_reset() {
         let mut network = mock_data::network();
         let card = network.add_card(PC).unwrap();
-        let lab_router = network.socket(Node::Device(LAB_ROUTER));
-        assert!(network.plug_card(card, lab_router));
-        let uplink = network.uplink(Node::Card(card));
-        assert_eq!(uplink.map(|c| c.upstream), Some(Node::Device(LAB_ROUTER)));
+        assert!(network.plug_card(card, Some(LAB_ROUTER_CARD)));
+        let uplink = network.uplink(card);
+        assert_eq!(uplink.map(|c| c.upstream), Some(LAB_ROUTER_CARD));
         network.restore_connections();
-        assert_eq!(network.uplink(Node::Card(card)), uplink, "kept on reset");
+        assert_eq!(network.uplink(card), uplink, "kept on reset");
 
-        let own = network.socket(Node::Device(PC));
-        assert!(!network.plug_card(card, own), "into its own device");
-        let switch = network.socket(Node::Device(SWITCH));
-        let pc_card = network.device(PC).unwrap().cards[0].id;
-        let switch_card = network.device(SWITCH).unwrap().cards[0].id;
-        assert!(!network.plug_card(switch_card, Some(pc_card)), "loop");
-        assert!(network.plug_card(card, switch));
-        let docker_home = network.device(DOCKER_HOST).unwrap().cards[0].id;
+        assert!(!network.plug_card(card, Some(PC_CARD)), "its own device");
+        assert!(!network.plug_card(SWITCH_CARD, Some(PC_CARD)), "loop");
         assert!(
-            !network.plug_card(docker_home, switch),
-            "a guest's first card"
+            network.plug_card(DOCKER_HOME, Some(SWITCH_CARD)),
+            "a guest's too"
         );
+        assert!(network.plug_card(card, None));
+        assert!(network.uplink(card).is_none());
     }
 
     #[test]
     fn a_card_is_removed_with_the_links_into_it_but_never_the_last() {
         let mut network = mock_data::network();
-        let docker = network.device(DOCKER_HOST).unwrap().clone();
-        let [home, lab] = [0, 1].map(|at| docker.cards[at].id);
-        let pc = network.device(PC).unwrap().cards[0].id;
-        assert!(network.plug_card(pc, Some(lab)));
+        assert!(network.plug_card(PC_CARD, Some(DOCKER_LAB)));
         assert!(!network.remove_card(CardId(999)));
-        assert!(!network.remove_card(pc), "last");
-        assert!(network.remove_card(lab));
-        assert!(network.uplink(Node::Device(PC)).is_none(), "unplugged");
+        assert!(!network.remove_card(PC_CARD), "last");
+        assert!(network.remove_card(DOCKER_LAB));
+        assert!(network.uplink(PC_CARD).is_none(), "unplugged");
         network.restore_connections();
-        assert!(network.uplink(Node::Device(PC)).is_none(), "gone for good");
-        assert!(!network.remove_card(home), "now the last");
+        assert!(network.uplink(PC_CARD).is_none(), "gone for good");
+        assert!(!network.remove_card(DOCKER_HOME), "now the last");
     }
 }

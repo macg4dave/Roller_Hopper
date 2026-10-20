@@ -8,7 +8,6 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { Splitter } from "components/splitter.slint";
 import { CardEditor } from "card-editor.slint";
 import { GuestEditor } from "guest-editor.slint";
-import { PortEditor } from "port-editor.slint";
 
 // Edit page, left side: every device with its network cards nested under it on the left; the
 // selected device's editable fields on the right, or the selected card's.
@@ -121,10 +120,6 @@ export component DeviceEditor inherits HorizontalLayout {
                 DetailField {
                     label: @tr("edit.guests");
                     GuestEditor { }
-                }
-                DetailField {
-                    label: @tr("details.open-ports");
-                    PortEditor { }
                 }
                 DetailField {
                     label: @tr("details.notes");

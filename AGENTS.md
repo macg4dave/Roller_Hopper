@@ -21,7 +21,7 @@ Each guide is short. Read the ones your task touches **before** editing; when un
 | [docs/agents/product.md](docs/agents/product.md) | Any feature or UI work — product brief, scope limits, definition of done |
 | [docs/agents/rust.md](docs/agents/rust.md) | Writing or reviewing Rust code, build scripts or dependencies |
 | [docs/agents/slint.md](docs/agents/slint.md) | UI, UI text or translation work, or code that connects the model to the UI |
-| [docs/agents/tooling.md](docs/agents/tooling.md) | Before any shell command other than `cargo`/`git`/`rustfmt`, wanting a script, or working on agent tooling |
+| [docs/agents/tooling.md](docs/agents/tooling.md) | Always — choose existing tooling before automation; no disposable task scripts |
 
 ## Architecture
 

@@ -42,10 +42,9 @@ export component TopologyCanvas inherits Rectangle {
         auto-fit = true;
     }
 
-    // Whether a node is drawn selected: a ghost when its card is selected; a device when it is,
-    // or when one of its cards without a ghost is.
+    // Whether a card is drawn selected: when it is, or when its device is.
     pure function is-selected(node: DeviceView) -> bool {
-        return node.card-id >= 0 ? node.card-id == Bridge.selected-card : node.id == Bridge.selected-id && !Bridge.selected-ghost;
+        return Bridge.selected-card >= 0 ? node.card-id == Bridge.selected-card : node.id == Bridge.selected-id;
     }
 
     // Glides the map so the point (x, y), in map units, sits in the centre of the view.
@@ -128,7 +127,7 @@ export component TopologyCanvas inherits Rectangle {
             stroke-width: (set.thick ? Theme.line-width-thick : Theme.line-width) / zoom;
         }
 
-        // Root circles at the foot of each trunk, drawn like the node's lines.
+        // Root circles at the foot of each trunk, drawn like the card's lines.
         for device[i] in Bridge.nodes: Rectangle {
             visible: Bridge.places[i].has-root;
             x: (Bridge.places[i].x - Bridge.bounds.x) * 1px - self.width / 2;
@@ -167,13 +166,7 @@ export component TopologyCanvas inherits Rectangle {
             selected: root.is-selected(device);
             x: (Bridge.places[i].x - Bridge.bounds.x) * 1px - self.width / 2;
             y: (Bridge.places[i].y - Bridge.bounds.y) * 1px - (self.icon-size + 14px) / 2;
-            clicked => {
-                if device.card-id >= 0 {
-                    Bridge.select-card(device.card-id);
-                } else {
-                    Bridge.select(device.id);
-                }
-            }
+            clicked => { Bridge.select-card(device.card-id); }
             // The pointer offset arrives already in map units, as the node sits inside the scale.
             dragged(dx, dy) => {
                 Bridge.move-node(i, Bridge.places[i].x + dx / 1px, Bridge.places[i].y + dy / 1px);

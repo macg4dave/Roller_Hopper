@@ -1,7 +1,7 @@
-//! Network cards in the UI. A card is a child of its device: a row under it in the lists and,
-//! drawn as a ghost, a node on the map. This module builds their views and handles editing
-//! the selected card (its IPv4 settings, where it is plugged in, removing it), adding cards,
-//! and adding virtual machines and containers to the selected device.
+//! Network cards in the UI. A card is a child of its device: a row under it in the lists, and a
+//! node on the map drawn with the device's icon and name. This module builds their views and
+//! handles editing the selected card (its IPv4 settings, where it is plugged in, removing it),
+//! adding cards, and adding virtual machines and containers to the selected device.
 
 use std::cell::RefCell;
 use std::net::Ipv4Addr;
@@ -10,10 +10,8 @@ use std::rc::Rc;
 use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString};
 
-use super::{AppState, convert, handler, update};
-use crate::model::{
-    CardId, ConnectionKind, Device, GuestKind, MacAddr, Network, NetworkCard, Node,
-};
+use super::{AppState, Selection, convert, handler, update};
+use crate::model::{CardId, ConnectionKind, Device, GuestKind, MacAddr, Network, NetworkCard};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// The card's address without its prefix, as shown; empty when it has none.
@@ -34,7 +32,7 @@ fn index_of(device: &Device, card: CardId) -> i32 {
     at.and_then(|at| i32::try_from(at).ok()).unwrap_or_default()
 }
 
-/// The row or ghost of `card`, made from `device_row`, the row of its device.
+/// The row or map node of `card`, made from `device_row`, the row of its device.
 pub(super) fn card_row(
     device_row: &ui::DeviceView,
     device: &Device,
@@ -75,8 +73,6 @@ pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView
         let via = link.and_then(|l| Some((l.upstream, network.card_owner(l.upstream)?)));
         let via_card = via.and_then(|(id, d)| d.cards.iter().find(|c| c.id == id));
         let several = via.is_some_and(|(_, d)| d.cards.len() > 1);
-        let guests_first =
-            device.guest.is_some() && device.primary_card().map(|c| c.id) == Some(card.id);
         ui::CardView {
             id: convert::ui_card_id(card.id),
             index: index_of(device, card.id),
@@ -100,7 +96,7 @@ pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView
                 Some(_) | None => -1,
             },
             inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
-            pluggable: !guests_first,
+            services: card.services.to_string().into(),
         }
     });
     views.collect()
@@ -128,21 +124,16 @@ fn optional<T: std::str::FromStr>(text: &str) -> Result<Option<T>, T::Err> {
 
 impl AppState {
     /// The cards the selected card can be plugged into, in dropdown order after "none": the
-    /// cards of the other devices, in device order. Cards of its own device, and those behind
-    /// any part of it, are left out, as they would form a loop.
+    /// cards of the other devices, in device order, apart from those behind it, which would
+    /// form a loop.
     pub(super) fn upstream_choices(&self) -> Vec<CardId> {
-        let owner = self
-            .selected_card()
-            .and_then(|c| self.network.card_owner(c));
-        let Some(owner) = owner.map(|d| d.id) else {
+        let Some(selected) = self.selected_card() else {
             return Vec::new();
         };
-        let cards = self.network.devices().iter().flat_map(|d| &d.cards);
-        let free = |&card: &CardId| {
-            let node = self.network.node_of_card(card);
-            node.is_some_and(|n| !self.network.within_device(n, owner))
-        };
-        cards.map(|c| c.id).filter(free).collect()
+        let cards = self.network.nodes().into_iter();
+        cards
+            .filter(|&card| self.network.can_plug(selected, card))
+            .collect()
     }
 
     /// Where the selected card is plugged in, as its index in the dropdown: 0 for none.
@@ -162,7 +153,7 @@ impl AppState {
             return;
         };
         if let Some(card) = self.network.add_card(device) {
-            self.selected = Some(Node::Card(card));
+            self.selected = Some(Selection::Card(card));
             self.lay_out_at_rest();
         }
     }
@@ -173,7 +164,7 @@ impl AppState {
             return;
         };
         if self.network.remove_card(card) {
-            self.selected = Some(Node::Device(device));
+            self.selected = Some(Selection::Device(device));
             self.lay_out_at_rest();
         }
     }
@@ -298,21 +289,21 @@ mod tests {
     /// A state with a blank card just added to the PC, and selected.
     fn with_new_card() -> (AppState, CardId) {
         let mut state = AppState::new(mock_data::network());
-        state.selected = Some(Node::Device(PC));
+        state.selected = Some(Selection::Device(PC));
         state.add_card();
         let card = state.selected_card().unwrap();
         (state, card)
     }
 
     #[test]
-    fn adding_a_card_selects_it_under_its_device_and_on_the_map() {
+    fn adding_a_card_selects_it_and_puts_it_on_the_map() {
         let (state, card) = with_new_card();
         assert_eq!(state.selected_device(), Some(PC));
         assert_eq!(state.network.card(card), Some(&NetworkCard::blank(card)));
-        let ghost = state.positions[&Node::Card(card)];
+        assert!(state.positions.contains_key(&card), "on the map");
         assert!(
-            ghost.y > state.positions[&Node::Device(PC)].y,
-            "below the PC"
+            state.network.uplink(card).is_none(),
+            "plugged in nowhere yet"
         );
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
     }
@@ -393,8 +384,8 @@ mod tests {
         let at = choices.iter().position(|&c| c == lab).unwrap();
         state.plug_card(at + 1);
         assert_eq!(state.plug_choice(), at + 1);
-        let uplink = state.network.uplink(Node::Card(card)).map(|c| c.upstream);
-        assert_eq!(uplink, Some(Node::Device(LAB_ROUTER)));
+        let uplink = state.network.uplink(card).map(|c| c.upstream);
+        assert_eq!(uplink, Some(CardId(LAB_ROUTER.0)));
         state.plug_card(999);
         assert_eq!(state.plug_choice(), at + 1, "out of range");
         state.plug_card(0);
@@ -405,10 +396,10 @@ mod tests {
     fn removing_a_card_selects_its_device_but_the_last_stays() {
         let (mut state, card) = with_new_card();
         state.remove_card();
-        assert_eq!(state.selected, Some(Node::Device(PC)));
+        assert_eq!(state.selected, Some(Selection::Device(PC)));
         assert!(state.network.card(card).is_none());
         let only = state.network.device(PC).unwrap().cards[0].id;
-        state.selected = Some(Node::Card(only));
+        state.selected = Some(Selection::Card(only));
         state.remove_card();
         assert!(state.network.card(only).is_some(), "the last stays");
     }
@@ -421,7 +412,7 @@ mod tests {
             !state.add_guest(kind, "Web", "172.17.0.9/16"),
             "nothing selected"
         );
-        state.selected = Some(Node::Device(DOCKER_HOST));
+        state.selected = Some(Selection::Device(DOCKER_HOST));
         assert!(!state.add_guest(kind, "Web", "172.17.0"));
         assert!(!state.add_guest(kind, "  ", "172.17.0.9/16"));
         assert!(state.add_guest(kind, "Web", "172.17.0.9/16"));
@@ -434,7 +425,8 @@ mod tests {
             .unwrap()
             .id;
         assert_eq!(state.network.host(web), Some(DOCKER_HOST));
-        let (web, host) = (Node::Device(web), Node::Device(DOCKER_HOST));
+        let web = state.network.device(web).unwrap().cards[0].id;
+        let host = CardId(DOCKER_HOST.0);
         assert!(state.positions[&web].y > state.positions[&host].y);
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
     }

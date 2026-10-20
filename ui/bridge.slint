@@ -33,8 +33,8 @@ export enum GroupColour { none, red, orange, yellow, green, blue, purple }
 // What a device runs as on its host; `none` for a physical device.
 export enum GuestKind { none, virtual-machine, container }
 
-/// One device as drawn on the map and in the lists, or one of its network cards: a row under
-/// the device in the lists, and its ghost on the map. `x`/`y` are map units (icon centre).
+/// One device in the lists, or one of its network cards: a row under the device in the lists,
+/// and a node on the map. `x`/`y` are map units (icon centre).
 export struct DeviceView {
     // The device's id, also for one of its cards.
     id: int,
@@ -56,8 +56,8 @@ export struct DeviceView {
     // The colour of the role's group.
     colour: GroupColour,
     status: DeviceStatus,
-    // Its settled spot in the layout, which the list centres the map on; for a card without a
-    // ghost, its device's. Where it is drawn while it moves is in Bridge.places.
+    // Its settled spot on the map, which the list centres the map on; for a device, that of its
+    // first card. Where it is drawn while it moves is in Bridge.places.
     x: float,
     y: float,
     // Hidden by the current search or filter: faded on the map.
@@ -93,8 +93,8 @@ export struct CardView {
     via-card: string,
     via-index: int,
     inferred: bool,
-    // False for a guest's first card, which reaches the network through its host.
-    pluggable: bool,
+    // Its open ports, as shown (empty when none).
+    services: string,
 }
 
 /// A setting of the selected network card, typed on the edit page.
@@ -121,14 +121,9 @@ export struct DeviceDetails {
     model: string,
     hostname: string,
     last-seen-minutes: int,
-    // Name of the device this one connects through; empty for the router and for a guest,
-    // which connects through its host.
-    uplink-name: string,
-    uplink-inferred: bool,
-    services: string,
 }
 
-/// An open port of the selected device, in port order, for the edit page.
+/// An open port of the selected network card, in port order, for the edit page.
 export struct PortView {
     port: int,
     description: string,
@@ -156,7 +151,8 @@ export struct GroupView {
 }
 
 /// Connection lines drawn alike, as SVG path commands in map units. A line takes the colour and
-/// line style of the device it hangs from; the selected device's lines are highlighted instead.
+/// line style of the device whose card it hangs from; the selected card's lines (all of the
+/// selected device's cards' lines, and the ties between them) are highlighted instead.
 /// The style is already in the commands, apart from its width.
 export struct LineSet {
     commands: string,
@@ -186,7 +182,8 @@ export struct MapBounds {
 }
 
 export global Bridge {
-    // The map's nodes: the devices, each followed by the ghosts of its further network cards.
+    // The map's nodes: every network card, drawn with its device's icon and name. Devices are
+    // not on the map themselves.
     in property <[DeviceView]> nodes;
     in property <[NodePlace]> places;
     // The devices the search and filter let through, each followed by its network cards.
@@ -201,10 +198,8 @@ export global Bridge {
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[CardView]> cards;
-    // The selected network card, -1 for none; whether it is drawn as a ghost (else the map shows
-    // it as its device); and its view.
+    // The selected network card, -1 for none, and its view.
     in property <int> selected-card: -1;
-    in property <bool> selected-ghost;
     in property <CardView> card;
     // What the selected card can be plugged into: first none, then the cards of the devices
     // away from its own, in device order; and where it is plugged in now.
@@ -251,7 +246,7 @@ export global Bridge {
     callback reset-icon();
     // Removes the selected device until the app restarts.
     callback forget();
-    // The selected device's ports, identified by their index in ports. Port numbers come as
+    // The selected card's ports, identified by their index in ports. Port numbers come as
     // typed; one that is not 1–65535, or is already listed, is refused (add-port returns false).
     callback add-port(string, string) -> bool;
     callback set-port-number(int, string);
@@ -289,9 +284,8 @@ export global Bridge {
     callback set-group-line-style(int, int);
     // The group's roles are left in no group.
     callback delete-group(int);
-    // Dragging a node (by its index in nodes) previews the line it would join; dropping it joins
-    // that line, or leaves it standing alone away from every line (a ghost goes back under its
-    // device). Ignored when nothing was dragged.
+    // Dragging a card (by its index in nodes) previews the line it would join; dropping it plugs
+    // it in there, or unplugs it away from every line. Ignored when nothing was dragged.
     callback move-node(int, float, float);
     callback drop-node();
     // Brings back the connections as found, and the tidy layout.

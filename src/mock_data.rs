@@ -4,8 +4,6 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-#[cfg(test)]
-use crate::model::Node;
 use crate::model::{
     CardId, CardLink, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Guest, GuestKind,
     Icon, LastSeen, LineStyle, MacAddr, Network, NetworkCard, Role, Services, Status,
@@ -69,6 +67,7 @@ impl Spec {
             icon: None,
             status: self.status,
             cards: card(self.id, self.subnet, self.host, self.prefix, self.mac)
+                .map(|card| NetworkCard { services, ..card })
                 .into_iter()
                 .collect(),
             guest: self.guest.map(|(host, kind)| Guest {
@@ -81,7 +80,6 @@ impl Spec {
             last_seen: LastSeen {
                 minutes_ago: self.minutes_ago,
             },
-            services,
             notes: self.notes.to_owned(),
         }
     }
@@ -532,6 +530,14 @@ fn links() -> Vec<CardLink> {
         (3, 13, Inferred),
         (22, 23, Known),
         (22, DOCKER_LAB_CARD, Known),
+        // Each guest's card is plugged into its host's.
+        (6, 17, Known),
+        (6, 18, Known),
+        (6, 19, Known),
+        (6, 20, Known),
+        (6, 21, Known),
+        (19, 24, Known),
+        (19, 25, Known),
     ]
     .into_iter()
     .map(|(up, card, kind)| CardLink {
@@ -674,10 +680,10 @@ mod tests {
     #[test]
     fn a_further_card_joins_its_device_to_another_subnet() {
         let network = network();
-        let ghost = Node::Card(CardId(DOCKER_LAB_CARD));
-        let link = network.uplink(ghost).unwrap();
-        let docker = network.node_device(ghost).unwrap();
-        let upstream = network.node_device(link.upstream).unwrap();
+        let lab_card = CardId(DOCKER_LAB_CARD);
+        let link = network.uplink(lab_card).unwrap();
+        let docker = network.card_owner(lab_card).unwrap();
+        let upstream = network.card_owner(link.upstream).unwrap();
         let [home, lab] = [0, 1].map(|at| docker.cards[at].address.unwrap());
         assert_ne!(home.network(), lab.network());
         let lab_router = upstream.primary_card().unwrap().address.unwrap();
@@ -715,12 +721,12 @@ mod tests {
         assert_eq!(
             downstream.len(),
             network.connections().len(),
-            "one uplink per device"
+            "one uplink per card"
         );
         assert_eq!(
             network.nodes().len() - downstream.len(),
-            2,
-            "the home network and the lab network"
+            3,
+            "the home network, the router's internet side and the lab network"
         );
     }
 
@@ -762,6 +768,8 @@ mod tests {
                     kind,
                 });
                 assert_eq!(guest.guest, on, "{}", guest.name);
+                let plugged = network.uplink(guest.cards[0].id).map(|c| c.upstream);
+                assert_eq!(plugged, Some(CardId(host)), "{}: into its host", guest.name);
             }
         }
     }

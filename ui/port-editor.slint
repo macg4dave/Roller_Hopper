@@ -3,14 +3,14 @@ import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { NameEdit } from "components/name-edit.slint";
 
-// The selected device's open ports on the edit page: change a number or description in place,
-// remove a port, or add as many as needed.
+// The selected network card's open ports on the edit page: change a number or description in
+// place, remove a port, or add as many as needed.
 export component PortEditor inherits VerticalLayout {
     property <bool> adding;
     property <length> number-width: 88px;
-    // Half-typed ports belong to the device they were typed for.
-    property <int> selected-id: Bridge.selected-id;
-    changed selected-id => { adding = false; }
+    // Half-typed ports belong to the card they were typed for.
+    property <int> selected-card: Bridge.selected-card;
+    changed selected-card => { adding = false; }
 
     spacing: Theme.space-xs;
     horizontal-stretch: 1;

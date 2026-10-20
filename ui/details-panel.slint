@@ -6,8 +6,9 @@ import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
 import { StatusDot } from "components/status-dot.slint";
 
-// Right panel: everything known about the selected device, or about the selected network card
-// under its device's name. Editing happens on the edit page.
+// Right panel: everything known about the selected device, with its network cards, or about
+// the selected card (its addresses and open ports) under its device's name. Editing happens on
+// the edit page.
 export component DetailsPanel inherits Rectangle {
     // Open the edit page on the selected device.
     callback edit();
@@ -102,6 +103,7 @@ export component DetailsPanel inherits Rectangle {
                     label: @tr("details.plugged-into");
                     value: Labels.plugged-into(Bridge.card.via-name, Bridge.card.via-card, Bridge.card.via-index, Bridge.card.inferred);
                 }
+                if Bridge.card.services != "": DetailField { label: @tr("details.open-ports"); value: Bridge.card.services; }
                 HorizontalLayout {
                     alignment: start;
                     padding-top: Theme.space-s;
@@ -130,11 +132,6 @@ export component DetailsPanel inherits Rectangle {
                 if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }
                 if Bridge.details.hostname != "": DetailField { label: @tr("details.hostname"); value: Bridge.details.hostname; }
                 DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
-                if Bridge.details.uplink-name != "": DetailField {
-                    label: @tr("details.connected-to");
-                    value: Labels.uplink(Bridge.details.uplink-name, Bridge.details.uplink-inferred);
-                }
-                if Bridge.details.services != "": DetailField { label: @tr("details.open-ports"); value: Bridge.details.services; }
                 if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
             }
         }

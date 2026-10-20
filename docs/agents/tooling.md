@@ -1,7 +1,7 @@
 # Agent tooling
 
-Read before running any shell command other than `cargo`, `git` or `rustfmt`, and before working
-on agent tooling. Part of the agent rules indexed in [AGENTS.md](../../AGENTS.md).
+Read for every task, before choosing commands or writing automation. Part of the agent rules
+indexed in [AGENTS.md](../../AGENTS.md).
 
 Use established tools to get the work done. Commands such as `jq`, `rg` and `grep` can run
 directly. Build useful repository tooling when a task needs it, and use that tooling to complete
@@ -16,10 +16,13 @@ the task. A missing command is a problem to solve, not a reason to stop or skip 
   when needed; do not assume a Unix command has the same meaning in PowerShell.
 - Ordinary pipes and short, readable shell commands are encouraged. Use an existing tool for
   the job it already does well: `jq` for JSON, `rg` or `grep` for search, and so on.
-- MUST NOT write or run one-off Python scripts for repository work. This includes inline
-  programs (`python -c`, heredocs), temporary scripts and scripts deleted after use. Python
-  and Node may launch established tools, but MUST NOT contain ad hoc task logic. Do not move
-  that logic into a Node program or a Bash/PowerShell script to bypass this rule.
+- MUST NOT write or run disposable task scripts, in any language. This includes Python/Node
+  inline programs (`python -c`, `node -e`), heredocs, temporary script files, shell functions,
+  custom Bash/PowerShell processing loops and throwaway Rust programs. Calling a script
+  "small", "one-time", "just a helper" or deleting it afterwards is not an exception.
+- Run established commands directly. Do not wrap them in a Python/Node program that adds
+  file processing, parsing, replacements or other task logic. An interpreter may run an
+  existing maintained tool's entry point; it is not permission to author a new script.
 - MUST use existing repository tooling when it covers the task. If it falls short, improve
   the closest existing command; if no suitable command exists, implement the smallest tested
   Rust command in `tools/` and use it in the same task, even if the immediate need is one-off.
@@ -35,6 +38,32 @@ rg "Role::Custom" src
 git diff --stat
 cargo metadata --no-deps --format-version 1 | jq '.packages[].name'
 ```
+
+## Required tool selection
+
+Before any automated search, inspection, bulk edit or repeated workflow:
+
+1. MUST read [the tool index](../../tools/README.md), run `cargo tool --help`, then read the
+   relevant area's README and `cargo tool <area> <command> --help` before choosing a command.
+2. MUST use the repository command when it covers the task. For ordinary search, use `rg`
+   directly. For CRLF conversion, use `cargo tool text normalize-eol`; for exact multiline
+   replacements, use `cargo tool text replace-text`. Preview edits before using `--apply`.
+   A list of replacements across several files is not an exception: invoke the text command
+   for each block, or extend it with tested batch support first. MUST NOT write a helper such
+   as `edit(path, replacements)` that reads files, loops over `.replace()` calls and writes
+   them back. This remains prohibited even when the helper asserts that the old text exists.
+3. If a capability is missing, MUST inspect and improve the closest existing tool, or add
+   the smallest tested Rust command to the appropriate task folder. Complete and use it in
+   this task, not after doing the work through a disposable script.
+4. MUST NOT claim tooling is missing without checking its README, CLI help and relevant source.
+   A missing option, inconvenient interface, shell-quoting difficulty or lack of familiarity
+   is a reason to improve or learn the tool, not permission to bypass it.
+
+Built-in file editors and patch tools remain available for ordinary source edits, tool
+implementation and writing the old/new text input files. Those input files contain data,
+not executable helper code. Direct established commands and short pipelines remain allowed;
+do not turn them into custom task programs. In the task report, name the command used or
+improved and any genuine blocker, rather than saying only that tooling was considered.
 
 ## Build useful tooling when needed
 
@@ -94,8 +123,9 @@ its own creation.
   dependencies separate from the app's. Keep its lock file in version control when committing.
 - Copy the app's lint tables unchanged into a new tooling manifest. Preserve existing tooling
   and protected configuration. Ignore `tools/target/` build output.
-- The entry point uses a clap enum to dispatch to areas. Each area has one clear concern and
-  one module; each command has its own module. Add only the area and command needed now.
+- `src/main.rs` only dispatches to task areas. Each area has its own `tools/<area>/` folder
+  containing its CLI module, command modules and README. Every area and command MUST support
+  `--help`; command help MUST include usage examples. Keep the tool index in step.
 - Extend an existing area before adding another. Areas might cover repository checks,
   inspection, mechanical edits or installation. Reuse functions across commands rather than
   copying their logic.

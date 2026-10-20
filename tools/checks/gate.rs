@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, clap::Args)]
+#[command(
+    after_help = "Examples:\n  cargo tool checks gate\n  cargo tool checks gate --scope tools\n  cargo tool checks gate --scope app --dry-run\n\nRuns fmt check, strict clippy, tests and build in that order.\nThe default checks tools first, then the app, stopping at the first failure."
+)]
 pub(crate) struct Args {
     /// Select which crate to check (all checks tools first, then the app).
     #[arg(long, value_enum, default_value_t = Scope::All)]

@@ -8,8 +8,8 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    CardId, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle,
-    Network, Node, Point, Role, Snap, Status, StatusFilter,
+    CardId, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle, Network,
+    NetworkCard, Point, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -150,7 +150,7 @@ pub(super) fn colour_from_ui(colour: ui::GroupColour) -> Option<GroupColour> {
 }
 
 /// A device whose settled spot is `at`; the caller dims it when the search or filter hides it,
-/// and makes a card's row or ghost from it.
+/// and makes each card's row and map node from it.
 pub(super) fn device_view(
     network: &Network,
     icons: &Icons,
@@ -225,20 +225,8 @@ pub(super) fn details(
     role: SharedString,
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
-    let name_of = |node| network.node_device(node).map(|d| d.name.trim());
-    // A guest connects through its host, which is shown as where it runs instead.
-    let uplink = network
-        .uplink(Node::Device(device.id))
-        .filter(|_| device.guest.is_none());
-    let uplink = uplink.and_then(|link| {
-        Some((
-            name_of(link.upstream)?,
-            link.kind == ConnectionKind::Inferred,
-        ))
-    });
-    let host = device
-        .guest
-        .and_then(|guest| name_of(Node::Device(guest.host)));
+    let host = device.guest.and_then(|guest| network.device(guest.host));
+    let host = host.map(|d| d.name.trim());
     ui::DeviceDetails {
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
@@ -254,15 +242,12 @@ pub(super) fn details(
         model: text(device.model),
         hostname: text(device.hostname),
         last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
-        uplink_name: uplink.map(|(name, _)| name).unwrap_or_default().into(),
-        uplink_inferred: uplink.is_some_and(|(_, inferred)| inferred),
-        services: device.services.to_string().into(),
     }
 }
 
-/// The device's open ports, as rows to edit.
-pub(super) fn port_views(device: &Device) -> Vec<ui::PortView> {
-    let views = device.services.iter().map(|s| ui::PortView {
+/// The card's open ports, as rows to edit.
+pub(super) fn port_views(card: &NetworkCard) -> Vec<ui::PortView> {
+    let views = card.services.iter().map(|s| ui::PortView {
         port: i32::from(s.port),
         description: s.description.as_str().into(),
     });
@@ -384,7 +369,7 @@ mod tests {
         let network = crate::mock_data::network();
         let arrangement = crate::model::Arrangement::default();
         let positions = crate::model::tree_layout(&network, &arrangement);
-        let (pc, nas) = (Node::Device(DeviceId(5)), Node::Device(DeviceId(4)));
+        let (pc, nas) = (CardId(5), CardId(4));
         let any =
             crate::model::snap_target(&network, &arrangement, &positions, pc, positions[&nas]);
         let snap = Snap {

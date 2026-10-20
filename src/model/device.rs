@@ -4,7 +4,6 @@
 //! translated; only language-neutral formats (such as the MAC address) are produced here.
 
 use super::card::NetworkCard;
-use super::services::Services;
 
 /// Stable identifier of a device; not an index into any list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -171,8 +170,8 @@ pub(crate) struct Device {
     /// An icon picked for this device alone; `None` follows the role.
     pub(crate) icon: Option<Icon>,
     pub(crate) status: Status,
-    /// Its children on the map and in the lists. Every device has at least one; the first is
-    /// the one its address is shown from.
+    /// Its children in the lists, and what stands for it on the map. Every device has at least
+    /// one; the first is the one its address is shown from.
     pub(crate) cards: Vec<NetworkCard>,
     /// The host it runs on, for a virtual machine or container; `None` for a physical device.
     pub(crate) guest: Option<Guest>,
@@ -180,7 +179,6 @@ pub(crate) struct Device {
     pub(crate) model: Option<&'static str>,
     pub(crate) hostname: Option<&'static str>,
     pub(crate) last_seen: LastSeen,
-    pub(crate) services: Services,
     pub(crate) notes: String,
 }
 
@@ -228,7 +226,6 @@ mod tests {
             model: None,
             hostname: None,
             last_seen: LastSeen::default(),
-            services: Services::default(),
             notes: String::new(),
         }
     }

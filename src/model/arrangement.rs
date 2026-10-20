@@ -1,10 +1,11 @@
-//! How the devices behind each device are arranged down its trunk: in tiers, one below the
-//! other, each split to the left and right of the trunk. This is layout only: who connects to
-//! whom is in [`Network`], and a device's place here never changes its uplink.
+//! How the cards plugged into each card are arranged down its trunk: in tiers, one below the
+//! other, each split to the left and right of the trunk. This is layout only: what is plugged
+//! into what is in [`Network`], and a card's place here never changes its uplink.
 
 use std::collections::HashMap;
 
-use super::network::{Network, Node};
+use super::card::CardId;
+use super::network::Network;
 
 /// Which side of a trunk a device hangs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,30 +17,30 @@ pub(crate) enum Side {
 /// One level of devices hanging off a trunk, each side listed left to right.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Tier {
-    pub(crate) left: Vec<Node>,
-    pub(crate) right: Vec<Node>,
+    pub(crate) left: Vec<CardId>,
+    pub(crate) right: Vec<CardId>,
 }
 
 impl Tier {
-    pub(crate) fn side(&self, side: Side) -> &[Node] {
+    pub(crate) fn side(&self, side: Side) -> &[CardId] {
         match side {
             Side::Left => &self.left,
             Side::Right => &self.right,
         }
     }
 
-    fn side_mut(&mut self, side: Side) -> &mut Vec<Node> {
+    fn side_mut(&mut self, side: Side) -> &mut Vec<CardId> {
         match side {
             Side::Left => &mut self.left,
             Side::Right => &mut self.right,
         }
     }
 
-    pub(crate) fn devices(&self) -> impl Iterator<Item = Node> {
+    pub(crate) fn devices(&self) -> impl Iterator<Item = CardId> {
         self.left.iter().chain(&self.right).copied()
     }
 
-    fn remove(&mut self, id: Node) {
+    fn remove(&mut self, id: CardId) {
         self.left.retain(|&d| d != id);
         self.right.retain(|&d| d != id);
     }
@@ -62,28 +63,28 @@ pub(crate) struct Slot {
     pub(crate) level: Level,
     pub(crate) side: Side,
     /// The device on that side it goes just left of; `None` to go rightmost.
-    pub(crate) before: Option<Node>,
+    pub(crate) before: Option<CardId>,
 }
 
 /// The tiers the user arranged under each device, until the layout is reset.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Arrangement {
-    tiers: HashMap<Node, Vec<Tier>>,
+    tiers: HashMap<CardId, Vec<Tier>>,
 }
 
 impl Arrangement {
     /// The tiers under `parent`, as arranged, holding only devices still connected behind it.
     /// Devices not arranged yet go in the first tier, the first half of them on the left, so
     /// with nothing arranged a device's devices sit in one row centred under it.
-    pub(crate) fn tiers(&self, network: &Network, parent: Node) -> Vec<Tier> {
-        let behind: Vec<Node> = network.behind(parent).collect();
+    pub(crate) fn tiers(&self, network: &Network, parent: CardId) -> Vec<Tier> {
+        let behind: Vec<CardId> = network.behind(parent).collect();
         let mut tiers = self.tiers.get(&parent).cloned().unwrap_or_default();
         for tier in &mut tiers {
             tier.left.retain(|d| behind.contains(d));
             tier.right.retain(|d| behind.contains(d));
         }
         tiers.retain(|t| !t.is_empty());
-        let loose: Vec<Node> = behind
+        let loose: Vec<CardId> = behind
             .into_iter()
             .filter(|&d| !tiers.iter().any(|t| t.devices().any(|placed| placed == d)))
             .collect();
@@ -105,8 +106,8 @@ impl Arrangement {
     pub(crate) fn inner_neighbours(
         &self,
         network: &Network,
-        without: Option<Node>,
-    ) -> HashMap<Node, Node> {
+        without: Option<CardId>,
+    ) -> HashMap<CardId, CardId> {
         let mut inner = HashMap::new();
         for parent in network.nodes() {
             let tiers = match without {
@@ -131,7 +132,7 @@ impl Arrangement {
     }
 
     /// The tiers under `parent` as they are without `id`, with any tier it leaves empty gone.
-    pub(crate) fn tiers_without(&self, network: &Network, parent: Node, id: Node) -> Vec<Tier> {
+    pub(crate) fn tiers_without(&self, network: &Network, parent: CardId, id: CardId) -> Vec<Tier> {
         let mut tiers = self.tiers(network, parent);
         for tier in &mut tiers {
             tier.remove(id);
@@ -142,7 +143,7 @@ impl Arrangement {
 
     /// Puts `id`, connected behind `parent`, at `slot` among the tiers under it, judged as
     /// [`Self::tiers_without`] it; it leaves wherever it was before.
-    pub(crate) fn place(&mut self, network: &Network, id: Node, parent: Node, slot: Slot) {
+    pub(crate) fn place(&mut self, network: &Network, id: CardId, parent: CardId, slot: Slot) {
         let mut tiers = self.tiers_without(network, parent, id);
         self.remove(id);
         let index = match slot.level {
@@ -168,7 +169,7 @@ impl Arrangement {
     }
 
     /// Takes `id` out of every tier, as when it is left standing alone.
-    pub(crate) fn remove(&mut self, id: Node) {
+    pub(crate) fn remove(&mut self, id: CardId) {
         for tier in self.tiers.values_mut().flatten() {
             tier.remove(id);
         }
@@ -184,20 +185,18 @@ mod tests {
     use super::*;
     use crate::mock_data;
 
-    use crate::model::{CardId, DeviceId};
-
-    /// The router's LAN card, which the home network hangs from.
-    const ROUTER: Node = Node::Card(CardId(1));
-    const SWITCH: Node = Node::Device(DeviceId(2));
-    const ACCESS_POINT: Node = Node::Device(DeviceId(3));
-    const PC: Node = Node::Device(DeviceId(5));
+    // Each sample device's first card has its id; the router's first is its LAN card.
+    const ROUTER: CardId = CardId(1);
+    const SWITCH: CardId = CardId(2);
+    const ACCESS_POINT: CardId = CardId(3);
+    const PC: CardId = CardId(5);
 
     #[test]
     fn unarranged_devices_split_either_side_in_one_tier() {
         let network = mock_data::network();
         let tiers = Arrangement::default().tiers(&network, ROUTER);
         let expected = Tier {
-            left: vec![Node::Device(DeviceId(4))],
+            left: vec![CardId(4)],
             right: vec![SWITCH, ACCESS_POINT],
         };
         assert_eq!(tiers, [expected]);
@@ -251,13 +250,9 @@ mod tests {
         let inner = arrangement.inner_neighbours(&network, None);
         assert_eq!(inner.get(&ACCESS_POINT), Some(&SWITCH));
         assert_eq!(inner.get(&SWITCH), None, "straight off the trunk");
-        assert_eq!(
-            inner.get(&Node::Device(DeviceId(4))),
-            None,
-            "alone on its side"
-        );
+        assert_eq!(inner.get(&CardId(4)), None, "alone on its side");
         // The switch's first three hang left of its trunk, so the PC, leftmost, is outermost.
-        assert_eq!(inner.get(&PC), Some(&Node::Device(DeviceId(6))));
+        assert_eq!(inner.get(&PC), Some(&CardId(6)));
 
         let without_switch = arrangement.inner_neighbours(&network, Some(SWITCH));
         assert_eq!(without_switch.get(&ACCESS_POINT), None);

@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[derive(Debug, clap::Args)]
+#[command(
+    after_help = "Examples:\n  cargo tool icons audit\n  cargo tool icons audit --directory path/to/icons\n\nRead-only: reports hidden SVG paths and case-insensitive icon ID conflicts.\nSVG content and rendering are not validated. Issues produce a non-zero exit code."
+)]
 pub(crate) struct Args {
     /// Icon folder (defaults to the repository's icons/; relative paths use the current directory).
     #[arg(long)]
