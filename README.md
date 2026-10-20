@@ -1,15 +1,47 @@
 # Network Mapper
 
 A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-memory mock data
-only — there is no real network discovery or scanning. Settings → AI settings can download
-an AI model (Qwen3-4B, 2.5 GB) into the user's application data folder, but the app cannot
-run it yet.
+only — there is no real network discovery or scanning. Settings → AI settings installs an AI
+model (Qwen3-4B, 2.5 GB, or Qwen3-0.6B, 0.6 GB) into the user's application data folder,
+loads one, and runs it on an editable prompt and sample device file.
 
 ## Run
 
 ```sh
 cargo run
 ```
+
+The AI model is far faster in a release build with AVX2 (on the CPU, about 25 s rather than
+150 s for one answer from Qwen3-0.6B):
+
+```sh
+RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run --release
+```
+
+### AI on the GPU (NVIDIA, Windows)
+
+The `cuda` feature runs the model on an NVIDIA graphics card (Qwen3-0.6B: about 9 s an
+answer on an RTX 5060). Building it needs the CUDA toolkit and Visual Studio's C++ tools; on
+the development PC the toolkit is unpacked, not installed, in
+`%APPDATA%\Network Mapper\dev\cuda-13.3.1` (NVIDIA's redistributable archives: `cuda_nvcc`,
+`cuda_crt`, `libnvvm`, `cccl`, `cuda_cudart`, `cuda_nvrtc`, `libcublas`, `libcurand`). Set:
+
+```sh
+CUDA_PATH="<toolkit folder>"                  # cudarc links against its libraries
+CUDARC_CUDA_VERSION=13030                     # CUDA 13.3
+CUDA_COMPUTE_CAP=120                          # the card's compute capability (nvidia-smi)
+NVCC_CCBIN="<MSVC>\bin\Hostx64\x64"           # the folder holding cl.exe
+NVCC_APPEND_FLAGS="-Xcompiler /Zc:preprocessor -Xcompiler /MD"
+```
+
+then `cargo build --release --features cuda`. CUDA 13's headers need MSVC's conforming
+preprocessor, and `/MD` matches Skia's C runtime. Candle's kernel build does not notice a
+changed flag, so after changing one run `cargo clean --release -p candle-kernels`. The
+program loads `cublas64_13.dll`, `cublasLt64_13.dll`, `cudart64_13.dll`, `curand64_10.dll`,
+`nvrtc64_130_0.dll` and `nvrtc-builtins64_133.dll` at start-up: copy them from the toolkit's
+`bin\x64` beside the executable (and beside the test binaries in `deps\` for `cargo test`).
+The gate's `cargo clippy --all-features` builds this feature too, so it needs the same
+settings.
 
 ## Icons
 
@@ -35,9 +67,10 @@ src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices with their network cards, virtual machines and
                    containers; the map's tree of network cards, roles, groups,
                    layout; the simulated discovery run) — no Slint imports
-src/ai.rs          the AI models offered, pinned by revision and hash, and where they are
-                   installed; ai/ downloads and checks them — no Slint imports
-src/ai_settings.rs the AI settings window: Install AI in the background, installed models
+src/ai.rs          the AI models offered, pinned by revision and hash, where they are
+                   installed, the prompt and sample; ai/ downloads and checks them and runs
+                   the loaded one with Candle (CPU or CUDA) — no Slint imports
+src/ai_settings.rs the AI settings window: install, load, GPU switch and Run in the background
 src/mock_data.rs   the sample network, and in mock_data/ the hosts a discovery run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
 src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,

@@ -1,39 +1,38 @@
-//! Connects the AI settings window to [`crate::ai`]: shows what is installed and runs Install AI
-//! in the background, so the window stays responsive during a download of gigabytes.
+//! Connects the AI settings window to [`crate::ai`]: installs models in the background, loads
+//! the one picked, and runs it on the prompt and evidence, so the window stays responsive
+//! through downloads of gigabytes and answers that take minutes.
 
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use slint::{CloseRequestResponse, ComponentHandle, ModelRc, SharedString, VecModel, Weak};
+use slint::{
+    CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel, Weak,
+};
 
-use crate::ai::{self, InstallError, MODELS};
-use crate::ui::{AiSettingsWindow, AppWindow, InstallOutcome};
+use crate::ai::{self, InstallError, Job, MODELS, Model, RunError, Worker, WorkerEvent};
+use crate::ui::{AiSettingsWindow, AppWindow, InstallOutcome, ModelState};
 
 /// Opens the window from Settings, bringing back the same window each time.
 pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     let window = AiSettingsWindow::new()?;
-    if let Some(model) = MODELS.first() {
-        window.set_offered_name(model.name.into());
-        window.set_offered_gb(gigabytes(model.size()));
-    }
-    // An empty folder disables Install AI.
-    let folder = ai::models_dir();
-    window.set_folder(
-        folder
-            .as_deref()
-            .map(|d| d.display().to_string())
-            .unwrap_or_default()
-            .into(),
-    );
+    show_offers(&window);
+    window.set_prompt(ai::PROMPT.into());
+    window.set_input(ai::SAMPLE_EVIDENCE.into());
+    // A CUDA build uses the GPU unless the user switches it off.
+    window.set_gpu_built(ai::gpu_built());
+    window.set_use_gpu(ai::gpu_built());
 
     let cancel = Arc::new(AtomicBool::new(false));
     let (weak, flag) = (window.as_weak(), Arc::clone(&cancel));
-    window.on_install(move || start_install(&weak, &flag));
+    window.on_install(move |index| start_install(&weak, &flag, index));
     window.on_cancel_install(move || cancel.store(true, Ordering::Relaxed));
+    connect_worker(&window);
 
     // The app runs until its last window closes, so the main window takes this one with it.
-    // A download in progress stops with the app; its partial file is never taken as installed.
+    // A download or answer in progress stops with the app; a partial download is never taken
+    // as installed.
     let closing = window.as_weak();
     ui.window().on_close_requested(move || {
         if let Some(open) = closing.upgrade() {
@@ -52,22 +51,125 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     Ok(())
 }
 
-/// Re-reads the models folder, which may have changed outside the app.
+/// Loading and running go to one worker, which keeps the loaded model between runs.
+fn connect_worker(window: &AiSettingsWindow) {
+    let reporting = window.as_weak();
+    // Without a data folder nothing can be installed, so every load reports Missing.
+    let dir = ai::models_dir().unwrap_or_default();
+    let worker = Rc::new(Worker::start(dir, move |event| {
+        // An error only means the app is closing, so there is no window to update.
+        reporting
+            .upgrade_in_event_loop(move |w| show_event(&w, event))
+            .ok();
+    }));
+
+    let (loading, loader) = (window.as_weak(), Rc::clone(&worker));
+    window.on_load(move |index| {
+        if let Some(open) = loading.upgrade() {
+            let model = installed_model(&open, index);
+            let gpu = open.get_use_gpu();
+            send(&open, &loader, Job::Load { model, gpu });
+        }
+    });
+    // The picked model, if any, reloads on the other device.
+    let (moving, mover) = (window.as_weak(), Rc::clone(&worker));
+    window.on_set_gpu(move |gpu| {
+        if let Some(open) = moving.upgrade()
+            && let Some(model) = installed_model(&open, open.get_loaded_index())
+        {
+            let model = Some(model);
+            send(&open, &mover, Job::Load { model, gpu });
+        }
+    });
+    let running = window.as_weak();
+    window.on_run(move |prompt, input| {
+        if let Some(open) = running.upgrade() {
+            let (system, user) = (prompt.into(), input.into());
+            send(&open, &worker, Job::Run { system, user });
+        }
+    });
+}
+
+fn send(window: &AiSettingsWindow, worker: &Worker, job: Job) {
+    if !worker.send(job) {
+        window.set_state(ModelState::Failed);
+    }
+}
+
+/// The model the window lists at `index` among the installed ones.
+fn installed_model(window: &AiSettingsWindow, index: i32) -> Option<&'static Model> {
+    let name = window
+        .get_installed()
+        .row_data(usize::try_from(index).ok()?)?;
+    MODELS.iter().find(|m| m.name == name.as_str())
+}
+
+fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
+    match event {
+        WorkerEvent::Unloaded => window.set_state(ModelState::None),
+        WorkerEvent::Loading => window.set_state(ModelState::Loading),
+        WorkerEvent::Ready | WorkerEvent::Finished(Ok(())) => window.set_state(ModelState::Ready),
+        // Without a GPU the pick stays, so switching CUDA off loads it on the processor.
+        WorkerEvent::LoadFailed(RunError::NoGpu) => window.set_state(ModelState::NoGpu),
+        WorkerEvent::LoadFailed(e) => {
+            window.set_loaded_index(-1);
+            window.set_state(state(e));
+        }
+        WorkerEvent::Running => {
+            window.set_output(SharedString::new());
+            window.set_state(ModelState::Running);
+        }
+        WorkerEvent::Output(text) => window.set_output(text.into()),
+        WorkerEvent::Finished(Err(e)) => window.set_state(state(e)),
+    }
+}
+
+fn state(error: RunError) -> ModelState {
+    match error {
+        RunError::NoModel => ModelState::NoModel,
+        RunError::Missing => ModelState::Missing,
+        RunError::Broken => ModelState::Broken,
+        RunError::NoGpu => ModelState::NoGpu,
+        RunError::TooLong => ModelState::TooLong,
+        RunError::Failed => ModelState::Failed,
+    }
+}
+
+fn show_offers(window: &AiSettingsWindow) {
+    let names: Vec<SharedString> = MODELS.iter().map(|m| m.name.into()).collect();
+    let sizes: Vec<f32> = MODELS.iter().map(|m| gigabytes(m.size())).collect();
+    window.set_offered_names(ModelRc::new(VecModel::from(names)));
+    window.set_offered_gb(ModelRc::new(VecModel::from(sizes)));
+    // An empty folder disables Install AI.
+    let folder = ai::models_dir().map(|d| d.display().to_string());
+    window.set_folder(folder.unwrap_or_default().into());
+    show_installed(window);
+}
+
+/// Re-reads the models folder, which may have changed outside the app, keeping the loaded
+/// model picked in the list.
 fn show_installed(window: &AiSettingsWindow) {
+    let loaded = installed_model(window, window.get_loaded_index());
     let installed = ai::models_dir()
         .map(|d| ai::installed(&d))
         .unwrap_or_default();
+    let flags: Vec<bool> = MODELS
+        .iter()
+        .map(|m| installed.iter().any(|i| std::ptr::eq(*i, m)))
+        .collect();
     let names: Vec<SharedString> = installed.iter().map(|m| m.name.into()).collect();
-    window.set_offered_installed(
-        MODELS
-            .first()
-            .is_some_and(|m| installed.iter().any(|i| std::ptr::eq(*i, m))),
-    );
+    let index = loaded
+        .and_then(|l| installed.iter().position(|i| std::ptr::eq(*i, l)))
+        .and_then(|i| i32::try_from(i).ok())
+        .unwrap_or(-1);
+    window.set_offered_installed(ModelRc::new(VecModel::from(flags)));
     window.set_installed(ModelRc::new(VecModel::from(names)));
+    window.set_loaded_index(index);
 }
 
-fn start_install(weak: &Weak<AiSettingsWindow>, cancel: &Arc<AtomicBool>) {
-    let (Some(window), Some(model)) = (weak.upgrade(), MODELS.first()) else {
+fn start_install(weak: &Weak<AiSettingsWindow>, cancel: &Arc<AtomicBool>, index: i32) {
+    let model = usize::try_from(index).ok().and_then(|i| MODELS.get(i));
+    let (Some(window), Some(model)) = (weak.upgrade(), model) else {
         return;
     };
     let Some(dir) = ai::models_dir() else {

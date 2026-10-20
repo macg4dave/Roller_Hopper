@@ -182,6 +182,13 @@ Tool code is project code. [rust.md](rust.md) applies in full, with these additi
   describe exactly what they change, support `--dry-run` and run only when the user has
   authorised those changes. Wrap existing installation mechanisms rather than reimplementing
   them; their network access is allowed when the installation needs it.
+- **Standing authorisation: the user's `%APPDATA%` folder.** Agents may put anything there
+  without asking — models, toolkits, SDKs, test data, build helpers — and change or remove
+  what agents put there. Keep it in clearly named folders of its own (the app's own data
+  under `%APPDATA%\Network Mapper\`), and MUST NOT change or delete other programs' files
+  there. Say in the task report what was added. Anything outside `%APPDATA%` (Program Files,
+  system settings, PATH, installers needing administrator rights) still needs the user's
+  approval each time.
 - Test the command's glue: arguments, input/output, failure handling and repository-specific
   behaviour. Do not retest a wrapped crate or utility's own implementation.
 - When adding or changing Rust tooling, run its full gate as well as the app's gate:

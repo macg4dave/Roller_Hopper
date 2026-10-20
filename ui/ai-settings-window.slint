@@ -1,11 +1,14 @@
-import { Button, ComboBox, Palette, ProgressIndicator, Switch } from "std-widgets.slint";
+import { Button, ComboBox, Palette, ProgressIndicator, Switch, TextEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // How the last install ended, if one ran since the window opened.
 export enum InstallOutcome { none, done, cancelled, no-folder, network, disk, corrupt }
 
-// A switch that nothing can act on until the AI runtime is built, so it stays off and
-// disabled, with what it will do.
+// The loaded model: none, on its way, ready, answering, or why it is not.
+export enum ModelState { none, loading, ready, running, no-model, missing, broken, no-gpu, too-long, failed }
+
+// An automation switch that nothing can act on yet, so it stays off and disabled, with what it
+// will do.
 component AiControl inherits VerticalLayout {
     in property <string> text;
     in property <string> explanation;
@@ -31,28 +34,52 @@ component SectionTitle inherits Text {
     color: Theme.text;
 }
 
-// Its own window, opened from Settings: installing a model, choosing the one the app uses,
-// and every AI setting the user controls.
+component Note inherits Text {
+    font-size: Theme.font-small;
+    color: Theme.text-muted;
+    wrap: word-wrap;
+}
+
+// Its own window, opened from Settings: installing models, loading one, trying it on a prompt
+// and an evidence file, and the AI settings the user controls.
 export component AiSettingsWindow inherits Window {
-    // The recommended model, which Install AI downloads.
-    in property <string> offered-name;
-    in property <float> offered-gb;
-    in property <bool> offered-installed;
+    // The models offered for install, with their download sizes and whether each is installed.
+    in property <[string]> offered-names;
+    in property <[float]> offered-gb;
+    in property <[bool]> offered-installed;
+    in-out property <int> offer-index: 0;
     // Where models are installed.
     in property <string> folder;
-    // The installed models, by name.
-    in property <[string]> installed;
     in property <bool> installing;
     // Of the install, from 0 to 1.
     in property <float> progress;
     in property <InstallOutcome> outcome;
 
-    callback install();
+    // The installed models, by name, and which is loaded (-1 for none).
+    in property <[string]> installed;
+    in-out property <int> loaded-index: -1;
+    in property <ModelState> state;
+    // Whether this build can use an NVIDIA GPU, and whether models load onto it.
+    in property <bool> gpu-built;
+    in-out property <bool> use-gpu;
+
+    in-out property <string> prompt;
+    in-out property <string> input;
+    in property <string> output;
+
+    callback install(int);
     callback cancel-install();
+    // An installed model, by its index in `installed`, was picked to load.
+    callback load(int);
+    // The CUDA switch changed; the loaded model moves to the GPU or the CPU.
+    callback set-gpu(bool);
+    callback run(string, string);
 
     title: @tr("ai-settings.title");
-    preferred-width: 460px;
-    min-width: 380px;
+    preferred-width: 1040px;
+    preferred-height: 760px;
+    min-width: 820px;
+    min-height: 620px;
     background: Theme.surface;
     default-font-size: Theme.font-body;
 
@@ -69,107 +96,173 @@ export component AiSettingsWindow inherits Window {
         return "";
     }
 
+    pure function state-text(state: ModelState) -> string {
+        if state == ModelState.none { return @tr("ai-settings.state-none"); }
+        if state == ModelState.loading { return @tr("ai-settings.state-loading"); }
+        if state == ModelState.ready { return use-gpu ? @tr("ai-settings.state-ready-gpu") : @tr("ai-settings.state-ready-cpu"); }
+        if state == ModelState.running { return @tr("ai-settings.state-running"); }
+        if state == ModelState.no-model { return @tr("ai-settings.state-no-model"); }
+        if state == ModelState.missing { return @tr("ai-settings.state-missing"); }
+        if state == ModelState.broken { return @tr("ai-settings.state-broken"); }
+        if state == ModelState.no-gpu { return @tr("ai-settings.state-no-gpu"); }
+        if state == ModelState.too-long { return @tr("ai-settings.state-too-long"); }
+        if state == ModelState.failed { return @tr("ai-settings.state-failed"); }
+        return "";
+    }
+
     // Sizes to one decimal place.
     pure function gb(value: float) -> string {
         return Math.round(value * 10) / 10;
     }
 
-    VerticalLayout {
+    HorizontalLayout {
         padding: Theme.space-l;
-        spacing: Theme.space-l;
+        spacing: Theme.space-l * 2;
 
-        Text {
-            text: @tr("ai-settings.title");
-            font-size: Theme.font-title;
-            font-weight: 600;
-            color: Theme.text;
-        }
+        VerticalLayout {
+            width: 360px;
+            spacing: Theme.space-l;
 
-        Rectangle {
-            background: Theme.warning-soft;
-            border-radius: Theme.radius;
+            Text {
+                text: @tr("ai-settings.title");
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+            }
 
             VerticalLayout {
-                padding: Theme.space-m;
-                Text {
-                    text: @tr("ai-settings.not-running");
-                    color: Theme.text;
+                spacing: Theme.space-s;
+
+                SectionTitle { text: @tr("ai-settings.install-title"); }
+                ComboBox {
+                    model: offered-names;
+                    current-index <=> offer-index;
+                    enabled: !installing;
+                }
+                if offered-installed[offer-index] && !installing: Note {
+                    text: @tr("ai-settings.offer-installed", offered-names[offer-index]);
+                }
+                if !offered-installed[offer-index] && !installing: VerticalLayout {
+                    spacing: Theme.space-s;
+                    Note {
+                        text: @tr("ai-settings.install-note", offered-names[offer-index], gb(offered-gb[offer-index]), folder);
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        Button {
+                            text: @tr("ai-settings.install");
+                            primary: true;
+                            enabled: folder != "";
+                            clicked => { root.install(offer-index); }
+                        }
+                    }
+                }
+                if installing: VerticalLayout {
+                    spacing: Theme.space-s;
+                    ProgressIndicator { progress: root.progress; }
+                    HorizontalLayout {
+                        spacing: Theme.space-s;
+                        Text {
+                            text: @tr("ai-settings.downloading", offered-names[offer-index], gb(offered-gb[offer-index] * progress), gb(offered-gb[offer-index]));
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                        Button {
+                            text: @tr("ai-settings.cancel");
+                            clicked => { root.cancel-install(); }
+                        }
+                    }
+                }
+                if outcome != InstallOutcome.none && !installing: Text {
+                    text: outcome-text(outcome);
+                    color: outcome == InstallOutcome.done ? Theme.text : Theme.warning;
                     wrap: word-wrap;
                 }
             }
+
+            VerticalLayout {
+                spacing: Theme.space-s;
+
+                SectionTitle { text: @tr("ai-settings.model"); }
+                ComboBox {
+                    model: installed;
+                    current-index <=> loaded-index;
+                    enabled: installed.length > 0 && state != ModelState.loading && state != ModelState.running;
+                    selected => { root.load(self.current-index); }
+                }
+                Text {
+                    text: installed.length == 0 ? @tr("ai-settings.no-model") : state-text(state);
+                    color: state == ModelState.ready || state == ModelState.none || state == ModelState.loading || state == ModelState.running ? Theme.text-muted : Theme.warning;
+                    font-size: Theme.font-small;
+                    wrap: word-wrap;
+                }
+            }
+
+            VerticalLayout {
+                spacing: Theme.space-m;
+
+                SectionTitle { text: @tr("ai-settings.behaviour"); }
+                VerticalLayout {
+                    spacing: Theme.space-xs;
+                    Switch {
+                        text: @tr("ai-settings.cuda");
+                        checked <=> root.use-gpu;
+                        enabled: gpu-built && state != ModelState.loading && state != ModelState.running;
+                        toggled => { root.set-gpu(self.checked); }
+                    }
+                    Note {
+                        text: gpu-built ? @tr("ai-settings.cuda-explained") : @tr("ai-settings.cuda-not-built");
+                    }
+                }
+                AiControl {
+                    text: @tr("ai-settings.fill-missing");
+                    explanation: @tr("ai-settings.fill-missing-explained");
+                }
+                AiControl {
+                    text: @tr("ai-settings.auto-add");
+                    explanation: @tr("ai-settings.auto-add-explained");
+                }
+            }
+
+            Rectangle { vertical-stretch: 1; }
         }
 
         VerticalLayout {
             spacing: Theme.space-s;
 
-            SectionTitle { text: @tr("ai-settings.model"); }
-            ComboBox {
-                model: installed.length > 0 ? installed : [@tr("ai-settings.no-model")];
-                enabled: installed.length > 1;
-            }
-
-            if !installing && !offered-installed: VerticalLayout {
-                spacing: Theme.space-s;
-                Text {
-                    text: @tr("ai-settings.install-note", offered-name, gb(offered-gb), folder);
-                    font-size: Theme.font-small;
-                    color: Theme.text-muted;
-                    wrap: word-wrap;
-                }
-                HorizontalLayout {
-                    alignment: start;
-                    Button {
-                        text: @tr("ai-settings.install");
-                        primary: true;
-                        enabled: folder != "";
-                        clicked => { root.install(); }
-                    }
-                }
-            }
-
-            if installing: VerticalLayout {
-                spacing: Theme.space-s;
-                ProgressIndicator { progress: root.progress; }
-                HorizontalLayout {
-                    spacing: Theme.space-s;
-                    Text {
-                        text: @tr("ai-settings.downloading", offered-name, gb(offered-gb * progress), gb(offered-gb));
-                        color: Theme.text;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                    }
-                    Button {
-                        text: @tr("ai-settings.cancel");
-                        clicked => { root.cancel-install(); }
-                    }
-                }
-            }
-
-            if outcome != InstallOutcome.none && !installing: Text {
-                text: outcome-text(outcome);
-                color: outcome == InstallOutcome.done ? Theme.text : Theme.warning;
+            SectionTitle { text: @tr("ai-settings.prompt"); }
+            TextEdit {
+                text <=> root.prompt;
                 wrap: word-wrap;
+                vertical-stretch: 3;
+            }
+
+            SectionTitle { text: @tr("ai-settings.input"); }
+            TextEdit {
+                text <=> root.input;
+                wrap: word-wrap;
+                vertical-stretch: 2;
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: @tr("ai-settings.run");
+                    primary: true;
+                    enabled: state == ModelState.ready || state == ModelState.too-long || state == ModelState.failed;
+                    clicked => { root.run(root.prompt, root.input); }
+                }
+            }
+
+            SectionTitle { text: @tr("ai-settings.output"); }
+            TextEdit {
+                text: root.output;
+                read-only: true;
+                wrap: word-wrap;
+                vertical-stretch: 3;
             }
         }
-
-        VerticalLayout {
-            spacing: Theme.space-m;
-
-            SectionTitle { text: @tr("ai-settings.behaviour"); }
-            AiControl {
-                text: @tr("ai-settings.cuda");
-                explanation: @tr("ai-settings.cuda-explained");
-            }
-            AiControl {
-                text: @tr("ai-settings.fill-missing");
-                explanation: @tr("ai-settings.fill-missing-explained");
-            }
-            AiControl {
-                text: @tr("ai-settings.auto-add");
-                explanation: @tr("ai-settings.auto-add-explained");
-            }
-        }
-
-        Rectangle { vertical-stretch: 1; }
     }
 }

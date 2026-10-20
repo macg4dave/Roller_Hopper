@@ -38,15 +38,17 @@ pub(crate) fn install(
     fs::create_dir_all(&folder).map_err(|_| InstallError::Disk)?;
     let agent = agent();
     let mut done = 0;
-    for file in model.files {
+    for file in model.files() {
         if !file.is_complete(&folder) {
             // The status alone tells the user what to do: try again later.
             let mut response = agent
                 .get(file.url)
                 .call()
                 .map_err(|_| InstallError::Network)?;
-            // A server sending more than the pinned size is not sending the pinned file.
-            let body = response.body_mut().with_config().limit(file.size).reader();
+            // Not ureq's own body limit: it fails the read after the last byte even when the
+            // body is exactly the limit, so every complete download looked broken. save
+            // bounds the read itself.
+            let body = response.body_mut().as_reader();
             save(body, file, &folder, cancel, &mut |n| progress(done + n))?;
         }
         done += file.size;
@@ -86,12 +88,15 @@ fn save(
 }
 
 fn copy_checked(
-    mut body: impl Read,
+    body: impl Read,
     file: &ModelFile,
     part: &Path,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(u64),
 ) -> Result<(), InstallError> {
+    // One byte past the pinned size is enough to tell a longer file from the pinned one,
+    // without reading or storing however much more a server sends.
+    let mut body = body.take(file.size.saturating_add(1));
     let mut out = File::create(part).map_err(|_| InstallError::Disk)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0; 1 << 16];
@@ -131,7 +136,7 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::io::{self, Cursor};
     use std::path::PathBuf;
 
     use super::super::MODELS;
@@ -208,6 +213,24 @@ mod tests {
     }
 
     #[test]
+    fn a_body_longer_than_the_pin_is_cut_off_and_refused() {
+        let dir = folder("endless");
+        let mut last = 0;
+        let saved = save(
+            io::repeat(b'x'),
+            &HELLO,
+            &dir,
+            &AtomicBool::new(false),
+            &mut |n| {
+                last = n;
+            },
+        );
+        assert_eq!(saved, Err(InstallError::Corrupt));
+        assert_eq!(last, HELLO.size + 1);
+        assert_eq!(files_in(&dir), NO_FILES);
+    }
+
+    #[test]
     fn a_cancelled_download_leaves_nothing_behind() {
         let dir = folder("cancelled");
         let saved = save(
@@ -227,22 +250,30 @@ mod tests {
         let model = Model {
             name: "Test",
             folder: "test",
-            files: &[HELLO],
+            weights: HELLO,
+            tokenizer: ModelFile {
+                name: "empty.json",
+                size: 0,
+                ..HELLO
+            },
         };
         assert!(!model.is_installed(&dir));
         let folder = model.path(&dir);
         fs::create_dir_all(&folder).unwrap();
         fs::write(folder.join("hello.bin"), "hell").unwrap();
+        fs::write(folder.join("empty.json"), "").unwrap();
         assert!(!model.is_installed(&dir));
         fs::write(folder.join("hello.bin"), "hello").unwrap();
         assert!(model.is_installed(&dir));
+        fs::remove_file(folder.join("empty.json")).unwrap();
+        assert!(!model.is_installed(&dir));
         // Only the offered models count, and none of them is in this folder.
         assert_eq!(super::super::installed(&dir).len(), 0);
     }
 
     #[test]
     fn offered_models_are_pinned_to_a_revision_over_https() {
-        for file in MODELS.iter().flat_map(|m| m.files) {
+        for file in MODELS.iter().flat_map(Model::files) {
             assert!(file.url.starts_with("https://huggingface.co/"));
             assert!(file.url.contains("/resolve/") && file.url.ends_with(file.name));
             assert_eq!(file.sha256.len(), 64);
@@ -252,6 +283,25 @@ mod tests {
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
             );
         }
+    }
+
+    /// The real download path end to end, on the smallest pinned file. Run on request with
+    /// `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "downloads 11 MB from Hugging Face"]
+    fn a_pinned_file_downloads_and_installs() {
+        let dir = folder("live");
+        // Twice the tokenizer: one download, then the second is already complete.
+        let model = Model {
+            name: "Tokenizer only",
+            folder: "live",
+            weights: super::super::QWEN3_TOKENIZER,
+            tokenizer: super::super::QWEN3_TOKENIZER,
+        };
+        let installed = install(&model, &dir, &AtomicBool::new(false), &mut |_| {});
+        assert_eq!(installed, Ok(()));
+        assert!(model.is_installed(&dir));
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

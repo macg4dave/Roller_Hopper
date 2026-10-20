@@ -1,0 +1,7 @@
+Evidence about one device:
+[
+  {"id": "E1", "source": "reverse DNS", "age": "2 min", "fact": "hostname \"DESKTOP-4F7K2QD.lan\""},
+  {"id": "E2", "source": "TCP scan", "age": "2 min", "fact": "open: 135, 139, 445, 3389"},
+  {"id": "E3", "source": "service probe", "age": "2 min", "fact": "TCP 3389 answered an RDP handshake"},
+  {"id": "E4", "source": "neighbour table", "age": "2 min", "fact": "MAC vendor \"Micro-Star INTL Co., Ltd.\""}
+]

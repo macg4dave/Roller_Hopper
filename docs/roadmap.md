@@ -88,9 +88,10 @@ controls, changed only where the brief or an agreed decision says. It already de
 Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
-  data only". Settings holds a pointer to the View menu and opens the AI settings window,
-  where Install AI downloads and checks Qwen3-4B but nothing runs a model yet: the model
-  list has no effect, and CUDA and both automation switches stay disabled, saying why.
+  data only". Settings holds a pointer to the View menu and opens the AI settings window:
+  install Qwen3-4B or Qwen3-0.6B, load one (CPU, or GPU in a `cuda` build), and Run it on
+  an editable prompt and sample file. Its output is shown raw, not checked against the
+  schema; it fills no device fields; both automation switches stay disabled, saying why.
 - The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
   depth and pace presets; method labels include SNMP, ONVIF and LLDP, which are not offered;
   Confidence is a made-up percentage.
@@ -260,11 +261,11 @@ Gaps the UI shows against the plan:
   Candle's own `quantized-qwen3` example built on Rust 1.99.1 and ran offline from local
   files on the user's Ryzen 5 7600X with 3 threads; the runtime graph's licences are all
   permissive, and tokenizers' `onig` feature compiles a C library in.
-  - Speed: needs an AVX2 build (`target-cpu=x86-64-v3`, inside the agreed baseline). Without
+  - Speed: needs an AVX2 build (`target-cpu=x86-64-v3`). Without
     it a 188-token prompt took 19 s; with it 4.9 s including a 1.2 s load (about 190 prompt
-    and 67 generated tokens a second). Not measured on a baseline machine.
+    and 67 generated tokens a second).
   - RAM: about 1.65 GB peak working set and 2.3 GB private bytes for the model process
-    alone, against 2 GB for the whole app.
+    alone.
   - Usefulness, zero-shot JSON prompt, four cases: "Router" with High confidence for a
     Windows RDP PC, a Linux xrdp host and an unmistakable Brother printer; three of four
     replies were not valid JSON. With a worked example it copied the example's camera and
@@ -272,7 +273,12 @@ Gaps the UI shows against the plan:
 - **The user's choice, to qualify next: Qwen3-4B Q4_K_M GGUF**, installed by Install AI
   rather than bundled. Artifact: `Qwen/Qwen3-4B-GGUF` revision `bc64014`, 2,497,280,256
   bytes, SHA-256 `7485fe6f…fdf5`, Apache-2.0; tokenizer from `Qwen/Qwen3-4B` `1cfa9a7`
-  (pinned in `src/ai.rs`). Not measured yet; it needs more RAM than the former 2 GB limit.
+  (pinned in `src/ai.rs`). Install AI downloads and checks it on the user's PC.
+- **In the app (Candle 0.11 `quantized_qwen3`, greedy, thinking off, schema in the prompt,
+  no constrained decoding).** On the user's PC (Ryzen 5 7600X, RTX 5060 8 GB, sm_120),
+  Qwen3-0.6B Q8_0 answers the identification prompt and sample: 154 s on the CPU in a plain
+  release build, 24.5 s with `target-cpu=x86-64-v3`, 8.9 s on the GPU (CUDA 13.3, warm;
+  the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
 - Earlier alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
@@ -305,19 +311,15 @@ Agreed with the user on 20 October 2026. Later tasks meet these; changing one ne
 approval. Scan capabilities are as requested: BE-0007 and BE-0008 establish what netscli-core
 supports, and anything unsupported is shown as unavailable, never faked.
 
-### Workload, limits and machines
+### Workload and test machine
 
 - Acceptance workload: 250 devices, about 400 cards (most devices one, NAS/servers two to
   four), 30 VMs/containers, about 2,000 services (≈8 per device), 100 saved runs and about
-  50,000 log lines.
-- On that workload: input responds within 200 ms, also during a scan; pan, zoom and animation
-  frames take at most 50 ms; RAM stays within 1 GB without the model, and within the limit
-  agreed after BE-0011 with it loaded;
-  Stop is acknowledged within 1 s and settled within 10 s; closing during a run finishes
-  within 5 s with nothing left running; Save and Open each finish within 5 s.
+  50,000 log lines. It must stay responsive, also during a scan, and Stop and closing must
+  not hang; there are no fixed hardware, memory or timing figures.
 - Viewports: 1366×768 at 100% (minimum), 1920×1080 at 125% and 2560×1440 at 150%.
-- Machines: Windows is the user's Windows 11 Pro PC. Linux and macOS machines are still to
-  be named (BLK-009).
+- Test machine: the user's Windows 11 Pro PC is the target for every test that needs one.
+  Linux and macOS machines are still to be named (BLK-009).
 
 ### Scan scope and methods
 
@@ -353,10 +355,8 @@ supports, and anything unsupported is shown as unavailable, never faked.
 
 ### AI
 
-- Baseline machine: 4-core x86-64 with AVX2 (2018 or newer) or Apple M1, 8 GB RAM. Cold load
-  within 15 s; one device's suggestion within 10 s; at most half the cores, in the
-  background; the app's RAM with the model loaded within a limit agreed with the user from
-  BE-0011's measurements (the 4B model needs more than the former 2 GB).
+- Inference runs in the background and leaves the app responsive; it is measured on the
+  user's PC, with no fixed hardware, memory or timing figures.
 - Fields: type (the app's device kinds or Unknown), OS family (Windows, macOS, Linux, iOS,
   Android, network/embedded or Unknown) and a description of at most 120 characters citing
   evidence IDs. Below the confidence cut-off a field stays Unknown.
@@ -405,7 +405,7 @@ These extend the product brief's wording, which needs updating first (BLK-010).
 | --- | --- | --- |
 | Milestone | `M-001` | `M-021` |
 | Task or backlog need | `BE-0001` | `BE-0110` |
-| Blocker (in the backlog) | `BLK-001` | `BLK-011` |
+| Blocker (in the backlog) | `BLK-001` | `BLK-012` |
 
 Take the next ID from this table and advance it in the same edit. Never reuse an ID, even after
 its item is deleted. Splitting a task keeps the original ID for what remains.
@@ -461,7 +461,7 @@ Live checks need user-approved targets.
 | BE-0008 | Turn the static trace (Findings) into a per-OS method matrix confirmed on each OS. Qualify only necessary supplementary crates: unprivileged ICMP on Linux/macOS, the macOS neighbour table and per-destination routes/source interface. Bring the macOS MAC gap to the user as a decision if no safe in-process route exists. | BE-0007 |
 | BE-0009 | Exercise incremental results, pause (the app withholds new host and ≤4,096-port calls; upstream has none), stop/close by dropping futures with task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
 | BE-0010 | Confirm the chosen rfd (`gtk3` on Linux) and atomic-write-file on each OS: a dialog parented to the Slint window opens and cancels without blocking the UI (approved GUI check), GTK3 runs in process alongside Slint's Linux backend, and the Unix mode/owner and macOS metadata survive a replace. Failed and locked replacements are tested in BE-0041. | — |
-| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify the user's choice, Qwen3-4B Q4_K_M (Findings), on the same cases on the CPU and with CUDA, and bring the measured RAM and latency to the user to agree the limits. | — |
+| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify the user's choice, Qwen3-4B Q4_K_M (Findings), on the same cases on the CPU and with CUDA, recording its RAM and speed on the user's PC. | — |
 | BE-0012 | Consolidate the qualified versions, features, assets and approvals; confirm each M-002 blocker in the backlog is resolved or still honestly open. | BE-0007, BE-0008, BE-0009, BE-0010, BE-0011 |
 
 Exit: every selected dependency has a compliant route. A successful build alone does not
@@ -652,11 +652,11 @@ Goal: one qualified model useful inside the existing discovery and details workf
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
 | BE-0082 | Load the model and tokenizer installed by Install AI, with the runtime and template compiled in, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
-| BE-0108 | Enable the CUDA switch: an optional CUDA build of the runtime, an NVIDIA GPU detected at run time, the CPU used when it is off or missing, and the switch disabled with its reason where CUDA is unavailable. | BE-0082 |
+| BE-0108 | Make the `cuda` build reproducible: one repository command that finds the toolkit and MSVC, sets the build settings (README "AI on the GPU") and puts the runtime DLLs beside the app and test binaries, replacing the manual steps; resolves BLK-011. | BE-0082 |
 | BE-0109 | Harden Install AI: check free space before starting, resume a broken download, fail a stalled read, remove an installed model; test against a local server, not the internet. | BE-0082 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
 | BE-0084 | Show type/OS-family/description suggestions with evidence, reasons and labelled confidence; explicit accept/edit/reject; suggestions never become observations. | BE-0083 |
-| BE-0085 | Evaluate held-out cases against the evidence baseline; measure per-field false positives/abstention, peak RAM, CPU, cold load and latency on agreed machines. | BE-0084 |
+| BE-0085 | Evaluate held-out cases against the evidence baseline; measure per-field false positives/abstention, peak RAM, CPU, cold load and latency on the user's PC. | BE-0084 |
 | BE-0086 | Discard stale generation/evidence/model/policy results; protect edits made during inference; missing or corrupt assets leave manual workflows working, with no automatic download or substitute. | BE-0085 |
 
 ## M-017: Explicit AI automation controls
@@ -689,7 +689,7 @@ Goal: runnable local app bundles with no extra installs. Not installers or a pub
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0097 | Windows, Linux and macOS bundles with native libraries, runtime icons and translations (the model is installed by Install AI, not bundled); document supported OS/CPU/GPU baselines. | BE-0096, BE-0012 |
+| BE-0097 | Windows, Linux and macOS bundles with native libraries, runtime icons and translations (the model is installed by Install AI, not bundled). | BE-0096, BE-0012 |
 | BE-0098 | Audit bundled dependencies, load paths, model/data licences and notices; nothing relies on repository paths or an external scanner, driver or service. | BE-0097 |
 | BE-0099 | Launch each bundle normally on a clean machine; check dialogs, writable locations and network permission deny/grant (macOS privacy, Linux UI/render dependencies). | BE-0098 |
 | BE-0100 | Install AI on a clean machine, then inference with the internet off: no downloads but the requested install, no telemetry. | BE-0099 |
