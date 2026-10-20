@@ -1,8 +1,5 @@
-//! Network cards in the UI. A card is a child of its device: a row under it in the lists, and a
-//! node on the map drawn with the device's icon and name. This module builds their views and
-//! handles editing the selected card (its IPv4 settings, where it is plugged in, removing it),
-//! adding cards, listing the virtual machines and containers on the selected device, and
-//! adding devices and guests.
+//! Editing the selected device's network cards: adding a blank one, filling in its IPv4
+//! settings, plugging it into a card of another device, giving it an icon, and removing it.
 
 use std::cell::RefCell;
 use std::net::Ipv4Addr;
@@ -11,123 +8,9 @@ use std::rc::Rc;
 use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString};
 
-use super::icons::Icons;
-use super::{AppState, Selection, convert, handler, update};
-use crate::model::{
-    CardId, ConnectionKind, Device, DeviceId, Guest, GuestKind, Icon, MacAddr, Network, NetworkCard,
-};
-use crate::ui::{self, AppWindow, Bridge, Labels};
-
-/// The card's address without its prefix, as shown; empty when it has none.
-pub(super) fn ip(card: &NetworkCard) -> SharedString {
-    let ip = card.address.map(|net| net.addr().to_string());
-    ip.unwrap_or_default().into()
-}
-
-/// The MAC address as shown; empty when there is none.
-pub(super) fn mac(card: &NetworkCard) -> SharedString {
-    let mac = card.mac.map(|mac| mac.to_string());
-    mac.unwrap_or_default().into()
-}
-
-/// Where `card` sits among its device's cards, from 0, for its placeholder name.
-fn index_of(device: &Device, card: CardId) -> i32 {
-    let at = device.cards.iter().position(|c| c.id == card);
-    at.and_then(|at| i32::try_from(at).ok()).unwrap_or_default()
-}
-
-/// The row or map node of `card`, made from `device_row`, the row of its device.
-pub(super) fn card_row(
-    icons: &Icons,
-    device_row: &ui::DeviceView,
-    device: &Device,
-    card: &NetworkCard,
-) -> ui::DeviceView {
-    ui::DeviceView {
-        card_id: convert::ui_card_id(card.id),
-        card_index: index_of(device, card.id),
-        card_name: card.name.trim().into(),
-        drag_card: convert::ui_card_id(card.id),
-        card_icon: icons.choice(&card.icon),
-        ip: ip(card),
-        mac: mac(card),
-        depth: device_row.depth + 1,
-        children: 0,
-        last: device.cards.last().is_some_and(|c| c.id == card.id),
-        ..device_row.clone()
-    }
-}
-
-/// The name of the card `socket` in the "plugged into" dropdown: its device's name, with the
-/// card's own when the device has several.
-pub(super) fn socket_name(labels: &Labels<'_>, network: &Network, socket: CardId) -> SharedString {
-    let Some(device) = network.card_owner(socket) else {
-        return SharedString::new();
-    };
-    let card = device.cards.iter().find(|c| c.id == socket);
-    let several = device.cards.len() > 1;
-    let index = if several {
-        index_of(device, socket)
-    } else {
-        -1
-    };
-    let name = card.map(|c| c.name.trim()).unwrap_or_default();
-    labels.invoke_card_of(device.name.trim().into(), name.into(), index)
-}
-
-/// The network cards of `device`, each with where it is plugged in.
-pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> Vec<ui::CardView> {
-    let views = device.cards.iter().map(|card| {
-        let link = network.link(card.id);
-        let via = link.and_then(|l| Some((l.upstream, network.card_owner(l.upstream)?)));
-        let via_card = via.and_then(|(id, d)| d.cards.iter().find(|c| c.id == id));
-        let several = via.is_some_and(|(_, d)| d.cards.len() > 1);
-        ui::CardView {
-            id: convert::ui_card_id(card.id),
-            index: index_of(device, card.id),
-            name: card.name.trim().into(),
-            ip: ip(card),
-            mask: card
-                .address
-                .map(|n| n.netmask().to_string())
-                .unwrap_or_default()
-                .into(),
-            gateway: card
-                .gateway
-                .map(|g| g.to_string())
-                .unwrap_or_default()
-                .into(),
-            mac: mac(card),
-            via_name: via.map(|(_, d)| d.name.trim()).unwrap_or_default().into(),
-            via_card: via_card.map(|c| c.name.trim()).unwrap_or_default().into(),
-            via_index: match via {
-                Some((id, d)) if several => index_of(d, id),
-                Some(_) | None => -1,
-            },
-            inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
-            services: card.services.to_string().into(),
-            icon: icons.choice(&card.icon),
-        }
-    });
-    views.collect()
-}
-
-/// The virtual machines and containers running straight on `host`, in device order; those on
-/// them are listed with their own host.
-pub(super) fn guest_views(network: &Network, icons: &Icons, host: DeviceId) -> Vec<ui::GuestView> {
-    let guests = network.devices().iter().filter_map(|device| {
-        let guest = device.guest.filter(|g| g.host == host)?;
-        Some(ui::GuestView {
-            id: convert::ui_id(device.id),
-            kind: convert::guest_kind(Some(guest.kind)),
-            name: device.name.trim().into(),
-            ip: device.primary_card().map(ip).unwrap_or_default(),
-            icon: icons.choice(&network.icon(device)),
-            colour: convert::colour(network.colour(device)),
-        })
-    });
-    guests.collect()
-}
+use crate::model::{CardId, Icon, MacAddr};
+use crate::ui::{self, AppWindow, Bridge};
+use crate::ui_bridge::{AppState, Selection, convert, handler, update};
 
 /// A subnet prefix as typed: a mask such as `255.255.255.0`, or a length such as `24` or `/24`.
 fn prefix(text: &str) -> Option<u8> {
@@ -153,7 +36,7 @@ impl AppState {
     /// The cards the selected card can be plugged into, in dropdown order after "none": the
     /// cards of the other devices, in device order, apart from those behind it, which would
     /// form a loop.
-    pub(super) fn upstream_choices(&self) -> Vec<CardId> {
+    pub(in crate::ui_bridge) fn upstream_choices(&self) -> Vec<CardId> {
         let Some(selected) = self.selected_card() else {
             return Vec::new();
         };
@@ -164,7 +47,7 @@ impl AppState {
     }
 
     /// Where the selected card is plugged in, as its index in the dropdown: 0 for none.
-    pub(super) fn plug_choice(&self) -> usize {
+    pub(in crate::ui_bridge) fn plug_choice(&self) -> usize {
         let link = self.selected_card().and_then(|c| self.network.link(c));
         let at = link.and_then(|l| {
             self.upstream_choices()
@@ -261,38 +144,10 @@ impl AppState {
             self.lay_out_at_rest();
         }
     }
-
-    /// Adds a blank device and selects it, so it can be filled in, as a new card is: a guest of
-    /// `kind` on the selected device, or with no kind a device of its own.
-    fn add_device(&mut self, kind: Option<GuestKind>) {
-        let guest = match kind {
-            None => None,
-            Some(kind) => match self.selected_device() {
-                Some(host) => Some(Guest { host, kind }),
-                None => return,
-            },
-        };
-        if let Some(id) = self.network.add_device(guest) {
-            self.selected = Some(Selection::Device(id));
-            self.lay_out_at_rest();
-        }
-    }
-
-    /// Changes what the selected guest runs as. Its icon follows unless it or its role has one
-    /// (see [`Network::icon`]).
-    fn set_guest_kind(&mut self, kind: GuestKind) {
-        self.edit_selected(|device| {
-            if let Some(guest) = &mut device.guest {
-                guest.kind = kind;
-            }
-        });
-    }
 }
 
-/// Adding, editing, plugging in and removing network cards, and adding devices and guests of
-/// the selected device. A guest is then a device of its own: edited, moved among its host's
-/// guests and forgotten like any other.
-pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+/// Adding, editing, plugging in, re-iconing and removing network cards.
+pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let add_card = handler(ui, state, |st, ()| st.add_card());
     bridge.on_add_card(move || add_card(()));
@@ -315,23 +170,15 @@ pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>)
     bridge.on_plug_card(handler(ui, state, |st, choice| {
         st.plug_card(convert::index(choice));
     }));
-    bridge.on_add_device(handler(ui, state, |st, kind| {
-        st.add_device(convert::guest_kind_from_ui(kind));
-    }));
-    bridge.on_set_guest_kind(handler(ui, state, |st, kind| {
-        if let Some(kind) = convert::guest_kind_from_ui(kind) {
-            st.set_guest_kind(kind);
-        }
-    }));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mock_data;
+    use crate::model::{DeviceId, NetworkCard};
 
     const PC: DeviceId = DeviceId(5);
-    const DOCKER_HOST: DeviceId = DeviceId(19);
     const LAB_ROUTER: DeviceId = DeviceId(22);
 
     /// A state with a blank card just added to the PC, and selected.
@@ -465,85 +312,5 @@ mod tests {
         state.selected = Some(Selection::Card(only));
         state.remove_card();
         assert!(state.network.card(only).is_some(), "the last stays");
-    }
-
-    #[test]
-    fn a_virtual_machine_is_added_to_the_selection_selected_and_placed_under_it() {
-        let mut state = AppState::new(mock_data::network());
-        let before = state.network.clone();
-        state.add_device(Some(GuestKind::VirtualMachine));
-        assert_eq!(state.network, before, "nothing selected to run on");
-
-        state.selected = Some(Selection::Card(CardId(DOCKER_HOST.0)));
-        state.add_device(Some(GuestKind::VirtualMachine));
-        let vm = state.selected_device().unwrap();
-        assert_eq!(state.selected, Some(Selection::Device(vm)), "selected");
-        assert_eq!(state.network.host(vm), Some(DOCKER_HOST));
-        let vm = state.network.device(vm).unwrap().cards[0].id;
-        let host = CardId(DOCKER_HOST.0);
-        assert!(state.positions[&vm].y > state.positions[&host].y);
-        assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
-    }
-
-    #[test]
-    fn a_device_of_its_own_is_added_and_selected_with_or_without_a_selection() {
-        let mut state = AppState::new(mock_data::network());
-        state.add_device(None);
-        let added = state.selected_device().unwrap();
-        assert_eq!(state.network.host(added), None);
-        let card = state.network.device(added).unwrap().cards[0].id;
-        assert!(state.positions.contains_key(&card), "on the map");
-    }
-
-    #[test]
-    fn a_guest_runs_as_another_kind_and_its_icon_follows_unless_picked() {
-        let mut state = AppState::new(mock_data::network());
-        state.selected = Some(Selection::Device(DOCKER_HOST));
-        state.add_device(Some(GuestKind::VirtualMachine));
-        let guest = state.selected_device().unwrap();
-        let of = |st: &AppState| {
-            let d = st.network.device(guest).unwrap();
-            (d.guest.map(|g| g.kind), st.network.icon(d))
-        };
-        let vm = Some(GuestKind::VirtualMachine);
-        assert_eq!(of(&state), (vm, GuestKind::VirtualMachine.icon()));
-        state.set_guest_kind(GuestKind::Container);
-        let container = Some(GuestKind::Container);
-        assert_eq!(of(&state), (container, GuestKind::Container.icon()));
-
-        let fish = Icon::new("My icons/Fish tank");
-        state.edit_selected(|d| d.icon = Some(fish.clone()));
-        state.set_guest_kind(GuestKind::VirtualMachine);
-        assert_eq!(of(&state), (vm, fish), "picked icon kept");
-
-        state.selected = Some(Selection::Device(PC));
-        state.set_guest_kind(GuestKind::Container);
-        assert_eq!(state.network.device(PC).unwrap().guest, None, "not a guest");
-    }
-
-    #[test]
-    fn a_hosts_guests_are_those_running_straight_on_it() {
-        let network = mock_data::network();
-        let icons = Icons::default();
-        let ids = |host| {
-            guest_views(&network, &icons, host)
-                .into_iter()
-                .map(|g| g.id)
-        };
-        let on_docker: Vec<i32> = network
-            .devices()
-            .iter()
-            .filter(|d| network.host(d.id) == Some(DOCKER_HOST))
-            .map(|d| convert::ui_id(d.id))
-            .collect();
-        assert!(!on_docker.is_empty());
-        assert_eq!(ids(DOCKER_HOST).collect::<Vec<_>>(), on_docker);
-        let on_linux_server: Vec<i32> = ids(network.host(DOCKER_HOST).unwrap()).collect();
-        assert!(on_linux_server.contains(&convert::ui_id(DOCKER_HOST)));
-        assert!(
-            on_docker.iter().all(|id| !on_linux_server.contains(id)),
-            "not the guests of its guests"
-        );
-        assert_eq!(ids(PC).count(), 0);
     }
 }

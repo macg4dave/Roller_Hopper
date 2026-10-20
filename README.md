@@ -34,7 +34,10 @@ src/model/         pure data and logic (devices with their network cards, virtua
                    containers; the map's tree of network cards, roles, groups,
                    layout) — no Slint imports
 src/mock_data.rs   the sample network
-src/ui_bridge/     model ↔ Slint conversion, callback handlers, map motion, reading the icon folder
+src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
+src/ui_bridge/     edit/ (device, card, port, role and group edits), map/ (layout, dragging,
+                   lines, motion), view/ (sending state to the UI), model ↔ Slint conversion,
+                   reading the icon folder, choosing the language
 ui/                .slint files: app window, panels, canvas, components/, theme
 ui/icons/          icons that are part of the UI (buttons, logo), compiled in
 icons/             device icons for the picker, read at run time (see above)

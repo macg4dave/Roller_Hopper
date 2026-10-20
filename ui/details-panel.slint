@@ -21,6 +21,11 @@ export component DetailsPanel inherits Rectangle {
         }
     }
 
+    // Opens the editor on the selected device, as the pencil does.
+    public function edit() {
+        editing = true;
+    }
+
     background: Theme.surface;
 
     Rectangle {

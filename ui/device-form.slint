@@ -1,19 +1,23 @@
-import { Button, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
+import { Button, ComboBox, TextEdit } from "std-widgets.slint";
 import { Bridge, GuestKind } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { ChildRow } from "components/child-row.slint";
 import { DetailField } from "components/detail-field.slint";
 import { IconChooser } from "components/icon-chooser.slint";
+import { TitleEdit } from "components/title-edit.slint";
 
 // The selected device's editable fields: icon, name, role, its network cards and guests with
 // adding more, notes, and forgetting it. Used on the edit page and in the details panel's edit
 // mode.
 export component DeviceForm inherits VerticalLayout {
-    // Forgetting asks first; a new selection drops the question.
+    // Forgetting asks first; a new selection drops the question, and a half-typed name.
     property <bool> confirm-forget;
     property <int> selected-id: Bridge.selected-id;
-    changed selected-id => { confirm-forget = false; }
+    changed selected-id => {
+        confirm-forget = false;
+        title.cancel();
+    }
 
     alignment: start;
     spacing: Theme.space-xs;
@@ -50,12 +54,11 @@ export component DeviceForm inherits VerticalLayout {
         VerticalLayout {
             alignment: center;
             spacing: Theme.space-xs;
-            Text {
-                text: Labels.device-name(Bridge.details.name);
-                font-size: Theme.font-title;
-                font-weight: 600;
-                color: Theme.text;
-                overflow: elide;
+            // The name is edited here, by clicking it.
+            title := TitleEdit {
+                name: Bridge.details.name;
+                shown: Labels.device-name(Bridge.details.name);
+                commit(text) => { Bridge.rename(text); }
             }
             if Bridge.cards.length > 0: Text {
                 text: Bridge.cards[0].ip;
@@ -65,13 +68,6 @@ export component DeviceForm inherits VerticalLayout {
         }
     }
 
-    DetailField {
-        label: @tr("details.name");
-        LineEdit {
-            text <=> Bridge.name-draft;
-            edited(text) => { Bridge.rename(text); }
-        }
-    }
     DetailField {
         label: @tr("details.role");
         // The role decides the icon the device is shown with. New roles are added in the role

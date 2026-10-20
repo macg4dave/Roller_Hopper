@@ -1,11 +1,11 @@
 //! Connection lines as SVG path commands, drawn in the colour and line style of the group of the
 //! device whose card each line hangs from.
 
-use super::convert;
 use crate::model::{
     CardId, Connection, ConnectionKind, Device, GroupColour, LineStyle, Network, Point, Positions,
 };
 use crate::ui;
+use crate::ui_bridge::convert;
 
 /// How far apart the zigzag and wavy styles swing to each side, and how far off the route,
 /// in map units.

@@ -1,14 +1,18 @@
 //! Connects the Slint UI to the model: pushes state into the `Bridge` global and handles the
 //! callbacks it raises. Rust owns the data; after every change the affected views are re-sent.
 //! Rust sends data rather than wording, so all user-visible text can be translated in Slint.
+//!
+//! This module owns the state, the selection and the list's search, filter and folding. The
+//! rest is split by area: [`edit`] handles editing, [`map`] the topology map, [`view`] sends
+//! the state to the UI, [`convert`] translates between model and UI types, and [`icons`] reads
+//! the icon folder.
 
-mod cards;
 mod convert;
+mod edit;
 mod i18n;
 mod icons;
-mod lines;
-mod motion;
-mod push;
+mod map;
+mod view;
 
 pub(crate) use i18n::select_language;
 
@@ -17,25 +21,19 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Timer, Weak};
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, CardId, Connection, Device, DeviceId, GroupId, GuestKind, Icon, Level, Network,
-    NetworkCard, Point, Positions, Role, Snap, StatusFilter, link_route, snap_target, tree_layout,
-    trunk,
+    Arrangement, CardId, Device, DeviceId, Network, NetworkCard, Positions, StatusFilter,
+    tree_layout,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
-use motion::Motion;
-use push::push;
+use map::Motion;
 
 /// How long the simulated scan pretends to take, so the refresh is visible.
 const SCAN_DURATION: Duration = Duration::from_millis(1500);
-/// What a network card dragged out of the lists carries, before its id.
-const CARD_PAYLOAD: &str = "network-mapper-card:";
-/// One frame of the map's motion, at about 60 frames a second.
-const FRAME: Duration = Duration::from_millis(16);
 
 /// What is selected: a device, picked in the lists, or one of its network cards, picked in
 /// the lists or on the map.
@@ -102,30 +100,6 @@ impl AppState {
         }
     }
 
-    /// The cards lit up on the map: the selected card, or every card of the selected device.
-    fn selected_cards(&self) -> Vec<CardId> {
-        match self.selected {
-            Some(Selection::Card(card)) => vec![card],
-            Some(Selection::Device(id)) => {
-                let cards = self
-                    .network
-                    .device(id)
-                    .map(|d| d.cards.iter().map(|c| c.id));
-                cards.into_iter().flatten().collect()
-            }
-            None => Vec::new(),
-        }
-    }
-
-    /// While a device is selected, the dotted ties between its cards as shown on the map.
-    fn ties(&self) -> Vec<[Point; 2]> {
-        let Some(Selection::Device(id)) = self.selected else {
-            return Vec::new();
-        };
-        let device = self.network.device(id);
-        device.map_or_else(Vec::new, |d| lines::ties(d, self.motion.shown()))
-    }
-
     /// Edits the selected card.
     fn edit_selected_card(&mut self, edit: impl FnOnce(&mut NetworkCard)) {
         if let Some(card) = self.selected_card().and_then(|c| self.network.card_mut(c)) {
@@ -143,253 +117,11 @@ impl AppState {
         }
     }
 
-    /// Gives device `id` its own icon: the selected device, or one of its guests from their row.
-    fn set_icon(&mut self, id: DeviceId, icon: Icon) {
-        if let Some(device) = self.network.device_mut(id) {
-            device.icon = Some(icon);
-        }
-    }
-
-    fn role(&self, index: usize) -> Option<Role> {
-        self.network.roles().into_iter().nth(index)
-    }
-
-    fn choose_role(&mut self, index: usize) {
-        if let Some(role) = self.role(index) {
-            self.edit_selected(|d| d.role = role);
-        }
-    }
-
-    /// Adds the role named `name`, shown with `icon`, unless it matches one of the roles `shown`
-    /// in the dropdown (which may be translated, so only the UI knows their names).
-    fn add_role(&mut self, name: &str, icon: Icon, shown: &[SharedString]) {
-        let lower = name.trim().to_lowercase();
-        if !shown.iter().any(|r| r.trim().to_lowercase() == lower) {
-            // A blank name adds nothing, which is what the user expects of it.
-            self.network.add_custom_role(name, icon);
-        }
-    }
-
-    /// Renames the role at `index`, unless `new` is the name of another role `shown` in the
-    /// dropdown, such as a translated standard role.
-    fn rename_role(&mut self, index: usize, new: &str, shown: &[SharedString]) {
-        let lower = new.trim().to_lowercase();
-        let clash = shown
-            .iter()
-            .enumerate()
-            .any(|(i, r)| i != index && r.trim().to_lowercase() == lower);
-        if !clash {
-            self.edit_role(index, |network, role| network.rename_role(role, new));
-        }
-    }
-
-    fn edit_role(&mut self, index: usize, edit: impl FnOnce(&mut Network, &Role)) {
-        if let Some(role) = self.role(index) {
-            edit(&mut self.network, &role);
-        }
-    }
-
-    fn group(&self, index: usize) -> Option<GroupId> {
-        self.network.groups().iter().nth(index).map(|(id, _)| id)
-    }
-
-    /// Puts the role at `index` in the group at `choice` in the group dropdown, where 0 is none.
-    fn set_role_group(&mut self, index: usize, choice: usize) {
-        let group = match choice.checked_sub(1) {
-            None => None,
-            Some(group) => match self.group(group) {
-                Some(id) => Some(id),
-                None => return,
-            },
-        };
-        self.edit_role(index, |network, role| network.set_role_group(role, group));
-    }
-
-    fn edit_group(&mut self, index: usize, edit: impl FnOnce(&mut Network, GroupId)) {
-        if let Some(group) = self.group(index) {
-            edit(&mut self.network, group);
-        }
-    }
-
-    /// Lists a port on the selected card. False if there is none, or the port number is refused
-    /// or already listed, so the UI can keep what was typed.
-    fn add_port(&mut self, port: &str, description: &str) -> bool {
-        let Some(port) = convert::port(port) else {
-            return false;
-        };
-        let mut added = false;
-        self.edit_selected_card(|c| added = c.services.add(port, description));
-        added
-    }
-
-    /// Forgets the selected device (or the device of the selected card), with what runs on it,
-    /// until restart, and lays the map out again without their cards.
-    fn forget_selected(&mut self) {
-        if let Some(id) = self.selected_device() {
-            self.selected = None;
-            self.network.remove_device(id);
-            self.lay_out_at_rest();
-        }
-    }
-
     /// Folds a device's group up in the lists, or opens it again.
     fn toggle_group(&mut self, id: DeviceId) {
         if !self.collapsed.remove(&id) {
             self.collapsed.insert(id);
         }
-    }
-
-    /// Drags card `id` so its icon is centred on `at`, on the map or from the lists. Ignored for
-    /// a card that is gone.
-    fn drag_to(&mut self, id: CardId, at: Point) {
-        if self.network.card(id).is_none() {
-            return;
-        }
-        self.positions.insert(id, at);
-        self.motion.place(id, at);
-        self.dragging = Some(id);
-    }
-
-    /// Ends a drag without dropping, as when a card from the lists is taken off the map again:
-    /// it glides back to its spot, plugged in where it was.
-    fn cancel_drag(&mut self) {
-        if self.dragging.take().is_some() {
-            self.lay_out();
-        }
-    }
-
-    /// Where the dragged card `id` would go if dropped now, judged by the map as shown: on the
-    /// trunk it is near, where it is on that trunk; `None` to stand alone.
-    fn snap(&self, id: CardId) -> Option<Snap> {
-        let shown = self.motion.shown();
-        let at = shown.get(&id).copied()?;
-        snap_target(&self.network, &self.arrangement, shown, id, at)
-    }
-
-    /// The trunk of every node as shown. A dragged branch's trunks are hidden until it is
-    /// dropped, and the other trunks do not stretch after it.
-    /// In node order, so the lines sent to the UI only change when the map does.
-    fn trunks(&self) -> Vec<(CardId, [Point; 2])> {
-        let shown = self.motion.shown();
-        let dragged = |id| self.dragging.is_some_and(|d| self.network.is_within(id, d));
-        let still: Positions = shown
-            .iter()
-            .filter(|&(&id, _)| !dragged(id))
-            .map(|(&id, &p)| (id, p))
-            .collect();
-        let ids = self.network.nodes().into_iter();
-        ids.filter_map(|id| Some((id, trunk(&self.network, &still, id)?)))
-            .collect()
-    }
-
-    /// The connections to draw: all but the dragged card's uplink, which [`Self::strand`]
-    /// stands in for.
-    /// Each runs along its route as shown, branching off its neighbour's line, with the dragged
-    /// device left out of the rows it was in.
-    fn links(&self) -> Vec<(Connection, [Point; 3])> {
-        let shown = self.motion.shown();
-        let inner = self
-            .arrangement
-            .inner_neighbours(&self.network, self.dragging);
-        let links = self.network.connections().into_iter();
-        links
-            .filter(|c| Some(c.downstream) != self.dragging)
-            .filter_map(|c| Some((c, link_route(shown, &inner, c.upstream, c.downstream)?)))
-            .collect()
-    }
-
-    /// While a device is dragged near a line, how it would join it.
-    fn strand(&self) -> Option<Snap> {
-        self.dragging.and_then(|id| self.snap(id))
-    }
-
-    /// Ends a drag: the device hangs from the trunk it was dropped on, where it was dropped, or
-    /// stands alone, and the map is laid out again around the change. The devices on the trunk
-    /// it joined bob as it settles in.
-    fn drop_dragged(&mut self) {
-        let Some(id) = self.dragging.take() else {
-            return;
-        };
-        let snap = self.snap(id);
-        self.network.connect(id, snap.map(|s| s.upstream));
-        match snap {
-            Some(snap) => {
-                let arrangement = &mut self.arrangement;
-                arrangement.place(&self.network, id, snap.upstream, snap.slot);
-                let others = self.network.behind(snap.upstream).filter(|&d| d != id);
-                self.motion.jiggle(others.chain([snap.upstream]));
-            }
-            None => self.arrangement.remove(id),
-        }
-        self.lay_out();
-    }
-
-    fn lay_out(&mut self) {
-        self.positions = tree_layout(&self.network, &self.arrangement);
-    }
-
-    /// Lays the map out again at rest: it is out of sight on the edit page, where the network
-    /// is edited.
-    fn lay_out_at_rest(&mut self) {
-        self.lay_out();
-        self.motion = Motion::new(self.positions.clone());
-    }
-
-    /// Back to the connections as found, laid out afresh with nothing the user arranged.
-    fn reset_layout(&mut self) {
-        self.network.restore_connections();
-        self.arrangement.clear();
-        self.lay_out();
-    }
-
-    /// Moves the map one frame on; true once everything has settled.
-    fn step_motion(&mut self) -> bool {
-        let dt = FRAME.as_secs_f32();
-        let strand = self.strand();
-        let targets = self.making_room(strand.as_ref());
-        self.motion.step(&targets, dt);
-        self.motion.step_strand(strand.as_ref(), dt);
-        self.motion.settled(&targets)
-    }
-
-    /// Where the motion takes each device: its spot in the layout, except that while a dragged
-    /// device is over a row it would join, the devices in that row move aside to make room
-    /// for it, each with what hangs behind it. Only the motion sees this; dropping lays out anew.
-    fn making_room(&self, snap: Option<&Snap>) -> Positions {
-        let mut targets = self.positions.clone();
-        let (Some(dragged), Some(snap)) = (self.dragging, snap) else {
-            return targets;
-        };
-        let (Level::Tier(index), Some(&pointer)) = (snap.slot.level, self.positions.get(&dragged))
-        else {
-            return targets;
-        };
-        let tiers = self
-            .arrangement
-            .tiers_without(&self.network, snap.upstream, dragged);
-        let Some(row) = tiers.get(index) else {
-            return targets;
-        };
-        // The row's devices on each side of the pointer, nearest first.
-        let mut beside: Vec<(CardId, f32)> = row
-            .devices()
-            .filter_map(|id| Some((id, self.positions.get(&id)?.x - pointer.x)))
-            .collect();
-        beside.sort_by(|a, b| a.1.abs().total_cmp(&b.1.abs()));
-        let (left, right): (Vec<_>, Vec<_>) = beside.into_iter().partition(|&(_, dx)| dx < 0.0);
-        let away = |side: Vec<(CardId, f32)>, sign: f32| {
-            let parted = side.into_iter().zip(motion::PARTING);
-            parted.map(move |((id, _), shift)| (id, sign * shift))
-        };
-        for (neighbour, shift) in away(left, -1.0).chain(away(right, 1.0)) {
-            let branch = targets.iter_mut().filter(|&(&id, _)| {
-                self.network.is_within(id, neighbour) && !self.network.is_within(id, dragged)
-            });
-            for (_, at) in branch {
-                at.x += shift;
-            }
-        }
-        targets
     }
 
     fn finish_scan(&mut self) {
@@ -419,14 +151,10 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_set_filter(handler(ui, state, |st, f| {
         st.filter = convert::filter_from_ui(f);
     }));
-    connect_device_edits(ui, state);
-    connect_port_edits(ui, state);
-    cards::connect_child_edits(ui, state);
-    connect_role_edits(ui, state);
-    connect_group_edits(ui, state);
+    edit::connect(ui, state);
+    map::connect(ui, state);
     let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
-    bridge.on_refresh_icons(move || refresh_icons(&icons_ui, &icons_state));
-    connect_map(ui, state);
+    bridge.on_refresh_icons(move || icons::refresh(&icons_ui, &icons_state));
 
     let start_scan = handler(ui, state, |st, ()| st.scanning = true);
     let finish_scan = Rc::new(handler(ui, state, |st, ()| st.finish_scan()));
@@ -436,237 +164,8 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         Timer::single_shot(SCAN_DURATION, move || finish_scan(()));
     });
 
-    // The style previews never change, so they are sent once.
-    bridge.set_line_styles(ModelRc::new(VecModel::from(lines::samples())));
     // Shows the initial state, with the icons.
-    refresh_icons(&ui.as_weak(), state);
-}
-
-/// Dragging (on the map or from the lists), dropping, cancelling and resetting, each followed
-/// by the motion that settles it.
-fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
-    let bridge = ui.global::<Bridge<'_>>();
-    let timer = Rc::new(Timer::default());
-    let settle = {
-        let (ui, state) = (ui.as_weak(), Rc::clone(state));
-        Rc::new(move || animate(&ui, &state, &timer))
-    };
-
-    let reset = handler(ui, state, |st, ()| st.reset_layout());
-    let reset_settle = Rc::clone(&settle);
-    bridge.on_reset_layout(move || {
-        reset(());
-        reset_settle();
-    });
-    // A card is dragged the same way on the map and from the lists. While dragging, the strand
-    // swings after the pointer.
-    let move_card = handler(ui, state, |st, (id, x, y)| {
-        if let Some(card) = convert::card_id(id) {
-            st.drag_to(card, Point { x, y });
-        }
-    });
-    let move_settle = Rc::clone(&settle);
-    bridge.on_move_card(move |id, x, y| {
-        move_card((id, x, y));
-        move_settle();
-    });
-    let drop_card = handler(ui, state, |st, ()| st.drop_dragged());
-    let drop_settle = Rc::clone(&settle);
-    bridge.on_drop_card(move || {
-        drop_card(());
-        drop_settle();
-    });
-    let cancel = handler(ui, state, |st, ()| st.cancel_drag());
-    bridge.on_cancel_drag(move || {
-        cancel(());
-        settle();
-    });
-
-    // A card dragged out of the lists carries its id as text, as Slint's drag payload is
-    // opaque to Slint code. The prefix keeps text dragged in from other apps from passing for
-    // a card.
-    bridge.on_card_transfer(|id| SharedString::from(card_payload(id)).into());
-    bridge.on_transfer_card(|data| {
-        let text = data.plain_text().unwrap_or_default();
-        payload_card(&text).unwrap_or(-1)
-    });
-}
-
-/// The drag payload of the card with UI id `id`.
-fn card_payload(id: i32) -> String {
-    format!("{CARD_PAYLOAD}{id}")
-}
-
-/// The UI id of the card a drag payload carries; `None` for anything else.
-fn payload_card(text: &str) -> Option<i32> {
-    text.strip_prefix(CARD_PAYLOAD)?.parse().ok()
-}
-
-/// Steps the map's motion every frame until everything has settled (or the window closed).
-fn animate(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, timer: &Rc<Timer>) {
-    if timer.running() {
-        return;
-    }
-    let (ui, state, this) = (ui.clone(), Rc::clone(state), Rc::downgrade(timer));
-    timer.start(TimerMode::Repeated, FRAME, move || {
-        let mut settled = true;
-        update(&ui, &state, |st| settled = st.step_motion());
-        if let Some(running) = this.upgrade().filter(|_| settled) {
-            running.stop();
-        }
-    });
-}
-
-/// Name, notes, role, icon and forgetting, for the selected device.
-fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
-    let bridge = ui.global::<Bridge<'_>>();
-    bridge.on_rename(handler(ui, state, |st, name: SharedString| {
-        st.edit_selected(|d| d.name = name.into());
-    }));
-    bridge.on_edit_notes(handler(ui, state, |st, notes: SharedString| {
-        st.edit_selected(|d| d.notes = notes.into());
-    }));
-    bridge.on_choose_role(handler(ui, state, |st, index| {
-        st.choose_role(convert::index(index));
-    }));
-    let set_icon = handler(ui, state, |st, (id, icon): (i32, SharedString)| {
-        if let Some(id) = convert::device_id(id) {
-            st.set_icon(id, convert::icon_from_ui(&icon));
-        }
-    });
-    bridge.on_set_icon(move |id, icon| set_icon((id, icon)));
-    let reset_icon = handler(ui, state, |st, ()| st.edit_selected(|d| d.icon = None));
-    bridge.on_reset_icon(move || reset_icon(()));
-    let forget = handler(ui, state, |st, ()| st.forget_selected());
-    bridge.on_forget(move || forget(()));
-}
-
-/// Adding, renumbering, describing and removing the selected card's open ports.
-fn connect_port_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
-    let bridge = ui.global::<Bridge<'_>>();
-    let (add_ui, add_state) = (ui.as_weak(), Rc::clone(state));
-    bridge.on_add_port(move |port, description| {
-        let mut added = false;
-        update(&add_ui, &add_state, |st| {
-            added = st.add_port(&port, &description);
-        });
-        added
-    });
-    let renumber = handler(ui, state, |st, (index, port): (i32, SharedString)| {
-        if let Some(port) = convert::port(&port) {
-            st.edit_selected_card(|c| c.services.set_port(convert::index(index), port));
-        }
-    });
-    bridge.on_set_port_number(move |index, port| renumber((index, port)));
-    let describe = handler(ui, state, |st, (index, text): (i32, SharedString)| {
-        st.edit_selected_card(|c| c.services.set_description(convert::index(index), &text));
-    });
-    bridge.on_set_port_description(move |index, text| describe((index, text)));
-    bridge.on_remove_port(handler(ui, state, |st, index| {
-        st.edit_selected_card(|c| c.services.remove(convert::index(index)));
-    }));
-}
-
-/// A new role's name and icon, with the role names the dropdown shows.
-type NewRole = (SharedString, Icon, Vec<SharedString>);
-
-/// The role list: adding, renaming, re-iconing, deleting and restoring roles.
-fn connect_role_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
-    let bridge = ui.global::<Bridge<'_>>();
-    let add = handler(ui, state, |st, (name, icon, shown): NewRole| {
-        st.add_role(&name, icon, &shown);
-    });
-    let add_ui = ui.as_weak();
-    bridge.on_add_role(move |name, icon| {
-        add((name, convert::icon_from_ui(&icon), shown_roles(&add_ui)));
-    });
-    let rename = handler(
-        ui,
-        state,
-        |st, (index, new, shown): (i32, SharedString, Vec<SharedString>)| {
-            st.rename_role(convert::index(index), &new, &shown);
-        },
-    );
-    let rename_ui = ui.as_weak();
-    bridge.on_rename_role(move |index, new| rename((index, new, shown_roles(&rename_ui))));
-    let set_icon = Rc::new(handler(
-        ui,
-        state,
-        |st, (index, icon): (i32, Option<Icon>)| {
-            st.edit_role(convert::index(index), |n, role| n.set_role_icon(role, icon));
-        },
-    ));
-    let clear_icon = Rc::clone(&set_icon);
-    bridge.on_set_role_icon(move |index, icon| {
-        set_icon((index, Some(convert::icon_from_ui(&icon))));
-    });
-    bridge.on_clear_role_icon(move |index| clear_icon((index, None)));
-    bridge.on_delete_role(handler(ui, state, |st, index| {
-        st.edit_role(convert::index(index), Network::remove_role);
-    }));
-    let restore = handler(ui, state, |st, ()| st.network.restore_standard_roles());
-    bridge.on_restore_roles(move || restore(()));
-}
-
-/// The group list, and choosing a role's group in the role list.
-fn connect_group_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
-    let bridge = ui.global::<Bridge<'_>>();
-    let set_group = handler(ui, state, |st, (role, choice)| {
-        st.set_role_group(convert::index(role), convert::index(choice));
-    });
-    bridge.on_set_role_group(move |role, choice| set_group((role, choice)));
-    bridge.on_add_group(handler(ui, state, |st, name: SharedString| {
-        st.network.add_group(&name);
-    }));
-    let rename = handler(ui, state, |st, (index, new): (i32, SharedString)| {
-        st.edit_group(convert::index(index), |n, group| {
-            n.rename_group(group, &new);
-        });
-    });
-    bridge.on_rename_group(move |index, new| rename((index, new)));
-    let set_colour = handler(ui, state, |st, (index, colour)| {
-        let colour = convert::colour_from_ui(colour);
-        st.edit_group(convert::index(index), |n, group| {
-            n.set_group_colour(group, colour);
-        });
-    });
-    bridge.on_set_group_colour(move |index, colour| set_colour((index, colour)));
-    let set_style = handler(ui, state, |st, (index, choice)| {
-        let Some(style) = convert::line_style_from_ui(choice) else {
-            return;
-        };
-        st.edit_group(convert::index(index), |n, group| {
-            n.set_group_line_style(group, style);
-        });
-    });
-    bridge.on_set_group_line_style(move |index, choice| set_style((index, choice)));
-    bridge.on_delete_group(handler(ui, state, |st, index| {
-        st.edit_group(convert::index(index), Network::remove_group);
-    }));
-}
-
-/// Reads the icon folder again and shows what is in it now. The picker's list is sent only
-/// here, not on every change, so it is not rebuilt while the user scrolls it.
-fn refresh_icons(ui: &Weak<AppWindow>, state: &RefCell<AppState>) {
-    update(ui, state, |st| st.icons = Icons::load(&icons::folder()));
-    if let Some(ui) = ui.upgrade() {
-        let icons = &state.borrow().icons;
-        let bridge = ui.global::<Bridge<'_>>();
-        bridge.set_icons(ModelRc::new(VecModel::from(icons.groups())));
-        // Where the icons new cards and guests start with live, wherever the user has put
-        // those folders.
-        let card_icons = icons.choice(&Icon::new(NetworkCard::DEFAULT_ICON)).group;
-        bridge.set_card_icon_category(card_icons);
-        let guest_icons = icons.choice(&GuestKind::VirtualMachine.icon()).group;
-        bridge.set_guest_icon_category(guest_icons);
-    }
-}
-
-/// The role names in the dropdown, as the UI shows them (standard ones translated).
-fn shown_roles(ui: &Weak<AppWindow>) -> Vec<SharedString> {
-    ui.upgrade()
-        .map(|window| window.global::<Bridge<'_>>().get_roles().iter().collect())
-        .unwrap_or_default()
+    icons::refresh(&ui.as_weak(), state);
 }
 
 /// A callback that applies `change` with the callback's argument, then refreshes the window.
@@ -683,392 +182,36 @@ fn handler<A>(
 fn update(ui: &Weak<AppWindow>, state: &RefCell<AppState>, change: impl FnOnce(&mut AppState)) {
     let Some(ui) = ui.upgrade() else { return };
     change(&mut state.borrow_mut());
-    push(&ui, &state.borrow());
+    view::push(&ui, &state.borrow());
+}
+
+/// Shared by the tests of every area.
+#[cfg(test)]
+impl AppState {
+    /// The sample network with the device `id` selected.
+    fn with_selected(id: u32) -> Self {
+        let mut state = Self::new(mock_data::network());
+        state.selected = Some(Selection::Device(DeviceId(id)));
+        state
+    }
+
+    fn selected_role(&self) -> Option<crate::model::Role> {
+        let device = self
+            .selected_device()
+            .and_then(|id| self.network.device(id));
+        device.map(|d| d.role.clone())
+    }
+
+    /// Where a role sits in the role dropdown.
+    fn role_index(&self, role: &crate::model::Role) -> usize {
+        let roles = self.network.roles();
+        roles.iter().position(|r| r == role).unwrap()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The router's LAN card, which the home network hangs from.
-    const ROUTER_LAN: CardId = CardId(1);
-
-    fn state_with(selected: u32) -> AppState {
-        let mut state = AppState::new(mock_data::network());
-        state.selected = Some(Selection::Device(DeviceId(selected)));
-        state
-    }
-
-    fn selected_role(state: &AppState) -> Option<Role> {
-        state
-            .selected_device()
-            .and_then(|id| state.network.device(id))
-            .map(|d| d.role.clone())
-    }
-
-    #[test]
-    fn choosing_a_role_by_index_assigns_it_to_the_selection() {
-        let mut state = state_with(5);
-        state.choose_role(0);
-        assert_eq!(selected_role(&state), Some(Role::Router));
-        state.choose_role(999);
-        assert_eq!(
-            selected_role(&state),
-            Some(Role::Router),
-            "out of range is ignored"
-        );
-    }
-
-    /// Role names as the dropdown would show them in some language.
-    fn shown_roles(state: &AppState) -> Vec<SharedString> {
-        let standard = [
-            "Routeur",
-            "Commutateur",
-            "Point d'accès",
-            "Serveur",
-            "NAS",
-            "Bureau",
-        ];
-        let rest = [
-            "Portable",
-            "Téléphone",
-            "Imprimante",
-            "Caméra",
-            "IoT",
-            "Autre",
-        ];
-        let custom = state.network.roles().into_iter().filter_map(|r| {
-            if let Role::Custom(name) = r {
-                Some(name.into())
-            } else {
-                None
-            }
-        });
-        standard
-            .into_iter()
-            .chain(rest)
-            .map(SharedString::from)
-            .chain(custom)
-            .collect()
-    }
-
-    #[test]
-    fn adding_a_role_that_is_already_shown_adds_nothing() {
-        let mut state = state_with(10);
-        let shown = shown_roles(&state);
-        let before = state.network.clone();
-        state.add_role(" serveur ", Icon::new("Entertainment/Smart TV"), &shown);
-        assert_eq!(state.network, before);
-    }
-
-    #[test]
-    fn a_new_role_comes_last_with_its_icon() {
-        let mut state = state_with(10);
-        let shown = shown_roles(&state);
-        let media = Role::Custom("Media".into());
-        let server = Icon::new("Computers/Server");
-        state.add_role("Media", server.clone(), &shown);
-        assert_eq!(state.network.roles().last(), Some(&media));
-        assert_eq!(state.network.role_icon(&media), Some(&server));
-        assert_eq!(
-            selected_role(&state),
-            Some(Role::Custom("TV".into())),
-            "unchanged"
-        );
-    }
-
-    /// Where a role sits in the dropdown.
-    fn index_of(state: &AppState, role: &Role) -> usize {
-        state
-            .network
-            .roles()
-            .iter()
-            .position(|r| r == role)
-            .unwrap()
-    }
-
-    #[test]
-    fn a_role_cannot_take_the_name_of_another_shown_role() {
-        let mut state = state_with(10);
-        let shown = shown_roles(&state);
-        let tv = index_of(&state, &Role::Custom("TV".into()));
-        state.rename_role(tv, "imprimante", &shown);
-        assert_eq!(selected_role(&state), Some(Role::Custom("TV".into())));
-        state.rename_role(tv, "tv", &shown);
-        assert_eq!(
-            selected_role(&state),
-            Some(Role::Custom("tv".into())),
-            "own name"
-        );
-        let router = index_of(&state, &Role::Router);
-        state.rename_role(router, "Serveur", &shown);
-        assert_eq!(state.network.role_name(&Role::Router), None);
-        state.rename_role(router, "Passerelle", &shown);
-        assert_eq!(state.network.role_name(&Role::Router), Some("Passerelle"));
-    }
-
-    #[test]
-    fn role_edits_out_of_range_change_nothing() {
-        let mut state = AppState::new(mock_data::network());
-        let before = state.network.clone();
-        state.edit_role(999, Network::remove_role);
-        state.rename_role(999, "Anything", &[]);
-        assert_eq!(state.network, before);
-    }
-
-    #[test]
-    fn a_role_is_put_in_a_group_by_dropdown_choice() {
-        let mut state = AppState::new(mock_data::network());
-        let printer = index_of(&state, &Role::Printer);
-        let third = state.group(2);
-        assert!(third.is_some());
-        assert_ne!(state.network.role_group(&Role::Printer), third);
-        state.set_role_group(printer, 3);
-        assert_eq!(state.network.role_group(&Role::Printer), third);
-        state.set_role_group(printer, 999);
-        assert_eq!(
-            state.network.role_group(&Role::Printer),
-            third,
-            "out of range"
-        );
-        state.set_role_group(printer, 0);
-        assert_eq!(state.network.role_group(&Role::Printer), None);
-    }
-
-    #[test]
-    fn deleting_a_group_leaves_its_roles_in_none() {
-        let mut state = AppState::new(mock_data::network());
-        let printer = index_of(&state, &Role::Printer);
-        state.set_role_group(printer, 1);
-        state.edit_group(0, Network::remove_group);
-        assert_eq!(state.network.role_group(&Role::Printer), None);
-        assert!(
-            state
-                .network
-                .groups()
-                .iter()
-                .all(|(_, n)| n != "Network core")
-        );
-    }
-
-    #[test]
-    fn a_port_is_added_to_the_selection_only_with_a_valid_number() {
-        let mut state = AppState::new(mock_data::network());
-        assert!(!state.add_port("8080", "Web"), "nothing selected");
-        state.selected = Some(Selection::Device(DeviceId(10)));
-        assert!(
-            !state.add_port("8080", "Web"),
-            "a device has no ports of its own"
-        );
-        state.selected = Some(Selection::Card(CardId(10)));
-        assert!(!state.add_port("70000", "Web"));
-        assert!(state.add_port(" 8080 ", "Web"));
-        assert!(!state.add_port("8080", "Again"), "already listed");
-        let card = state
-            .network
-            .card(CardId(10))
-            .map(|c| c.services.to_string());
-        assert_eq!(card.as_deref(), Some("8001 (SmartView), 8080 (Web)"));
-    }
-
-    #[test]
-    fn a_guests_card_dragged_away_is_unplugged_like_any_other() {
-        let mut state = AppState::new(mock_data::network());
-        let docker_host = CardId(19);
-        let far = Point {
-            x: -1000.0,
-            y: -1000.0,
-        };
-        state.drag_to(docker_host, far);
-        state.drop_dragged();
-        assert!(state.network.uplink(docker_host).is_none());
-        assert_eq!(
-            state.positions,
-            tree_layout(&state.network, &state.arrangement)
-        );
-    }
-
-    #[test]
-    fn forgetting_clears_the_selection_and_the_places_of_the_device_and_its_guests() {
-        let mut state = state_with(19);
-        state.forget_selected();
-        assert_eq!(state.selected, None);
-        for gone in [19, 24, 25] {
-            assert!(state.network.device(DeviceId(gone)).is_none(), "{gone}");
-            assert!(!state.positions.contains_key(&CardId(gone)), "{gone}");
-        }
-        assert!(!state.positions.contains_key(&CardId(100)), "its lab card");
-    }
-
-    #[test]
-    fn a_row_makes_room_for_a_device_dragged_over_it_and_closes_after() {
-        let mut state = AppState::new(mock_data::network());
-        let (switch, access_point, nas, pc) = (CardId(2), CardId(3), CardId(4), CardId(5));
-        let laid_out = state.positions.clone();
-        let between = Point {
-            x: f32::midpoint(laid_out[&switch].x, laid_out[&access_point].x),
-            y: laid_out[&switch].y,
-        };
-        state.drag_to(nas, between);
-        for _ in 0..60 {
-            state.step_motion();
-        }
-        let moved = |st: &AppState, id| st.motion.shown()[&id].x - laid_out[&id].x;
-        assert!(moved(&state, switch) < -1.0, "the switch moves left");
-        assert!(moved(&state, access_point) > 1.0, "the access point right");
-        assert!(
-            (moved(&state, pc) - moved(&state, switch)).abs() < 0.5,
-            "with what hangs behind it"
-        );
-        assert_eq!(
-            state.motion.shown()[&nas],
-            between,
-            "the dragged one stays put"
-        );
-
-        // Far from every line, the row closes up again.
-        state.drag_to(
-            nas,
-            Point {
-                x: -5000.0,
-                y: -5000.0,
-            },
-        );
-        assert!((0..600).any(|_| state.step_motion()));
-        assert!(moved(&state, switch).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn a_dropped_device_joins_the_line_it_was_previewing_on() {
-        let mut state = AppState::new(mock_data::network());
-        // The NAS hangs left of the router's LAN trunk; the switch and access point to its right.
-        let (router, switch, access_point, nas) = (ROUTER_LAN, CardId(2), CardId(3), CardId(4));
-        state.drop_dragged();
-        assert_eq!(
-            state.positions,
-            tree_layout(&state.network, &state.arrangement),
-            "no drag, no change"
-        );
-
-        // Dropped between the main switch and the access point.
-        let x = |shown: &AppState, id| shown.positions[&id].x;
-        let gap = |shown: &AppState| x(shown, access_point) - x(shown, switch);
-        let gap_before = gap(&state);
-        let between = Point {
-            x: f32::midpoint(x(&state, switch), x(&state, access_point)),
-            y: state.positions[&switch].y,
-        };
-        state.drag_to(nas, between);
-        assert!(
-            state.links().iter().all(|(c, _)| c.downstream != nas),
-            "old line hidden"
-        );
-        assert!(state.strand().is_some());
-
-        state.drop_dragged();
-        assert_eq!(state.dragging, None);
-        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(router));
-        assert_eq!(
-            state.positions,
-            tree_layout(&state.network, &state.arrangement),
-            "tidied again"
-        );
-        assert!(x(&state, switch) < x(&state, nas) && x(&state, nas) < x(&state, access_point));
-        assert!(gap(&state) > gap_before, "pushed apart");
-
-        assert!(!state.step_motion(), "glides into place");
-        assert!((0..600).any(|_| state.step_motion()), "and settles");
-        assert_eq!(state.motion.shown(), &state.positions);
-    }
-
-    #[test]
-    fn a_device_dropped_far_from_every_line_stands_alone() {
-        let mut state = AppState::new(mock_data::network());
-        let pc = CardId(5);
-        state.drag_to(
-            pc,
-            Point {
-                x: -1000.0,
-                y: -1000.0,
-            },
-        );
-        assert!(state.links().iter().all(|(c, _)| c.downstream != pc));
-        assert_eq!(state.strand(), None);
-        state.drop_dragged();
-        assert!(state.network.uplink(pc).is_none());
-    }
-
-    #[test]
-    fn a_device_dropped_on_a_trunk_below_a_row_hangs_below_it_until_reset() {
-        let mut state = AppState::new(mock_data::network());
-        let (router, switch, nas) = (ROUTER_LAN, CardId(2), CardId(4));
-        let lowest_of_switch_row = |shown: &AppState| {
-            let behind = shown.network.behind(switch).filter(|&d| d != nas);
-            behind
-                .map(|d| shown.positions[&d].y)
-                .fold(f32::MIN, f32::max)
-        };
-        let row = lowest_of_switch_row(&state);
-
-        // Just left of the switch's trunk, below its row.
-        let below_left = Point {
-            x: state.positions[&switch].x - 10.0,
-            y: row + 90.0,
-        };
-        state.drag_to(nas, below_left);
-        state.drop_dragged();
-        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(switch));
-        assert!(state.positions[&nas].y > lowest_of_switch_row(&state));
-        assert!(state.positions[&nas].x < state.positions[&switch].x);
-        assert!(
-            state.trunks().iter().any(|(id, _)| *id == nas),
-            "with a trunk of its own"
-        );
-
-        state.reset_layout();
-        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(router));
-        assert_eq!(state.arrangement, Arrangement::default());
-    }
-
-    #[test]
-    fn a_selected_card_lights_up_alone_and_a_selected_device_ties_its_cards() {
-        let mut state = AppState::new(mock_data::network());
-        state.selected = Some(Selection::Card(CardId(101)));
-        assert_eq!(state.selected_device(), Some(DeviceId(1)));
-        assert_eq!(state.selected_cards(), [CardId(101)]);
-        assert!(state.ties().is_empty());
-        state.edit_selected(|d| d.name = "Gateway".into());
-        assert_eq!(
-            state.network.device(DeviceId(1)).map(|d| d.name.as_str()),
-            Some("Gateway"),
-            "edits go to its device"
-        );
-        state.selected = Some(Selection::Device(DeviceId(1)));
-        assert_eq!(state.selected_cards(), [CardId(1), CardId(101)]);
-        assert_eq!(state.ties().len(), 1, "LAN to WAN");
-        state.selected = Some(Selection::Device(DeviceId(5)));
-        assert!(state.ties().is_empty(), "the PC has one card");
-    }
-
-    #[test]
-    fn a_card_dropped_on_another_trunk_is_plugged_in_there() {
-        let mut state = AppState::new(mock_data::network());
-        let (lab_card, lab_pi) = (CardId(100), CardId(23));
-        let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
-        state.drag_to(
-            lab_card,
-            Point {
-                y: root.y + 20.0,
-                ..root
-            },
-        );
-        state.drop_dragged();
-        assert_eq!(
-            state.network.uplink(lab_card).map(|c| c.upstream),
-            Some(lab_pi)
-        );
-        assert!(state.positions[&lab_card].y > state.positions[&lab_pi].y);
-    }
 
     #[test]
     fn a_group_folds_up_and_opens_again() {
@@ -1077,84 +220,6 @@ mod tests {
         assert!(state.collapsed.contains(&DeviceId(1)));
         state.toggle_group(DeviceId(1));
         assert!(state.collapsed.is_empty());
-    }
-
-    #[test]
-    fn a_guest_held_over_a_line_from_the_list_previews_it_and_goes_back_if_taken_off() {
-        let mut state = AppState::new(mock_data::network());
-        // A container's first card has the container's id, like every sample device's.
-        let (container, lab_pi) = (CardId(24), CardId(23));
-        let host = state.network.uplink(container).map(|c| c.upstream);
-        let laid_out = state.positions.clone();
-        let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
-        let on_root = Point {
-            y: root.y + 20.0,
-            ..root
-        };
-        state.drag_to(container, on_root);
-        assert_eq!(
-            state.strand().map(|s| s.upstream),
-            Some(lab_pi),
-            "previewed"
-        );
-
-        state.cancel_drag();
-        assert_eq!(state.dragging, None);
-        assert_eq!(state.network.uplink(container).map(|c| c.upstream), host);
-        assert_eq!(state.positions, laid_out, "back in its spot");
-        assert!((0..600).any(|_| state.step_motion()), "and glides there");
-
-        state.drag_to(container, on_root);
-        state.drop_dragged();
-        let plugged = state.network.uplink(container).map(|c| c.upstream);
-        assert_eq!(plugged, Some(lab_pi), "dropped where previewed");
-    }
-
-    #[test]
-    fn only_a_card_that_exists_can_be_dragged_and_cancelling_nothing_changes_nothing() {
-        let mut state = AppState::new(mock_data::network());
-        state.drag_to(CardId(999), Point::default());
-        assert_eq!(state.dragging, None);
-        let laid_out = state.positions.clone();
-        state.cancel_drag();
-        assert_eq!(state.positions, laid_out);
-    }
-
-    #[test]
-    fn a_drag_payload_carries_a_card_and_nothing_else() {
-        assert_eq!(payload_card(&card_payload(42)), Some(42));
-        assert_eq!(payload_card("42"), None, "text from another app");
-        assert_eq!(payload_card(&format!("{CARD_PAYLOAD}x")), None);
-    }
-
-    #[test]
-    fn a_guest_takes_its_own_icon_while_its_host_stays_selected() {
-        let mut state = state_with(19);
-        let web_server = DeviceId(24);
-        let lamp = Icon::new("Smart home/Smart light");
-        let icon_of = |st: &AppState, id| st.network.device(id).and_then(|d| d.icon.clone());
-        let host_icon = icon_of(&state, DeviceId(19));
-        state.set_icon(web_server, lamp.clone());
-        assert_eq!(icon_of(&state, web_server), Some(lamp));
-        assert_eq!(
-            icon_of(&state, DeviceId(19)),
-            host_icon,
-            "the host keeps its own"
-        );
-        assert_eq!(state.selected, Some(Selection::Device(DeviceId(19))));
-        let before = state.network.clone();
-        state.set_icon(DeviceId(999), Icon::new("Network/Router"));
-        assert_eq!(state.network, before, "no such device");
-    }
-
-    #[test]
-    fn edits_without_a_selection_change_nothing() {
-        let mut state = AppState::new(mock_data::network());
-        let before = state.network.clone();
-        state.edit_selected(|d| d.name = "Changed".into());
-        state.add_role("Media", Icon::new("Entertainment/Smart TV"), &[]);
-        state.forget_selected();
-        assert_eq!(state.network.devices(), before.devices());
     }
 
     #[test]

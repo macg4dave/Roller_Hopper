@@ -3,13 +3,15 @@ import { Bridge, DeviceView, StatusFilter } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
 
-// Left panel: search, the way to the edit page, All / Online / Offline filters and the
-// matching devices, each with its network cards.
+// Left panel: search, the way to the edit page, All / Online / Offline filters, the matching
+// devices, each with its network cards, and a button to add a device.
 export component DeviceList inherits Rectangle {
     // A device was double-clicked: bring it into view on the map.
     callback show-on-map(DeviceView);
     // Opens the edit page.
     callback edit();
+    // The add button under the list was clicked: a new device is wanted.
+    callback add();
 
     background: Theme.surface;
 
@@ -61,6 +63,16 @@ export component DeviceList inherits Rectangle {
             for device in Bridge.list: DeviceRow {
                 device: device;
                 double-clicked => { root.show-on-map(device); }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                icon: @image-url("icons/plus.svg");
+                colorize-icon: true;
+                accessible-label: @tr("list.add-device");
+                clicked => { root.add(); }
             }
         }
     }

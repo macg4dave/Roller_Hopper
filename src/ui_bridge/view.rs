@@ -1,8 +1,12 @@
-//! Sends the state to the window's `Bridge` global after every change.
+//! Sends the state to the window's `Bridge` global after every change: the lists, the roles and
+//! groups, the selection and its network cards. The map sends its own part (see
+//! [`super::map::push`]); the network cards' views are built in [`cards`].
+
+mod cards;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use super::{AppState, cards, convert, lines};
+use super::{AppState, convert, map};
 use crate::model::{CardId, Device, Network, Role, StatusFilter};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
@@ -20,7 +24,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     if let Some(model) = sync(&bridge.get_nodes(), views.nodes()) {
         bridge.set_nodes(model);
     }
-    push_map(&bridge, state);
+    map::push(&bridge, state);
     let list = views.rows(network.filtered(state.filter, &state.query));
     if let Some(model) = sync(&bridge.get_list(), list) {
         bridge.set_list(model);
@@ -104,41 +108,6 @@ impl Views<'_> {
     }
 }
 
-/// Where each card is drawn right now, the lines between them, and the area they take up.
-fn push_map(bridge: &Bridge<'_>, state: &AppState) {
-    let on_map = state.motion.shown();
-    let trunks = state.trunks();
-    let places = state.network.nodes().into_iter().map(|node| {
-        let at = on_map.get(&node).copied().unwrap_or_default();
-        let root = trunks
-            .iter()
-            .find(|(id, _)| *id == node)
-            .map(|(_, [_, root])| root);
-        ui::NodePlace {
-            x: at.x,
-            y: at.y,
-            has_root: root.is_some(),
-            root_y: root.map_or(0.0, |r| r.y),
-        }
-    });
-    if let Some(model) = sync(&bridge.get_places(), places.collect()) {
-        bridge.set_places(model);
-    }
-
-    let lit = state
-        .dragging
-        .map_or_else(|| state.selected_cards(), |card| vec![card]);
-    let lines = lines::lines(&state.network, &state.links(), &trunks, &lit, &state.ties());
-    bridge.set_strand(convert::strand(
-        state.strand().as_ref(),
-        state.motion.bend(),
-    ));
-    if let Some(model) = sync(&bridge.get_lines(), lines) {
-        bridge.set_lines(model);
-    }
-    bridge.set_bounds(convert::bounds(on_map.values().copied()));
-}
-
 /// The role dropdown's names, the role list's rows and the groups they can be in.
 fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let network = &state.network;
@@ -180,9 +149,9 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         .and_then(|id| state.network.device(id));
     let id = selected.map_or(-1, |d| convert::ui_id(d.id));
     if let Some(device) = selected {
-        // Edit buffers are reset only when the selection changes, so typing is never disturbed.
+        // The notes buffer is reset only when the selection changes, so typing is never
+        // disturbed.
         if bridge.get_selected_id() != id {
-            bridge.set_name_draft(device.name.as_str().into());
             bridge.set_notes_draft(device.notes.as_str().into());
         }
         let role = convert::role_label(labels, &state.network, &device.role);
@@ -240,7 +209,10 @@ fn count(network: &Network, filter: StatusFilter) -> i32 {
 
 /// Updates a `VecModel` in place, touching only rows that changed. Returns a new model to set
 /// when the property does not hold a `VecModel` yet (its initial empty value).
-fn sync<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, rows: Vec<T>) -> Option<ModelRc<T>> {
+pub(super) fn sync<T: Clone + PartialEq + 'static>(
+    model: &ModelRc<T>,
+    rows: Vec<T>,
+) -> Option<ModelRc<T>> {
     let Some(vec) = model.as_any().downcast_ref::<VecModel<T>>() else {
         return Some(ModelRc::new(VecModel::from(rows)));
     };

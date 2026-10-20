@@ -1,0 +1,53 @@
+import { Theme } from "../theme.slint";
+import { NameEdit } from "name-edit.slint";
+
+// A heading edited in place. A light box around it shows it can be changed; clicking it turns
+// it into a name field, which is kept on Enter or when it loses focus.
+export component TitleEdit inherits Rectangle {
+    // The name as stored, which may be blank, and as shown in the heading.
+    in property <string> name;
+    in property <string> shown;
+    callback commit(string);
+    property <bool> editing;
+
+    // Back to the heading without keeping what was typed.
+    public function cancel() {
+        editing = false;
+    }
+
+    min-height: 36px;
+    border-radius: Theme.radius;
+    border-width: editing ? 0 : 1px;
+    border-color: touch.has-hover ? Theme.border-strong : Theme.border;
+    background: editing ? transparent : touch.has-hover ? Theme.hover : Theme.background;
+
+    // Under the field, which takes the clicks while it is shown.
+    touch := TouchArea {
+        enabled: !root.editing;
+        mouse-cursor: text;
+        accessible-role: button;
+        accessible-label: @tr("edit.rename", root.shown);
+        accessible-action-default => { root.editing = true; }
+        clicked => { root.editing = true; }
+    }
+
+    if !editing: Text {
+        x: Theme.space-s;
+        width: parent.width - 2 * Theme.space-s;
+        text: root.shown;
+        font-size: Theme.font-title;
+        font-weight: 600;
+        color: Theme.text;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    if editing: NameEdit {
+        name: root.name;
+        font-size: Theme.font-title;
+        accessible-label: @tr("details.name");
+        init => { self.focus(); }
+        commit(text) => { root.commit(text); }
+        finished => { root.editing = false; }
+    }
+}

@@ -1,5 +1,5 @@
 import { Palette, Spinner } from "std-widgets.slint";
-import { Bridge } from "bridge.slint";
+import { Bridge, GuestKind } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { Header } from "header.slint";
 import { Labels } from "labels.slint";
@@ -50,6 +50,11 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 0;
                         show-on-map(device) => { canvas.centre-on(device.x, device.y); }
                         edit => { editing = true; }
+                        // The new device is selected; its details open ready to fill in.
+                        add => {
+                            Bridge.add-device(GuestKind.none);
+                            details.edit();
+                        }
                     }
                     canvas := TopologyCanvas {
                         min-width: Theme.canvas-min-width;

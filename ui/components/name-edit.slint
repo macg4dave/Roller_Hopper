@@ -5,6 +5,8 @@ import { LineEdit } from "std-widgets.slint";
 export component NameEdit inherits LineEdit {
     in property <string> name;
     callback commit(string);
+    // After Enter or losing focus, whether or not the name changed.
+    callback finished();
 
     text: name;
     // Committing assigns `text`, which ends the binding above, so follow later names by hand.
@@ -15,6 +17,7 @@ export component NameEdit inherits LineEdit {
             root.commit(self.text);
         }
         self.text = name;
+        root.finished();
     }
 
     accepted => { apply(); }

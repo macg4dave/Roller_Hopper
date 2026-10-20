@@ -3,20 +3,22 @@
 //! the app starts and again whenever the icon picker opens, so icons dropped in while the app
 //! runs show up without a restart.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use slint::{Image, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel, Weak};
 
-use crate::model::Icon;
-use crate::ui;
+use super::{AppState, update};
+use crate::model::{GuestKind, Icon, NetworkCard};
+use crate::ui::{self, AppWindow, Bridge};
 
 const FOLDER: &str = "icons";
 
 /// Where the icons are: an `icons` folder beside the program, or the one in the source tree
 /// when there is none (as under `cargo run`).
-pub(super) fn folder() -> PathBuf {
+fn folder() -> PathBuf {
     let beside_program = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join(FOLDER)));
@@ -81,6 +83,23 @@ impl Icons {
             }
         });
         groups.collect()
+    }
+}
+
+/// Reads the icon folder again and shows what is in it now. The picker's list is sent only
+/// here, not on every change, so it is not rebuilt while the user scrolls it.
+pub(super) fn refresh(ui: &Weak<AppWindow>, state: &RefCell<AppState>) {
+    update(ui, state, |st| st.icons = Icons::load(&folder()));
+    if let Some(ui) = ui.upgrade() {
+        let icons = &state.borrow().icons;
+        let bridge = ui.global::<Bridge<'_>>();
+        bridge.set_icons(ModelRc::new(VecModel::from(icons.groups())));
+        // Where the icons new cards and guests start with live, wherever the user has put
+        // those folders.
+        let card_icons = icons.choice(&Icon::new(NetworkCard::DEFAULT_ICON)).group;
+        bridge.set_card_icon_category(card_icons);
+        let guest_icons = icons.choice(&GuestKind::VirtualMachine.icon()).group;
+        bridge.set_guest_icon_category(guest_icons);
     }
 }
 

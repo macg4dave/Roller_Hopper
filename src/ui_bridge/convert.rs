@@ -44,6 +44,18 @@ pub(super) fn card_id(id: i32) -> Option<CardId> {
     u32::try_from(id).ok().map(CardId)
 }
 
+/// The card's address without its prefix, as shown; empty when it has none.
+pub(super) fn ip(card: &NetworkCard) -> SharedString {
+    let ip = card.address.map(|net| net.addr().to_string());
+    ip.unwrap_or_default().into()
+}
+
+/// The MAC address as shown; empty when there is none.
+pub(super) fn mac(card: &NetworkCard) -> SharedString {
+    let mac = card.mac.map(|mac| mac.to_string());
+    mac.unwrap_or_default().into()
+}
+
 pub(super) fn filter_from_ui(filter: ui::StatusFilter) -> StatusFilter {
     match filter {
         ui::StatusFilter::All => StatusFilter::All,
@@ -168,8 +180,8 @@ pub(super) fn device_view(
         card_icon: ui::IconChoice::default(),
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
-        ip: primary.map(super::cards::ip).unwrap_or_default(),
-        mac: primary.map(super::cards::mac).unwrap_or_default(),
+        ip: primary.map(ip).unwrap_or_default(),
+        mac: primary.map(mac).unwrap_or_default(),
         hostname: device.hostname.unwrap_or_default().into(),
         role,
         icon: icons.image(&network.icon(device)),

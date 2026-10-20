@@ -53,6 +53,10 @@ msgstr "{0}  {1}"
 msgid "list.no-match"
 msgstr "No devices match."
 
+# The + button under the list: adds a blank device and opens it for editing.
+msgid "list.add-device"
+msgstr "Add device"
+
 # Each device in the list heads a group of its network cards, which can be folded away.
 msgid "list.group-collapse"
 msgstr "Hide network cards"
@@ -230,6 +234,11 @@ msgstr "Back to map"
 
 msgid "edit.choose-device"
 msgstr "Choose a device to edit it."
+
+# Read out for the device's name at the top of its editor, which is clicked to rename it; {}
+# is the name.
+msgid "edit.rename"
+msgstr "Rename {}"
 
 msgid "edit.icon-from-role"
 msgstr "Use the role's icon"

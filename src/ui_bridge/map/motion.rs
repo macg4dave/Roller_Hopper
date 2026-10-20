@@ -39,7 +39,7 @@ struct Spring {
 
 /// Where each device is shown, and how fast it is moving there; likewise the strand's bend.
 #[derive(Debug, Default)]
-pub(super) struct Motion {
+pub(in crate::ui_bridge) struct Motion {
     shown: Positions,
     velocity: HashMap<CardId, Point>,
     /// The strand's bend point and its velocity, while there is a strand.
@@ -48,7 +48,7 @@ pub(super) struct Motion {
 
 impl Motion {
     /// Everything shown at rest at `at`.
-    pub(super) fn new(at: Positions) -> Self {
+    pub(in crate::ui_bridge) fn new(at: Positions) -> Self {
         Self {
             shown: at,
             ..Self::default()
@@ -84,7 +84,7 @@ impl Motion {
         }
     }
 
-    pub(super) fn shown(&self) -> &Positions {
+    pub(in crate::ui_bridge) fn shown(&self) -> &Positions {
         &self.shown
     }
 
