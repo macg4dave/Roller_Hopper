@@ -105,6 +105,13 @@ export global Labels {
         return name == "" ? @tr("card.unnamed", index + 1) : name;
     }
 
+    // Under a device's name in the lists: its first address and how many network cards its
+    // group holds.
+    public pure function group-summary(ip: string, cards: int) -> string {
+        let count = @tr("list.cards" | "list.cards.plural" % cards);
+        return ip == "" ? count : @tr("list.group-summary", ip, count);
+    }
+
     // A network card's short name on the map: its own name, or NC and its number.
     public pure function card-short(name: string, index: int) -> string {
         return name == "" ? @tr("card.short", index + 1) : name;

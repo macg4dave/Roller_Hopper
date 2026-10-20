@@ -10,8 +10,11 @@ use std::rc::Rc;
 use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString};
 
+use super::icons::Icons;
 use super::{AppState, Selection, convert, handler, update};
-use crate::model::{CardId, ConnectionKind, Device, GuestKind, MacAddr, Network, NetworkCard};
+use crate::model::{
+    CardId, ConnectionKind, Device, GuestKind, Icon, MacAddr, Network, NetworkCard,
+};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// The card's address without its prefix, as shown; empty when it has none.
@@ -34,6 +37,7 @@ fn index_of(device: &Device, card: CardId) -> i32 {
 
 /// The row or map node of `card`, made from `device_row`, the row of its device.
 pub(super) fn card_row(
+    icons: &Icons,
     device_row: &ui::DeviceView,
     device: &Device,
     card: &NetworkCard,
@@ -42,9 +46,12 @@ pub(super) fn card_row(
         card_id: convert::ui_card_id(card.id),
         card_index: index_of(device, card.id),
         card_name: card.name.trim().into(),
+        card_icon: icons.choice(&card.icon),
         ip: ip(card),
         mac: mac(card),
         depth: device_row.depth + 1,
+        children: 0,
+        last: device.cards.last().is_some_and(|c| c.id == card.id),
         ..device_row.clone()
     }
 }
@@ -67,7 +74,7 @@ pub(super) fn socket_name(labels: &Labels<'_>, network: &Network, socket: CardId
 }
 
 /// The network cards of `device`, each with where it is plugged in.
-pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView> {
+pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> Vec<ui::CardView> {
     let views = device.cards.iter().map(|card| {
         let link = network.link(card.id);
         let via = link.and_then(|l| Some((l.upstream, network.card_owner(l.upstream)?)));
@@ -97,6 +104,7 @@ pub(super) fn card_views(network: &Network, device: &Device) -> Vec<ui::CardView
             },
             inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
             services: card.services.to_string().into(),
+            icon: icons.choice(&card.icon),
         }
     });
     views.collect()
@@ -155,6 +163,14 @@ impl AppState {
         if let Some(card) = self.network.add_card(device) {
             self.selected = Some(Selection::Card(card));
             self.lay_out_at_rest();
+        }
+    }
+
+    /// Gives `card` its own icon. Any card can be given one straight from its row in the lists,
+    /// selected or not.
+    fn set_card_icon(&mut self, card: CardId, icon: Icon) {
+        if let Some(card) = self.network.card_mut(card) {
+            card.icon = icon;
         }
     }
 
@@ -252,6 +268,12 @@ pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>)
     bridge.on_add_card(move || add_card(()));
     let remove_card = handler(ui, state, |st, ()| st.remove_card());
     bridge.on_remove_card(move || remove_card(()));
+    let set_icon = handler(ui, state, |st, (id, icon): (i32, SharedString)| {
+        if let Some(card) = convert::card_id(id) {
+            st.set_card_icon(card, convert::icon_from_ui(&icon));
+        }
+    });
+    bridge.on_set_card_icon(move |id, icon| set_icon((id, icon)));
     let (edit_ui, edit_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_edit_card(move |field, text| {
         let mut accepted = false;
@@ -390,6 +412,21 @@ mod tests {
         assert_eq!(state.plug_choice(), at + 1, "out of range");
         state.plug_card(0);
         assert_eq!(state.plug_choice(), 0);
+    }
+
+    #[test]
+    fn a_card_starts_as_ethernet_and_takes_any_icon_without_being_selected() {
+        let (mut state, card) = with_new_card();
+        let icon_of = |st: &AppState, c| st.network.card(c).map(|c| c.icon.0.clone());
+        assert_eq!(
+            icon_of(&state, card).as_deref(),
+            Some(NetworkCard::DEFAULT_ICON)
+        );
+        let other = CardId(2);
+        state.set_card_icon(other, Icon::new("Network cards/5G"));
+        assert_eq!(icon_of(&state, other).as_deref(), Some("Network cards/5G"));
+        assert_eq!(state.selected_card(), Some(card), "the selection stays");
+        state.set_card_icon(CardId(999), Icon::new("Network/Router"));
     }
 
     #[test]

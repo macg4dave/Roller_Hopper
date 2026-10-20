@@ -28,6 +28,8 @@ export global Theme {
     out property <color> background: #f7f8fa;
     out property <color> surface: #ffffff;
     out property <color> border: #e3e6eb;
+    // Guide lines that tie a device's cards to it in the lists.
+    out property <color> border-strong: #c5cbd3;
     out property <color> hover: #f1f3f6;
     out property <color> grid: #eceff3;
     // Every other row of a table, so each line is easy to follow.
@@ -90,6 +92,8 @@ export global Theme {
     // A network card's row, nested under its device's.
     out property <length> card-row-height: 38px;
     out property <length> map-icon: 36px;
+    // The badge of a card's own icon on its device's icon on the map.
+    out property <length> map-card-badge: 20px;
     out property <length> map-label-width: 130px;
     out property <length> grid-spacing: 32px;
 }

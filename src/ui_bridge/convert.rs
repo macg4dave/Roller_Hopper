@@ -164,6 +164,7 @@ pub(super) fn device_view(
         card_id: -1,
         card_index: 0,
         card_name: SharedString::new(),
+        card_icon: ui::IconChoice::default(),
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
         ip: primary.map(super::cards::ip).unwrap_or_default(),
@@ -177,6 +178,9 @@ pub(super) fn device_view(
         y: at.y,
         dimmed: false,
         depth: i32::try_from(network.depth(device.id)).unwrap_or(i32::MAX),
+        children: i32::try_from(device.cards.len()).unwrap_or(i32::MAX),
+        expanded: true,
+        last: false,
     }
 }
 

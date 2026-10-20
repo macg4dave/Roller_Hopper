@@ -65,6 +65,29 @@ not executable helper code. Direct established commands and short pipelines rema
 do not turn them into custom task programs. In the task report, name the command used or
 improved and any genuine blocker, rather than saying only that tooling was considered.
 
+## Command enforcement
+
+Claude's Bash and PowerShell calls are checked before execution by
+`cargo tool checks agent-command`. A rejection requires changing approach to the workflow
+above, not retrying through another interpreter, encoding, wrapper or temporary file.
+Agents MUST NOT disable or evade the hook to complete a task.
+
+Normal direct commands and ordinary pipelines remain available. The detector blocks direct
+script execution, unapproved interpreter entry points, nested shells, shell functions and
+processing loops, script blocks, substitutions and input redirection. Use built-in file tools
+for source edits. Quoted search terms are data, not executable commands.
+
+The maintained interpreter entry points currently approved are interpreter `--help` and
+`--version`, and `python -m json.tool` (including `python3` and `py`) for standard JSON
+inspection. There are no approved script paths. Add a concrete maintained entry point only
+with its documented purpose and regression coverage; placing a script in the repository does
+not approve it. Disposable programs remain prohibited regardless of language or location.
+
+This is conservative enforcement of common command forms, not a complete shell parser or
+security sandbox. It cannot determine whether arbitrary Rust source run by Cargo is disposable.
+The shared rules still apply to commands outside its detection coverage. See
+[hook mechanics and limitations](../../tools/checks/README.md#claude-command-hook).
+
 ## Build useful tooling when needed
 
 Adding necessary tooling is part of the current task. Agents MUST build or extend a repository

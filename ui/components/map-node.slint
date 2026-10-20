@@ -29,8 +29,8 @@ component NodeLabel inherits HorizontalLayout {
     }
 }
 
-// A network card on the topology map, drawn with its device's icon and name, and the card's
-// short name and address underneath. Laid out at 100% and scaled with the rest of the map by
+// A network card on the topology map, drawn with its device's icon and name, the card's own
+// icon as a badge, and the card's short name and address underneath. Laid out at 100% and scaled with the rest of the map by
 // the canvas; the icon centre is the anchor point.
 export component MapNode inherits Rectangle {
     // The card's row (see DeviceView).
@@ -94,6 +94,32 @@ export component MapNode inherits Rectangle {
                     status: device.status;
                     x: parent.width - self.width - 3px;
                     y: 3px;
+                }
+
+                // The card's own icon (Ethernet, Wi-Fi, 5G…) as a badge in the corner.
+                Rectangle {
+                    width: Theme.map-card-badge;
+                    height: self.width;
+                    x: parent.width - self.width + 2px;
+                    y: parent.height - self.height + 2px;
+                    border-radius: self.width / 2;
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: selected ? Theme.accent : Theme.border-strong;
+
+                    DeviceIcon {
+                        // Sharp under zoom, as for the device icon above.
+                        property <float> detail: Math.pow(2, Math.ceil(Math.log(zoom, 2)));
+                        property <length> size: parent.width - 6px;
+                        icon: device.card-icon.image;
+                        x: (parent.width - size) / 2;
+                        y: (parent.height - size) / 2;
+                        width: size * detail;
+                        height: size * detail;
+                        transform-origin: { x: 0, y: 0 };
+                        transform-scale: 1 / detail;
+                        colorize: selected ? Theme.accent : Theme.icon;
+                    }
                 }
             }
         }

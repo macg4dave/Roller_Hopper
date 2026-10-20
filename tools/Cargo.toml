@@ -10,6 +10,8 @@ publish = false
 [dependencies]
 clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
 walkdir = "2.5.0"
+regex = { version = "1.13.1", default-features = false, features = ["std", "perf", "unicode-perl"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 
 # Protected: see docs/agents/rust.md and AGENTS.md "Protected files". Do not loosen without explicit user approval.
 [lints.rust]

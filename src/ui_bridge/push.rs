@@ -60,10 +60,11 @@ impl Views<'_> {
 
     /// The row of each card of `device`.
     fn card_rows(&self, device: &Device) -> Vec<ui::DeviceView> {
+        let icons = &self.state.icons;
         let rows = device
             .cards
             .iter()
-            .map(|card| cards::card_row(&self.view(device, Some(card.id)), device, card));
+            .map(|card| cards::card_row(icons, &self.view(device, Some(card.id)), device, card));
         rows.collect()
     }
 
@@ -82,12 +83,22 @@ impl Views<'_> {
         nodes.collect()
     }
 
-    /// Each of `devices` followed by its network cards, as the lists show them. A device's own
-    /// row centres the map on its first card.
+    /// Each of `devices` as the head of its group, followed by its network cards unless the
+    /// group is collapsed, as the lists show them. A device's own row centres the map on its
+    /// first card.
     fn rows<'d>(&self, devices: impl Iterator<Item = &'d Device>) -> Vec<ui::DeviceView> {
         let rows = devices.flat_map(|device| {
-            let row = self.view(device, device.primary_card().map(|c| c.id));
-            std::iter::once(row).chain(self.card_rows(device))
+            let expanded = !self.state.collapsed.contains(&device.id);
+            let row = ui::DeviceView {
+                expanded,
+                ..self.view(device, device.primary_card().map(|c| c.id))
+            };
+            let cards = if expanded {
+                self.card_rows(device)
+            } else {
+                Vec::new()
+            };
+            std::iter::once(row).chain(cards)
         });
         rows.collect()
     }
@@ -183,7 +194,7 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_role_index(i32::try_from(index).unwrap_or_default());
     }
     let cards = selected
-        .map(|d| cards::card_views(&state.network, d))
+        .map(|d| cards::card_views(&state.network, &state.icons, d))
         .unwrap_or_default();
     if let Some(model) = sync(&bridge.get_cards(), cards) {
         bridge.set_cards(model);
@@ -198,7 +209,7 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let id = card.map_or(-1, convert::ui_card_id);
     let view = card.and_then(|card| {
         let device = network.card_owner(card)?;
-        let mut views = cards::card_views(network, device).into_iter();
+        let mut views = cards::card_views(network, &state.icons, device).into_iter();
         views.find(|v| v.id == id)
     });
     bridge.set_card(view.unwrap_or_default());

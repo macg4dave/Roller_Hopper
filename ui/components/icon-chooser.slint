@@ -20,6 +20,8 @@ export component IconChooser inherits Rectangle {
     callback picked(IconChoice);
     callback reset();
     property <length> badge: 16px;
+    // The category the picker opens on, an index in Bridge.icons; -1 for the current icon's.
+    in property <int> start-category: -1;
     // The category shown in the picker: an index in Bridge.icons.
     property <int> category;
 
@@ -32,10 +34,10 @@ export component IconChooser inherits Rectangle {
     accessible-action-default => { open(); }
 
     // Icons dropped into the folder since it was last read appear in the picker, which opens on
-    // the current icon's category.
+    // the starting category if one is given, else on the current icon's.
     function open() {
         Bridge.refresh-icons();
-        category = max(0, root.icon.group);
+        category = max(0, root.start-category >= 0 ? root.start-category : root.icon.group);
         popup.show();
     }
 

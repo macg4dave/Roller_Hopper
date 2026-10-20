@@ -1,5 +1,6 @@
-//! A device's network cards: each is a child of its device, with its own IPv4 settings and open
-//! ports, and plugs into a card of another device on its own. Cards are what the map shows.
+//! A device's network cards: each is a child of its device, with its own IPv4 settings, open
+//! ports and icon, and plugs into a card of another device on its own. Cards are what the map
+//! shows.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -7,6 +8,7 @@ use std::str::FromStr;
 
 use ipnet::Ipv4Net;
 
+use super::device::Icon;
 use super::services::Services;
 
 /// Stable identifier of a network card, unique across the network.
@@ -59,9 +61,15 @@ pub(crate) struct NetworkCard {
     pub(crate) mac: Option<MacAddr>,
     /// The ports open at the card's address.
     pub(crate) services: Services,
+    /// What kind of connection it is, shown in the lists and as a badge on its device's icon on
+    /// the map: Ethernet, Wi-Fi, 5G and so on, or any icon the user picks.
+    pub(crate) icon: Icon,
 }
 
 impl NetworkCard {
+    /// The icon a card starts with, one of the icons that ship with the app.
+    pub(crate) const DEFAULT_ICON: &str = "Network cards/Ethernet";
+
     /// A card the user added, with nothing filled in yet.
     pub(crate) fn blank(id: CardId) -> Self {
         Self {
@@ -71,6 +79,7 @@ impl NetworkCard {
             gateway: None,
             mac: None,
             services: Services::default(),
+            icon: Icon::new(Self::DEFAULT_ICON),
         }
     }
 

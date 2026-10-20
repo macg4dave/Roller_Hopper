@@ -3,6 +3,7 @@ import { Bridge, CardField } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
+import { IconChooser } from "components/icon-chooser.slint";
 import { NameEdit } from "components/name-edit.slint";
 import { PortEditor } from "port-editor.slint";
 
@@ -59,11 +60,14 @@ export component CardEditor inherits VerticalLayout {
     HorizontalLayout {
         spacing: Theme.space-m;
         padding-bottom: Theme.space-m;
-        Image {
-            source: @image-url("icons/network-card.svg");
-            width: 44px;
-            height: 44px;
-            colorize: Theme.accent;
+        IconChooser {
+            width: 52px;
+            height: 52px;
+            icon: Bridge.card.icon;
+            start-category: Bridge.card-icon-category;
+            icon-size: 36px;
+            tint: Theme.accent;
+            picked(icon) => { Bridge.set-card-icon(Bridge.card.id, icon.id); }
         }
         VerticalLayout {
             alignment: center;

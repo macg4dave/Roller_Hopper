@@ -2,12 +2,15 @@ import { Bridge, DeviceStatus, DeviceView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
+import { IconChooser } from "icon-chooser.slint";
 import { StatusDot } from "status-dot.slint";
 
-// One entry in a device list: a device, or one of its network cards nested under it. Its
-// background stops short of the list's scroll bar, which floats over the right-hand edge of the
-// rows. A guest follows its host as a child, and a card its device: the icon sits under the
-// name above. Clicking selects the device or card.
+// One entry in a device list. A device heads a group: a chevron folds its network cards away,
+// and a line under its name says how many it holds. Each card follows inside the group, on an
+// inset band with a guide line down from the device's icon, and can be dragged onto the map to
+// plug it in there. A guest follows its host, indented under it. Clicking selects the device
+// or card. The background stops short of the list's scroll bar, which floats over the
+// right-hand edge of the rows.
 export component DeviceRow inherits Rectangle {
     in property <DeviceView> device;
     callback double-clicked;
@@ -15,42 +18,117 @@ export component DeviceRow inherits Rectangle {
     property <bool> card: device.card-id >= 0;
     property <bool> selected: card ? device.card-id == Bridge.selected-card : device.id == Bridge.selected-id && Bridge.selected-card < 0;
     property <string> name: card ? Labels.card-name(device.card-name, device.card-index) : Labels.device-name(device.name);
+    property <length> icon-width: 26px;
+    property <length> chevron-width: 16px;
+    property <length> step: icon-width + Theme.space-m;
+    // Where the device's icon sits; a card's guide line runs down from its centre.
+    property <length> device-icon-x: Theme.space-xs + chevron-width + Theme.space-xs + (device.depth - (card ? 1 : 0)) * step;
+    property <length> width-inside: root.width - Theme.scrollbar-width;
 
     height: card ? Theme.card-row-height : Theme.row-height;
     accessible-role: list-item;
     accessible-label: card ? Labels.card-of(device.name, device.card-name, device.card-index) : name;
     accessible-item-selected: selected;
+    accessible-expandable: !card && device.children > 0;
+    accessible-expanded: device.expanded;
 
     Rectangle {
         x: 0;
-        width: parent.width - Theme.scrollbar-width;
-        background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : Theme.group-tint(device.colour);
+        width: width-inside;
+        background: selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : card ? Theme.background : Theme.group-tint(device.colour);
     }
 
-    touch := TouchArea {
-        clicked => {
-            if card {
-                Bridge.select-card(device.card-id);
-            } else {
-                Bridge.select(device.id);
+    // A thin rule above each group, and a closing one under its last card.
+    if !card: Rectangle {
+        x: 0;
+        y: 0;
+        width: width-inside;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    // The group's guide line: down from the device's icon to this card, with a tick across.
+    if card: Rectangle {
+        x: device-icon-x + icon-width / 2;
+        y: 0;
+        width: 1px;
+        height: device.last ? root.height / 2 : root.height;
+        background: Theme.border-strong;
+    }
+    if card: Rectangle {
+        x: device-icon-x + icon-width / 2;
+        y: root.height / 2;
+        width: step - icon-width / 2 - Theme.space-xs;
+        height: 1px;
+        background: Theme.border-strong;
+    }
+
+    drag := DragArea {
+        enabled: card;
+        allow-move: true;
+        data: Bridge.card-transfer(device.card-id);
+        drag-image: device.card-icon.image;
+
+        touch := TouchArea {
+            mouse-cursor: card ? MouseCursor.grab : MouseCursor.default;
+            clicked => {
+                if card {
+                    Bridge.select-card(device.card-id);
+                } else {
+                    Bridge.select(device.id);
+                }
             }
+            double-clicked => { root.double-clicked(); }
         }
-        double-clicked => { root.double-clicked(); }
     }
-
-    property <length> icon-width: 26px;
 
     HorizontalLayout {
-        width: parent.width - Theme.scrollbar-width;
+        width: width-inside;
         x: 0;
-        padding-left: Theme.space-s + device.depth * (icon-width + Theme.space-m);
+        padding-left: card ? device-icon-x + step : Theme.space-xs + device.depth * step;
         padding-right: Theme.space-m;
         spacing: Theme.space-m;
+        opacity: drag.dragging ? 0.4 : 1;
 
-        DeviceIcon {
-            icon: card ? @image-url("../icons/network-card.svg") : device.icon;
+        // Folds the group up or opens it; a device with no cards has nothing to fold.
+        if !card: Rectangle {
+            width: chevron-width;
+            chevron := Image {
+                source: @image-url("../icons/chevron-right.svg");
+                visible: device.children > 0;
+                width: parent.width;
+                height: parent.width;
+                colorize: chevron-touch.has-hover ? Theme.text : Theme.text-muted;
+                transform-rotation: device.expanded ? 90deg : 0deg;
+                animate transform-rotation { duration: 120ms; }
+            }
+            chevron-touch := TouchArea {
+                enabled: device.children > 0;
+                accessible-role: button;
+                accessible-label: device.expanded ? @tr("list.group-collapse") : @tr("list.group-expand");
+                clicked => { Bridge.toggle-group(device.id); }
+            }
+        }
+
+        if !card: DeviceIcon {
+            icon: device.icon;
             width: icon-width;
-            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline || card ? Theme.icon-faded : Theme.icon);
+            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
+        }
+
+        // A card's icon says what kind of connection it is, and is changed right here. The picker
+        // opens on the network card icons; the other categories are a tab away.
+        if card: VerticalLayout {
+            alignment: center;
+            IconChooser {
+                width: icon-width;
+                height: icon-width;
+                icon: device.card-icon;
+                start-category: Bridge.card-icon-category;
+                icon-size: 18px;
+                tint: selected ? Theme.accent : Theme.icon;
+                picked(icon) => { Bridge.set-card-icon(device.card-id, icon.id); }
+            }
         }
 
         VerticalLayout {
@@ -63,10 +141,16 @@ export component DeviceRow inherits Rectangle {
                 color: Theme.text;
                 overflow: elide;
             }
-            if device.ip != "": Text {
+            if card && device.ip != "": Text {
                 text: device.ip;
                 font-size: Theme.font-small;
                 color: Theme.text-muted;
+            }
+            if !card: Text {
+                text: Labels.group-summary(device.ip, device.children);
+                font-size: Theme.font-small;
+                color: Theme.text-muted;
+                overflow: elide;
             }
         }
 
@@ -84,5 +168,13 @@ export component DeviceRow inherits Rectangle {
             alignment: center;
             StatusDot { status: device.status; }
         }
+    }
+
+    if card && device.last: Rectangle {
+        x: 0;
+        y: root.height - 1px;
+        width: width-inside;
+        height: 1px;
+        background: Theme.border;
     }
 }

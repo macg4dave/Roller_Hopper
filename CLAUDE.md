@@ -15,3 +15,8 @@
 - Run the quality gate through the shell exactly as written in `AGENTS.md`.
 - `cargo add` and edits to protected files trigger a permission prompt by design (Claude Code
   settings). Explain why the change is needed when asking.
+- `.claude/settings.json` runs `checks agent-command` before Bash and PowerShell calls using
+  Cargo's explicit tooling manifest path (independent of the shell's working directory).
+  Hook startup, build, input and timeout failures block the call. See
+  [the checks README](tools/checks/README.md#claude-command-hook) for verification and mechanics;
+  [the shared tooling guide](docs/agents/tooling.md#command-enforcement) owns the policy.

@@ -43,6 +43,8 @@ export struct DeviceView {
     card-id: int,
     card-index: int,
     card-name: string,
+    // The card's own icon (Ethernet, Wi-Fi…): in its row, and as a badge on the map.
+    card-icon: IconChoice,
     name: string,
     // Of its first network card, or of the card itself.
     ip: string,
@@ -65,6 +67,11 @@ export struct DeviceView {
     // How many hosts it runs within: a guest comes after its host in the lists, indented
     // under it. A card's row is indented one more, under its device.
     depth: int,
+    // For a device: how many network cards its group holds, and whether the lists show them.
+    children: int,
+    expanded: bool,
+    // For a card: it is the last of its device's cards, where the group's guide line ends.
+    last: bool,
 }
 
 /// Where a node in Bridge.nodes is drawn on the map right now, at the same index. Kept apart
@@ -95,6 +102,7 @@ export struct CardView {
     inferred: bool,
     // Its open ports, as shown (empty when none).
     services: string,
+    icon: IconChoice,
 }
 
 /// A setting of the selected network card, typed on the edit page.
@@ -224,6 +232,9 @@ export global Bridge {
     in property <int> scans;
     // Every icon in the icon folder, for the icon picker.
     in property <[IconGroup]> icons;
+    // The category of the network card icons in icons, which a card's picker opens on; -1 when
+    // the folder has none.
+    in property <int> card-icon-category: -1;
 
     // Edit buffers for the selected device, set by Rust when the selection changes.
     in-out property <string> name-draft;
@@ -233,6 +244,16 @@ export global Bridge {
     // Selects a device by its id, or nothing on -1; select-card selects a network card.
     callback select(int);
     callback select-card(int);
+    // Gives the card with this id the icon with this id (see IconChoice).
+    callback set-card-icon(int, string);
+    // Folds a device's group up in the lists, or opens it again.
+    callback toggle-group(int);
+    // A card's id as a drag payload, and back again: -1 when the payload is not a card.
+    pure callback card-transfer(int) -> data-transfer;
+    pure callback transfer-card(data-transfer) -> int;
+    // A card dragged from the lists and dropped on the map with its icon at (x, y), in map
+    // units: it is plugged in as if dragged there on the map.
+    callback drop-card(int, float, float);
     callback search(string);
     callback set-filter(StatusFilter);
     callback rename(string);

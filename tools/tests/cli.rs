@@ -1,5 +1,7 @@
 //! Exercise the public CLI using isolated fixtures, never the live icon library.
 
+#[path = "cli/agent_command.rs"]
+mod agent_command;
 #[path = "cli/edits.rs"]
 mod edits;
 
@@ -102,6 +104,7 @@ fn invalid_arguments_fail_with_help() -> io::Result<()> {
         vec!["--help"],
         vec!["checks", "--help"],
         vec!["checks", "gate", "--help"],
+        vec!["checks", "agent-command", "--help"],
         vec!["text", "--help"],
         vec!["text", "normalize-eol", "--help"],
         vec!["text", "replace-text", "--help"],

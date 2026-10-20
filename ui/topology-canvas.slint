@@ -102,6 +102,19 @@ export component TopologyCanvas inherits Rectangle {
         }
     }
 
+    // Cards dragged out of the lists are plugged in where they are dropped, as if dragged there
+    // on the map. The pointer becomes the card's icon centre, in map units.
+    drop := DropArea {
+        can-drop(event) => {
+            return Bridge.transfer-card(event.data) >= 0 ? DragAction.move : DragAction.none;
+        }
+        dropped(event) => {
+            Bridge.drop-card(Bridge.transfer-card(event.data), (event.position.x - pan-x) / zoom / 1px, (event.position.y - pan-y) / zoom / 1px);
+            auto-fit = false;
+            return event.proposed-action;
+        }
+    }
+
     // The map itself, laid out in map units and scaled as one picture: panning and zooming only
     // move this one element, so nothing inside is laid out or redrawn from scratch.
     Rectangle {
@@ -174,6 +187,12 @@ export component TopologyCanvas inherits Rectangle {
             }
             released => { Bridge.drop-node(); }
         }
+    }
+
+    // While a card from the lists is held over the map.
+    if drop.has-drag: Rectangle {
+        border-width: 2px;
+        border-color: Theme.accent;
     }
 
     // The key: each group and its lines.

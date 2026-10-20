@@ -506,7 +506,23 @@ fn devices_with_further_cards() -> Vec<Device> {
             device.cards.extend(further);
         }
     }
+    for card in devices.iter_mut().flat_map(|d| &mut d.cards) {
+        if let Some(icon) = card_icon(card.id) {
+            card.icon = Icon::new(icon);
+        }
+    }
     devices
+}
+
+/// The icon of a sample card that is not plain Ethernet: the access point's wireless clients,
+/// the router's fibre line out, and the virtual cards of virtual machines and containers.
+fn card_icon(card: CardId) -> Option<&'static str> {
+    match card.0 {
+        8 | 9 | 10 | 13 | 15 => Some("Network cards/Wi-Fi"),
+        ROUTER_WAN_CARD => Some("Network cards/Fibre"),
+        17..=21 | 24 | 25 | DOCKER_LAB_CARD => Some("Network cards/Virtual"),
+        _ => None,
+    }
 }
 
 /// Each card's link, as (upstream card, card, kind).
@@ -675,6 +691,20 @@ mod tests {
         let macs: Option<Vec<_>> = cards.iter().map(|c| c.mac).collect();
         let macs = macs.expect("every sample card has a MAC");
         assert!(all_unique(&macs));
+    }
+
+    #[test]
+    fn every_sample_cards_icon_ships_with_the_app() {
+        let network = network();
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("icons");
+        let blank = NetworkCard::blank(CardId(0)).icon;
+        let cards = network.devices().iter().flat_map(|d| &d.cards);
+        for icon in cards.map(|c| &c.icon).chain([&blank]) {
+            let file = folder.join(format!("{}.svg", icon.0));
+            assert!(file.is_file(), "{}", file.display());
+        }
+        let wireless = network.card(CardId(8)).map(|c| c.icon.0.as_str());
+        assert_eq!(wireless, Some("Network cards/Wi-Fi"));
     }
 
     #[test]

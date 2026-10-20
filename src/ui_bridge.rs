@@ -13,6 +13,7 @@ mod push;
 pub(crate) use i18n::select_language;
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -20,8 +21,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Arrangement, CardId, Connection, Device, DeviceId, GroupId, Icon, Level, Network, Point,
-    Positions, Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
+    Arrangement, CardId, Connection, Device, DeviceId, GroupId, Icon, Level, Network, NetworkCard,
+    Point, Positions, Role, Snap, StatusFilter, link_route, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -30,6 +31,8 @@ use push::push;
 
 /// How long the simulated scan pretends to take, so the refresh is visible.
 const SCAN_DURATION: Duration = Duration::from_millis(1500);
+/// What a network card dragged out of the lists carries, before its id.
+const CARD_PAYLOAD: &str = "network-mapper-card:";
 /// One frame of the map's motion, at about 60 frames a second.
 const FRAME: Duration = Duration::from_millis(16);
 
@@ -53,6 +56,8 @@ pub(crate) struct AppState {
     /// The card being dragged on the map, until it is dropped.
     dragging: Option<CardId>,
     selected: Option<Selection>,
+    /// Devices whose group is folded up in the lists, hiding their cards.
+    collapsed: HashSet<DeviceId>,
     filter: StatusFilter,
     query: String,
     scanning: bool,
@@ -72,6 +77,7 @@ impl AppState {
             arrangement,
             dragging: None,
             selected: None,
+            collapsed: HashSet::new(),
             filter: StatusFilter::All,
             query: String::new(),
             scanning: false,
@@ -120,7 +126,7 @@ impl AppState {
     }
 
     /// Edits the selected card.
-    fn edit_selected_card(&mut self, edit: impl FnOnce(&mut crate::model::NetworkCard)) {
+    fn edit_selected_card(&mut self, edit: impl FnOnce(&mut NetworkCard)) {
         if let Some(card) = self.selected_card().and_then(|c| self.network.card_mut(c)) {
             edit(card);
         }
@@ -215,6 +221,22 @@ impl AppState {
             self.selected = None;
             self.network.remove_device(id);
             self.lay_out_at_rest();
+        }
+    }
+
+    /// Folds a device's group up in the lists, or opens it again.
+    fn toggle_group(&mut self, id: DeviceId) {
+        if !self.collapsed.remove(&id) {
+            self.collapsed.insert(id);
+        }
+    }
+
+    /// A card dragged from the lists and dropped on the map at `at`: it is plugged in where it
+    /// would be on dropping it there on the map, or unplugged away from every line.
+    fn drop_card(&mut self, card: CardId, at: Point) {
+        if self.network.card(card).is_some() {
+            self.drag_to(card, at);
+            self.drop_dragged();
         }
     }
 
@@ -375,6 +397,11 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_select_card(handler(ui, state, |st, id| {
         st.selected = convert::card_id(id).map(Selection::Card);
     }));
+    bridge.on_toggle_group(handler(ui, state, |st, id| {
+        if let Some(id) = convert::device_id(id) {
+            st.toggle_group(id);
+        }
+    }));
     bridge.on_search(handler(ui, state, |st, text: SharedString| {
         st.query = text.into();
     }));
@@ -433,10 +460,39 @@ fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         move_settle();
     });
     let drop_node = handler(ui, state, |st, ()| st.drop_dragged());
+    let drop_settle = Rc::clone(&settle);
     bridge.on_drop_node(move || {
         drop_node(());
+        drop_settle();
+    });
+
+    // A card dragged out of the lists carries its id as text, as Slint's drag payload is
+    // opaque to Slint code. The prefix keeps text dragged in from other apps from passing for
+    // a card.
+    bridge.on_card_transfer(|id| SharedString::from(card_payload(id)).into());
+    bridge.on_transfer_card(|data| {
+        let text = data.plain_text().unwrap_or_default();
+        payload_card(&text).unwrap_or(-1)
+    });
+    let drop_card = handler(ui, state, |st, (id, x, y)| {
+        if let Some(card) = convert::card_id(id) {
+            st.drop_card(card, Point { x, y });
+        }
+    });
+    bridge.on_drop_card(move |id, x, y| {
+        drop_card((id, x, y));
         settle();
     });
+}
+
+/// The drag payload of the card with UI id `id`.
+fn card_payload(id: i32) -> String {
+    format!("{CARD_PAYLOAD}{id}")
+}
+
+/// The UI id of the card a drag payload carries; `None` for anything else.
+fn payload_card(text: &str) -> Option<i32> {
+    text.strip_prefix(CARD_PAYLOAD)?.parse().ok()
 }
 
 /// Steps the map's motion every frame until everything has settled (or the window closed).
@@ -584,8 +640,12 @@ fn connect_group_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
 fn refresh_icons(ui: &Weak<AppWindow>, state: &RefCell<AppState>) {
     update(ui, state, |st| st.icons = Icons::load(&icons::folder()));
     if let Some(ui) = ui.upgrade() {
-        let groups = VecModel::from(state.borrow().icons.groups());
-        ui.global::<Bridge<'_>>().set_icons(ModelRc::new(groups));
+        let icons = &state.borrow().icons;
+        let bridge = ui.global::<Bridge<'_>>();
+        bridge.set_icons(ModelRc::new(VecModel::from(icons.groups())));
+        // Where the icon new cards start with lives, wherever the user has put that folder.
+        let card_icons = icons.choice(&Icon::new(NetworkCard::DEFAULT_ICON)).group;
+        bridge.set_card_icon_category(card_icons);
     }
 }
 
@@ -995,6 +1055,42 @@ mod tests {
             Some(lab_pi)
         );
         assert!(state.positions[&lab_card].y > state.positions[&lab_pi].y);
+    }
+
+    #[test]
+    fn a_group_folds_up_and_opens_again() {
+        let mut state = AppState::new(mock_data::network());
+        state.toggle_group(DeviceId(1));
+        assert!(state.collapsed.contains(&DeviceId(1)));
+        state.toggle_group(DeviceId(1));
+        assert!(state.collapsed.is_empty());
+    }
+
+    #[test]
+    fn a_card_dropped_from_the_list_is_plugged_in_where_it_lands() {
+        let mut state = AppState::new(mock_data::network());
+        let (lab_card, lab_pi) = (CardId(100), CardId(23));
+        let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
+        let on_root = Point {
+            y: root.y + 20.0,
+            ..root
+        };
+        state.drop_card(lab_card, on_root);
+        assert_eq!(state.dragging, None);
+        assert_eq!(
+            state.network.uplink(lab_card).map(|c| c.upstream),
+            Some(lab_pi)
+        );
+        let before = state.network.clone();
+        state.drop_card(CardId(999), on_root);
+        assert_eq!(state.network, before, "no such card");
+    }
+
+    #[test]
+    fn a_drag_payload_carries_a_card_and_nothing_else() {
+        assert_eq!(payload_card(&card_payload(42)), Some(42));
+        assert_eq!(payload_card("42"), None, "text from another app");
+        assert_eq!(payload_card(&format!("{CARD_PAYLOAD}x")), None);
     }
 
     #[test]

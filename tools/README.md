@@ -12,12 +12,12 @@ cargo tool <area> <command> --help
 | Task | Folder and documentation | Commands |
 | --- | --- | --- |
 | Text editing | [text/](text/README.md) | `text normalize-eol`, `text replace-text` |
-| Development checks | [checks/](checks/README.md) | `checks gate` |
+| Development checks | [checks/](checks/README.md) | `checks gate`, `checks agent-command` |
 | Runtime icon library | [icons/](icons/README.md) | `icons audit` |
 
 ```text
 tools/
-  checks/    cli.rs, gate.rs, README.md
+  checks/    cli.rs, gate.rs, agent_command.rs, README.md
   text/      cli.rs, edit.rs, normalize_eol.rs, replace_text.rs, README.md
   icons/     cli.rs, audit.rs, README.md
   src/       main.rs: shared CLI dispatch only

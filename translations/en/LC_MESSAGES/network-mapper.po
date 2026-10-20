@@ -53,6 +53,22 @@ msgstr "{0}  {1}"
 msgid "list.no-match"
 msgstr "No devices match."
 
+# Each device in the list heads a group of its network cards, which can be folded away.
+msgid "list.group-collapse"
+msgstr "Hide network cards"
+
+msgid "list.group-expand"
+msgstr "Show network cards"
+
+# Under a device's name in the list: {0} is its IP address, {1} list.cards.
+msgid "list.group-summary"
+msgstr "{0} · {1}"
+
+msgid "list.cards"
+msgid_plural "list.cards.plural"
+msgstr[0] "{n} network card"
+msgstr[1] "{n} network cards"
+
 # Map
 msgid "map.zoom-in"
 msgstr "Zoom in"
