@@ -9,10 +9,38 @@ only — there is no real network discovery or scanning.
 cargo run
 ```
 
+## Icons
+
+Device and role icons come from the `icons/` folder. Every SVG file in it can be picked in the
+app's icon picker, named after its file (`Fish tank.svg` shows as "Fish tank"). Each subfolder
+becomes a heading over its icons; deeper folders are not read. Icons added while the app runs
+appear the next time the picker opens.
+
+Use single-colour line art: icons are tinted to show status and selection, so a coloured icon
+shows as one solid colour. A built app looks for an `icons` folder beside its executable; under
+`cargo run` it uses the one in this repository.
+
 ## Languages
 
 All UI text is translatable. To add or change a language, see
 [translations/README.md](translations/README.md).
+
+## Project layout
+
+```text
+src/main.rs        wiring only: build state, create window, connect callbacks, run
+src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
+src/model/         pure data and logic (devices, connections, roles, groups) — no Slint imports
+src/mock_data.rs   the sample network
+src/ui_bridge/     model ↔ Slint conversion, callback handlers, reading the icon folder
+ui/                .slint files: app window, panels, canvas, components/, theme
+ui/icons/          icons that are part of the UI (buttons, logo), compiled in
+icons/             device icons for the picker, read at run time (see above)
+translations/      all UI text: one gettext .po file per language (English in en/)
+docs/agents/       the agent guides indexed by AGENTS.md
+```
+
+Agent tooling, when added, is a separate crate in `tools/`, run with `cargo tool`.
 
 ## Contributing (humans and AI agents)
 

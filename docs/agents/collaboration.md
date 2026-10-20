@@ -26,15 +26,15 @@ before starting any task. Part of the agent rules indexed in [AGENTS.md](../../A
   branch in its own worktree:
 
   ```sh
-  git worktree add ../Roller_Hopper-<agent>-<topic> -b <agent>/<topic>
+  git worktree add ../<repository>-<agent>-<topic> -b <agent>/<topic>
   ```
 
   Branch names start with the agent (`claude/…`, `codex/…`) so ownership is obvious.
 - `cargo fmt --all` rewrites every file. Run it only when the working tree holds nothing but your
   own changes; otherwise format just your files with `rustfmt <path>`. The gate's
   `cargo fmt --all --check` never writes, so it is always safe.
-- Do not delete or regenerate shared outputs another agent may be using (`target/`,
-  `Cargo.lock`) unless the task requires it.
+- Do not delete or regenerate shared outputs another agent may be using (build output, lock
+  files) unless the task requires it.
 
 ## Handing over
 

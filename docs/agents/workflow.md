@@ -10,7 +10,7 @@ the first instinct.
 1. **Understand.** Read the code you will touch and the code that calls it. State the goal in one
    sentence before editing.
 2. **Search.** Look for existing types, functions, Slint components, crate features or std APIs
-   that already do — or nearly do — what is needed (`rg`, docs.rs, Slint docs).
+   that already do — or nearly do — what is needed (code search, docs.rs, the Slint docs).
 3. **Delete.** Remove code that the change makes obsolete, and any dead, duplicated or speculative
    code in the area you are touching. Do this *before* writing new code.
 4. **Combine.** Meet the need by extending what exists: a new enum variant, a parameter, a reused

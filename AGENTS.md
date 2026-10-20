@@ -1,12 +1,14 @@
-# Network Mapper — AGENTS.md
+# AGENTS.md
 
 This is an **AI-led project**. This file and the guides it links are the single source of truth
-for every coding agent (Claude, Codex, Copilot, Cursor, …) and for humans.
+for how every coding agent (Claude, Codex, Copilot, Cursor, …) and every human works here. They
+describe *how to work*, not where things are: learn the code's layout by reading it, and see
+[README.md](README.md) for an overview.
 
 - **MUST / MUST NOT** rules are non-negotiable. Breaking one is a failed task, even if the code works.
-- Rules are enforced mechanically where possible (`Cargo.toml` `[lints]`, `clippy.toml`,
-  `rustfmt.toml`, `rust-toolchain.toml`). Agents MUST NOT weaken that configuration, or edit the
-  agent rules, unless the user explicitly asks.
+- Rules are enforced mechanically where possible (lint, format and toolchain configuration).
+  Agents MUST NOT weaken that configuration, or edit the agent rules, unless the user explicitly
+  asks.
 
 ## Guides — read before working
 
@@ -17,34 +19,28 @@ Each guide is short. Read the ones your task touches **before** editing; when un
 | [docs/agents/workflow.md](docs/agents/workflow.md) | Always — delete → combine → add, and agent conduct |
 | [docs/agents/collaboration.md](docs/agents/collaboration.md) | Always — working alongside other agents (Claude, Codex) |
 | [docs/agents/product.md](docs/agents/product.md) | Any feature or UI work — product brief, scope limits, definition of done |
-| [docs/agents/rust.md](docs/agents/rust.md) | Touching `src/`, `build.rs` or `Cargo.toml` |
-| [docs/agents/slint.md](docs/agents/slint.md) | Touching `ui/`, `translations/` or `src/ui_bridge.rs` |
-| [docs/agents/tooling.md](docs/agents/tooling.md) | Before any shell command other than `cargo`/`git`/`rustfmt`, wanting a script, or touching `tools/` |
+| [docs/agents/rust.md](docs/agents/rust.md) | Writing or reviewing Rust code, build scripts or dependencies |
+| [docs/agents/slint.md](docs/agents/slint.md) | UI, UI text or translation work, or code that connects the model to the UI |
+| [docs/agents/tooling.md](docs/agents/tooling.md) | Before any shell command other than `cargo`/`git`/`rustfmt`, wanting a script, or working on agent tooling |
 
-## Project layout
+## Architecture
 
-Adjust only through delete → combine.
-
-```text
-src/main.rs        wiring only: build state, create window, connect callbacks, run
-src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
-src/model/         pure data and logic (devices, connections, roles, filtering) — no Slint imports
-src/mock_data.rs   the sample network
-src/ui_bridge.rs   model ↔ Slint struct conversion and callback handlers
-ui/                .slint files: app window, panels, canvas, components/, icons/, theme
-translations/      all UI text: one gettext .po file per language (English in en/)
-tools/             agent tooling: Rust wrappers around established crates (jq, grep, …)
-docs/agents/       the agent guides linked above
-```
-
-The model layer MUST NOT depend on Slint. That separation is what lets a real backend replace
-`mock_data.rs` later — no extra abstraction is needed beyond it.
+- Keep the network model free of UI code: it MUST NOT depend on Slint. That separation is what
+  lets a real backend replace the mock data later — no extra abstraction is needed beyond it.
+- Rust owns the data and the logic; the UI presents it. One thin bridge converts between them.
+- Change the layout only through delete → combine ([workflow.md](docs/agents/workflow.md)), and
+  keep [README.md](README.md) in step when you do.
 
 ## Protected files
 
-Change only on explicit user request: `AGENTS.md`, `docs/agents/*.md`, `CLAUDE.md`,
-`Cargo.toml` `[lints]`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`, `src/ui.rs`,
-`.claude/settings.json`.
+Change only on explicit user request:
+
+- the agent rules: this file, the guides it links, and tool-specific rule files (such as
+  `CLAUDE.md`);
+- lint, format and toolchain configuration, including the `[lints]` table of every Cargo
+  manifest;
+- the module that only wraps Slint's generated code;
+- agent tool settings (such as `.claude/settings.json`).
 
 ## Quality gate
 

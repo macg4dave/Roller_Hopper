@@ -1,18 +1,18 @@
 # Rust standards
 
-Read before touching `src/`, `build.rs` or `Cargo.toml`. Part of the agent rules indexed in
-[AGENTS.md](../../AGENTS.md).
+Read before writing or reviewing Rust code, build scripts or dependencies. Part of the agent
+rules indexed in [AGENTS.md](../../AGENTS.md).
 
 ## Lints are law
 
-- The lint set in `Cargo.toml` (`clippy::all` + `clippy::pedantic` + selected restriction lints)
-  is the baseline. The gate runs clippy with `-D warnings`, so every warning is a failure.
+- The manifest's lint set (`clippy::all` + `clippy::pedantic` + selected restriction lints) is
+  the baseline. The gate runs clippy with `-D warnings`, so every warning is a failure.
 - MUST NOT use `#[allow(...)]` — it is denied. If a lint is genuinely wrong for one item, use
   `#[expect(clippy::lint_name, reason = "why this case is correct")]` on the **narrowest** item.
   Never at module or crate level. Never to make the gate pass faster.
-- **The single exception** is `src/ui.rs`, which only wraps `slint::include_modules!()` and
-  exempts that generated code. MUST NOT write any code in `src/ui.rs`, and MUST NOT copy its
-  exemption anywhere else.
+- **The single exception** is the module that only wraps `slint::include_modules!()` and exempts
+  that generated code. MUST NOT write any other code in it, and MUST NOT copy its exemption
+  anywhere else.
 - `unsafe` is denied (`deny`, not `forbid`, only because Slint's generated code needs a local
   allow). There is no reason for it in our code.
 
@@ -54,8 +54,8 @@ Read before touching `src/`, `build.rs` or `Cargo.toml`. Part of the agent rules
 - Keep files focused (guideline: under ~300 lines). A file that grows past that is a signal to
   split by responsibility, not to add a layer.
 - Names are descriptive and follow Rust API guidelines (RFC 430). User-facing text is British
-  English and lives in `translations/en/`; identifiers follow the APIs they touch (e.g. Slint's
-  `color`).
+  English and lives in the translation files; identifiers follow the APIs they touch (e.g.
+  Slint's `color`).
 - Comments explain *why*, not *what*. Add a `//!` module doc to each module and `///` docs to
   any item whose purpose is not obvious from its name and signature.
 

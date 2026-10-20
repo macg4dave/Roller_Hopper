@@ -1,12 +1,13 @@
 # Agent tooling
 
-Read before running any shell command other than `cargo`, `git` or `rustfmt`, and before touching
-`tools/`. Part of the agent rules indexed in [AGENTS.md](../../AGENTS.md).
+Read before running any shell command other than `cargo`, `git` or `rustfmt`, and before working
+on agent tooling. Part of the agent rules indexed in [AGENTS.md](../../AGENTS.md).
 
 Agents often reach for shell utilities — `jq`, `grep`, `sed`, `awk`, `find`, Python or PowerShell
 one-liners. Those differ between machines and shells (this repo is worked on from PowerShell, Git
 Bash and Unix shells) and are not reviewed like project code. In this repository, every such
-utility is a **Rust subcommand in `tools/`**, so every agent runs the same, tested tool everywhere.
+utility is a **Rust subcommand of the tooling crate**, so every agent runs the same, tested tool
+everywhere.
 
 ## What you may run
 
@@ -16,18 +17,26 @@ utility is a **Rust subcommand in `tools/`**, so every agent runs the same, test
 - **Everything else goes through `cargo tool <area> <command>`.** MUST NOT call `jq`, `grep`,
   `rg`, `sed`, `awk`, `find`, `xargs`, `python`, `node`, PowerShell cmdlet pipelines or similar
   for project work, and MUST NOT write throwaway scripts in another language.
-- If no command does what you need, add one (below) rather than falling back to a shell tool.
+- If no command does what you need, add or extend one (below) as part of your current task. You
+  do not need to ask first. MUST NOT fall back to a shell tool "just this once".
 
 ## Building tooling you will use
 
 Agents are encouraged to build tools that make their own work on this repository easier — not
 only replacements for shell utilities. If you find yourself wanting a script (install /
 uninstall the app, set up prerequisites, check the translation file, list unused icons, …), make
-it a Rust tool in `tools/` instead.
+it a Rust tool instead.
+
+Adding tooling code is normal work, not a detour:
+
+- When you need a command that does not exist, build it in the same task, run the tools gate
+  (below), then use it. Report it under `Added:` in the task report.
+- New tool dependencies go in the tooling crate's manifest, never in the app's.
+- Built-in file tools stay available while you build, so a missing command never blocks you.
 
 Before adding anything, in this order:
 
-1. **Look.** Run `cargo tool --help` and read `tools/src/` to see what already exists.
+1. **Look.** Run `cargo tool --help` and read the tooling source to see what already exists.
 2. **Improve.** If an existing command nearly fits, extend it (a flag, an option, better output)
    and fix anything weak you notice in it. Do not add a near-duplicate beside it.
 3. **Add** a new command only when the need is real — you will use it in this task, or it
@@ -54,8 +63,12 @@ one clear concern:
 
 ## Do not reinvent the wheel
 
-`tools/` wraps established crates; it does not reimplement them. A command is thin glue: parse
-arguments, call the crate, write the result.
+`tools/` wraps established crates; it does not reimplement them. A command that replaces a
+general utility is thin glue: parse arguments, call the crate, write the result.
+
+Commands specific to this repository (check the translation file, list unused icons, …) may hold
+their own logic, because no crate knows our files. They still use crates for the generic parts
+(walking files, parsing, regex) and the existing areas' functions rather than copies of them.
 
 | Need | Command | Wraps |
 | --- | --- | --- |
@@ -90,32 +103,28 @@ cargo tool data toml Cargo.toml | cargo tool data jq '.dependencies | keys'
 - A pipe between two `cargo tool` calls is fine. Piping into a non-Rust utility is not.
 - If you chain the same steps repeatedly, add a command that does them in one call instead.
 
-## Layout and setup
+## Structure
 
-```text
-tools/Cargo.toml          standalone crate (own workspace and Cargo.lock) — keeps tool dependencies out of the app
-tools/src/main.rs         clap entry point: one variant per area, dispatch only
-tools/src/<area>.rs       the area's subcommand enum and dispatch
-tools/src/<area>/<cmd>.rs one module per command
-.cargo/config.toml        alias: [alias] tool = "run -q --manifest-path tools/Cargo.toml --"
-```
-
-When `tools/` does not exist yet, the first agent that needs a tool creates exactly this, plus
-`/tools/target` in `.gitignore`, and only the area and command it needs.
+- Tooling is a standalone crate with its own workspace and lock file, so tool dependencies never
+  reach the app. A Cargo alias makes it `cargo tool`.
+- The entry point is a clap enum with one variant per area and does nothing but dispatch. Each
+  area is one module holding its subcommand enum; each command is one module of its own.
+- If the tooling crate does not exist yet, the first agent that needs a tool sets up exactly
+  this — with only the area and command it needs — and keeps its build output out of git.
 
 ## Standards for tool code
 
 Tool code is project code. [rust.md](rust.md) applies in full, with these additions:
 
-- `tools/Cargo.toml` carries the same `[lints]` table as the root `Cargo.toml`, and it is
-  protected in the same way. Keep the two identical.
+- The tooling crate carries the same `[lints]` table as the app, and it is protected in the
+  same way. Keep the two identical.
 - Write output with `writeln!` on a locked `std::io::stdout()` and return errors from `main`
   (`print_stdout`/`print_stderr` are linted). Exit non-zero on failure.
 - Tools work on local files only: no network access, and no modification of files unless the
   command exists to do that (`edit replace`, `install`) and was asked to.
 - Every command has `--help` text that says what it does, so the next agent can find it.
 - Test each command's glue (arguments in, output out) — not the wrapped crate's behaviour.
-- When touching `tools/`, run the quality gate for it as well:
+- When working on tooling, run the quality gate for it as well (`tools/` is the crate's folder):
 
   ```sh
   cargo fmt --all --check --manifest-path tools/Cargo.toml

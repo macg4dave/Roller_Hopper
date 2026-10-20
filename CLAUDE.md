@@ -13,5 +13,5 @@
 - For work that touches more than three files, outline the delete → combine → add plan before
   editing.
 - Run the quality gate through the shell exactly as written in `AGENTS.md`.
-- `cargo add` and edits to protected files trigger a permission prompt by design
-  (`.claude/settings.json`). Explain why the change is needed when asking.
+- `cargo add` and edits to protected files trigger a permission prompt by design (Claude Code
+  settings). Explain why the change is needed when asking.
