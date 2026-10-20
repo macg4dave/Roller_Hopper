@@ -1,0 +1,129 @@
+import { Button, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+import { DetailField } from "components/detail-field.slint";
+import { IconChooser } from "components/icon-chooser.slint";
+import { GuestEditor } from "guest-editor.slint";
+
+// The selected device's editable fields: icon, name, role, a new network card, guests, notes,
+// and forgetting it. Used on the edit page and in the details panel's edit mode.
+export component DeviceForm inherits VerticalLayout {
+    // Forgetting asks first; a new selection drops the question.
+    property <bool> confirm-forget;
+    property <int> selected-id: Bridge.selected-id;
+    changed selected-id => { confirm-forget = false; }
+
+    alignment: start;
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        spacing: Theme.space-m;
+        padding-bottom: Theme.space-m;
+        IconChooser {
+            width: 52px;
+            height: 52px;
+            icon: Bridge.details.icon;
+            icon-size: 36px;
+            tint: Theme.group-colour(Bridge.details.colour, Theme.accent);
+            reset-text: @tr("edit.icon-from-role");
+            can-reset: Bridge.details.custom-icon;
+            picked(icon) => { Bridge.set-icon(icon.id); }
+            reset => { Bridge.reset-icon(); }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+            Text {
+                text: Labels.device-name(Bridge.details.name);
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            if Bridge.cards.length > 0: Text {
+                text: Bridge.cards[0].ip;
+                font-size: Theme.font-body;
+                color: Theme.text-muted;
+            }
+        }
+    }
+
+    DetailField {
+        label: @tr("details.name");
+        LineEdit {
+            text <=> Bridge.name-draft;
+            edited(text) => { Bridge.rename(text); }
+        }
+    }
+    DetailField {
+        label: @tr("details.role");
+        // The role decides the icon the device is shown with. New roles are added in the role
+        // list.
+        ComboBox {
+            model: Bridge.roles;
+            current-index <=> Bridge.role-index;
+            selected => { Bridge.choose-role(self.current-index); }
+        }
+    }
+    // The cards themselves are listed under the device, where a new one is selected.
+    DetailField {
+        label: @tr("edit.cards");
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: @tr("edit.card-add");
+                icon: @image-url("icons/plus.svg");
+                colorize-icon: true;
+                clicked => { Bridge.add-card(); }
+            }
+        }
+    }
+    DetailField {
+        label: @tr("edit.guests");
+        GuestEditor { }
+    }
+    DetailField {
+        label: @tr("details.notes");
+        TextEdit {
+            height: 96px;
+            wrap: word-wrap;
+            placeholder-text: @tr("details.notes-placeholder");
+            text <=> Bridge.notes-draft;
+            edited(text) => { Bridge.edit-notes(text); }
+        }
+    }
+
+    Rectangle { height: Theme.space-m; }
+    if !confirm-forget: HorizontalLayout {
+        alignment: start;
+        Button {
+            text: @tr("edit.forget");
+            icon: @image-url("icons/delete.svg");
+            colorize-icon: true;
+            clicked => { confirm-forget = true; }
+        }
+    }
+    if confirm-forget: VerticalLayout {
+        spacing: Theme.space-s;
+        Text {
+            text: @tr("edit.forget-question");
+            font-size: Theme.font-body;
+            color: Theme.text;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space-s;
+            Button {
+                text: @tr("edit.forget-confirm");
+                primary: true;
+                clicked => { Bridge.forget(); }
+            }
+            Button {
+                text: @tr("edit.cancel");
+                clicked => { confirm-forget = false; }
+            }
+        }
+    }
+}

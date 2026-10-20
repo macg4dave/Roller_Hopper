@@ -5,13 +5,21 @@ import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
 import { StatusDot } from "components/status-dot.slint";
+import { CardEditor } from "card-editor.slint";
+import { DeviceForm } from "device-form.slint";
 
 // Right panel: everything known about the selected device, with its network cards, or about
-// the selected card (its addresses and open ports) under its device's name. Editing happens on
-// the edit page.
+// the selected card (its addresses and open ports) under its device's name. The pencil turns it
+// into the same editor as the edit page's, for the device or card, until Done.
 export component DetailsPanel inherits Rectangle {
-    // Open the edit page on the selected device.
-    callback edit();
+    // Showing the editor rather than the details; ends when nothing is selected.
+    property <bool> editing;
+    property <int> selected-id: Bridge.selected-id;
+    changed selected-id => {
+        if selected-id < 0 {
+            editing = false;
+        }
+    }
 
     background: Theme.surface;
 
@@ -31,7 +39,27 @@ export component DetailsPanel inherits Rectangle {
         width: parent.width - 4 * Theme.space-l;
     }
 
-    if Bridge.selected-id >= 0: scroll := ScrollView {
+    if Bridge.selected-id >= 0 && editing: edit-scroll := ScrollView {
+        VerticalLayout {
+            width: edit-scroll.visible-width;
+            alignment: start;
+            padding: Theme.space-l;
+            spacing: Theme.space-s;
+
+            HorizontalLayout {
+                alignment: end;
+                Button {
+                    text: @tr("details.done");
+                    primary: true;
+                    clicked => { root.editing = false; }
+                }
+            }
+            if Bridge.selected-card >= 0: CardEditor { }
+            if Bridge.selected-card < 0: DeviceForm { }
+        }
+    }
+
+    if Bridge.selected-id >= 0 && !editing: scroll := ScrollView {
         VerticalLayout {
             width: scroll.visible-width;
             alignment: start;
@@ -79,7 +107,7 @@ export component DetailsPanel inherits Rectangle {
                         icon: @image-url("icons/edit.svg");
                         colorize-icon: true;
                         accessible-label: @tr("details.edit");
-                        clicked => { root.edit(); }
+                        clicked => { root.editing = true; }
                     }
                     Button {
                         icon: @image-url("icons/close.svg");

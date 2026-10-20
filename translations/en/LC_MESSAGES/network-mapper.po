@@ -118,8 +118,13 @@ msgstr "Select a device on the map or in the list to see its details."
 msgid "details.close"
 msgstr "Close details"
 
+# The pencil in the details panel: edits the selected device or network card in the panel.
 msgid "details.edit"
-msgstr "Edit device"
+msgstr "Edit"
+
+# Ends editing in the details panel and shows the details again.
+msgid "details.done"
+msgstr "Done"
 
 msgid "details.name"
 msgstr "Name"

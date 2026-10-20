@@ -2,7 +2,6 @@ import { Bridge, DeviceStatus, DeviceView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
-import { IconChooser } from "icon-chooser.slint";
 import { StatusDot } from "status-dot.slint";
 
 // One entry in a device list. A device heads a group: a chevron folds its network cards away,
@@ -110,25 +109,11 @@ export component DeviceRow inherits Rectangle {
             }
         }
 
-        if !card: DeviceIcon {
-            icon: device.icon;
-            width: icon-width;
-            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
-        }
-
-        // A card's icon says what kind of connection it is, and is changed right here. The picker
-        // opens on the network card icons; the other categories are a tab away.
-        if card: VerticalLayout {
-            alignment: center;
-            IconChooser {
-                width: icon-width;
-                height: icon-width;
-                icon: device.card-icon;
-                start-category: Bridge.card-icon-category;
-                icon-size: 18px;
-                tint: selected ? Theme.accent : Theme.icon;
-                picked(icon) => { Bridge.set-card-icon(device.card-id, icon.id); }
-            }
+        // A card shows its own icon, which says what kind of connection it is.
+        DeviceIcon {
+            icon: card ? device.card-icon.image : device.icon;
+            width: card ? 20px : icon-width;
+            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline || card ? Theme.icon-faded : Theme.icon);
         }
 
         VerticalLayout {

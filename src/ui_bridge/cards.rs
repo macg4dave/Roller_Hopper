@@ -166,8 +166,7 @@ impl AppState {
         }
     }
 
-    /// Gives `card` its own icon. Any card can be given one straight from its row in the lists,
-    /// selected or not.
+    /// Gives `card` its own icon, from the card editor.
     fn set_card_icon(&mut self, card: CardId, icon: Icon) {
         if let Some(card) = self.network.card_mut(card) {
             card.icon = icon;
