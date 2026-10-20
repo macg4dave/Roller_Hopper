@@ -15,10 +15,10 @@ const SAG: f32 = 0.3;
 /// Dash and gap lengths of inferred links, in map units.
 const DASH: f32 = 6.0;
 const GAP: f32 = 4.0;
-/// Room around the outermost icons for their labels, in map units.
+/// Room around the outermost icons for their labels and root circles, in map units.
 const PAD_SIDE: f32 = 80.0;
 const PAD_TOP: f32 = 40.0;
-const PAD_BOTTOM: f32 = 80.0;
+const PAD_BOTTOM: f32 = 90.0;
 
 pub(super) fn ui_id(id: DeviceId) -> i32 {
     // Ids come from our own data and stay far below i32::MAX; -1 means "no device" to the UI.
@@ -153,6 +153,8 @@ pub(super) fn device_view(
         status: status(device.status),
         x: at.x,
         y: at.y,
+        has_root: false,
+        root_y: 0.0,
         dimmed: false,
     }
 }
@@ -244,24 +246,33 @@ type LineStyle = (Option<GroupColour>, ConnectionKind, bool);
 pub(super) fn lines(
     network: &Network,
     links: &[Connection],
+    trunks: &[(DeviceId, [Point; 2])],
     positions: &Positions,
     selected: Option<DeviceId>,
 ) -> Vec<ui::LineSet> {
     let at = |id| positions.get(&id).copied().unwrap_or_default();
-    let mut sets: Vec<(LineStyle, Vec<String>)> = Vec::new();
-    for link in links {
+    let is_selected = |id| selected == Some(id);
+    // Every line hangs from a device: a link from its upstream device, a trunk from its own.
+    let link_lines = links.iter().map(|link| {
+        let highlighted = is_selected(link.upstream) || is_selected(link.downstream);
         let points = route(at(link.upstream), at(link.downstream));
-        let highlighted = selected.is_some_and(|id| id == link.upstream || id == link.downstream);
+        (link.upstream, link.kind, highlighted, points.to_vec())
+    });
+    let trunk_lines = trunks
+        .iter()
+        .map(|&(id, trunk)| (id, ConnectionKind::Known, is_selected(id), trunk.to_vec()));
+    let mut sets: Vec<(LineStyle, Vec<String>)> = Vec::new();
+    for (parent, kind, highlighted, points) in link_lines.chain(trunk_lines) {
         // A line takes the group colour of the device it hangs from, unless it is highlighted.
-        let parent = network.device(link.upstream);
-        let colour = parent
+        let colour = network
+            .device(parent)
             .filter(|_| !highlighted)
             .and_then(|d| network.colour(d));
-        let path = match link.kind {
+        let path = match kind {
             ConnectionKind::Known => solid(&points),
             ConnectionKind::Inferred => dashed(&points),
         };
-        let style = (colour, link.kind, highlighted);
+        let style = (colour, kind, highlighted);
         match sets.iter_mut().find(|(s, _)| *s == style) {
             Some((_, paths)) => paths.push(path),
             None => sets.push((style, vec![path])),
@@ -378,11 +389,16 @@ mod tests {
 
     #[test]
     fn a_strand_sags_when_slack_and_pulls_straight_when_stretched() {
+        let network = crate::mock_data::network();
+        let arrangement = crate::model::Arrangement::default();
+        let positions = crate::model::tree_layout(&network, &arrangement);
+        let (pc, nas) = (DeviceId(5), DeviceId(4));
+        let any =
+            crate::model::snap_target(&network, &arrangement, &positions, pc, positions[&nas]);
         let snap = |pull| Snap {
-            upstream: DeviceId(1),
-            before: None,
             line: [Point { x: 0.0, y: 0.0 }, Point { x: 40.0, y: 0.0 }],
             pull,
+            ..any.unwrap()
         };
         assert_eq!(
             strand(Some(&snap(0.5))).commands,
@@ -425,14 +441,15 @@ mod tests {
     #[test]
     fn selection_highlights_its_links_and_draws_them_last() {
         let network = crate::mock_data::network();
-        let positions = crate::model::tree_layout(&network);
-        let plain = lines(&network, network.connections(), &positions, None);
+        let positions = crate::model::tree_layout(&network, &crate::model::Arrangement::default());
+        let plain = lines(&network, network.connections(), &[], &positions, None);
         assert!(plain.iter().all(|s| !s.selected));
 
         let access_point = DeviceId(3);
         let highlighted = lines(
             &network,
             network.connections(),
+            &[],
             &positions,
             Some(access_point),
         );
@@ -447,24 +464,32 @@ mod tests {
     #[test]
     fn lines_take_the_colour_of_the_device_they_hang_from() {
         let mut network = crate::mock_data::network();
-        let positions = crate::model::tree_layout(&network);
+        let positions = crate::model::tree_layout(&network, &crate::model::Arrangement::default());
         // A colour of its own, so other groups' lines cannot be mistaken for the router's.
         let group = network.add_group("Gateway").unwrap();
         network.set_group_colour(group, Some(GroupColour::Red));
         network.set_role_group(&Role::Router, Some(group));
 
-        let sets = lines(&network, network.connections(), &positions, None);
+        let router = DeviceId(1);
+        let trunks = [router, DeviceId(2)]
+            .map(|id| (id, crate::model::trunk(&network, &positions, id).unwrap()));
+        let sets = lines(&network, network.connections(), &trunks, &positions, None);
         let red = sets
             .iter()
             .find(|s| s.colour == ui::GroupColour::Red && !s.inferred);
         let router_links = network
             .connections()
             .iter()
-            .filter(|c| c.upstream == DeviceId(1));
-        let expected = router_links
+            .filter(|c| c.upstream == router);
+        let known = router_links
             .filter(|c| c.kind == ConnectionKind::Known)
             .count();
         let drawn = red.map(|s| s.commands.matches('M').count());
-        assert_eq!(drawn, Some(expected), "the router's links, and only those");
+        let expected = known + 1;
+        assert_eq!(
+            drawn,
+            Some(expected),
+            "the router's links and trunk, and only those"
+        );
     }
 }

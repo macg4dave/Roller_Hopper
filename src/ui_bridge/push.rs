@@ -19,10 +19,17 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         convert::device_view(network, icons, d, role, at(d.id))
     };
 
+    let trunks = state.trunks();
     let nodes = network.devices().iter().map(|d| {
         let shown = state.filter.admits(d.status) && d.matches(&state.query);
+        let root = trunks
+            .iter()
+            .find(|(id, _)| *id == d.id)
+            .map(|(_, [_, root])| root);
         ui::DeviceView {
             dimmed: !shown,
+            has_root: root.is_some(),
+            root_y: root.map_or(0.0, |r| r.y),
             ..view(d)
         }
     });
@@ -36,7 +43,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_roles(&bridge, &labels, state);
 
     let highlighted = state.dragging.or(state.selected);
-    let lines = convert::lines(network, &state.links(), on_map, highlighted);
+    let lines = convert::lines(network, &state.links(), &trunks, on_map, highlighted);
     bridge.set_strand(convert::strand(state.strand().as_ref()));
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);

@@ -119,6 +119,20 @@ export component TopologyCanvas inherits Rectangle {
             stroke-width: Theme.line-width / zoom;
         }
 
+        // Root circles at the foot of each trunk, drawn like the device's lines.
+        for device in Bridge.devices: Rectangle {
+            visible: device.has-root;
+            x: (device.x - Bridge.bounds.x) * 1px - self.width / 2;
+            y: (device.root-y - Bridge.bounds.y) * 1px - self.height / 2;
+            width: Theme.root-size;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: Theme.background;
+            border-width: Theme.line-width / zoom;
+            border-color: device.id == Bridge.selected-id ? Theme.accent : Theme.group-colour(device.colour, Theme.line);
+            opacity: device.dimmed ? 0.3 : 1;
+        }
+
         if Bridge.strand.commands != "": Path {
             width: parent.width;
             height: parent.height;

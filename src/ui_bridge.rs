@@ -18,8 +18,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, Vec
 
 use crate::mock_data;
 use crate::model::{
-    Connection, Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role, Snap,
-    StatusFilter, snap_target, tree_layout,
+    Arrangement, Connection, Device, DeviceId, GroupId, Icon, Network, Point, Positions, Role,
+    Snap, StatusFilter, snap_target, tree_layout, trunk,
 };
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
@@ -38,6 +38,8 @@ pub(crate) struct AppState {
     positions: Positions,
     /// Where each device is shown, on its way to its spot in `positions`.
     motion: Motion,
+    /// How the user arranged devices down each trunk, until the layout is reset.
+    arrangement: Arrangement,
     /// The device being dragged on the map, until it is dropped.
     dragging: Option<DeviceId>,
     selected: Option<DeviceId>,
@@ -51,11 +53,13 @@ pub(crate) struct AppState {
 
 impl AppState {
     pub(crate) fn new(network: Network) -> Self {
-        let positions = tree_layout(&network);
+        let arrangement = Arrangement::default();
+        let positions = tree_layout(&network, &arrangement);
         Self {
             network,
             motion: Motion::new(positions.clone()),
             positions,
+            arrangement,
             dragging: None,
             selected: None,
             filter: StatusFilter::All,
@@ -161,11 +165,27 @@ impl AppState {
     }
 
     /// Where the dragged device `id` would go if dropped now, judged by the map as shown: on the
-    /// line it is near, between the devices it is between; `None` to stand alone.
+    /// trunk it is near, where it is on that trunk; `None` to stand alone.
     fn snap(&self, id: DeviceId) -> Option<Snap> {
         let shown = self.motion.shown();
         let at = shown.get(&id).copied()?;
-        snap_target(&self.network, shown, id, at)
+        snap_target(&self.network, &self.arrangement, shown, id, at)
+    }
+
+    /// The trunk of every device as shown. A dragged branch's trunks are hidden until it is
+    /// dropped, and the other trunks do not stretch after it.
+    /// In device order, so the lines sent to the UI only change when the map does.
+    fn trunks(&self) -> Vec<(DeviceId, [Point; 2])> {
+        let shown = self.motion.shown();
+        let dragged = |id| self.dragging.is_some_and(|d| self.network.is_within(id, d));
+        let still: Positions = shown
+            .iter()
+            .filter(|&(&id, _)| !dragged(id))
+            .map(|(&id, &p)| (id, p))
+            .collect();
+        let ids = self.network.devices().iter().map(|d| d.id);
+        ids.filter_map(|id| Some((id, trunk(&self.network, &still, id)?)))
+            .collect()
     }
 
     /// The connections to draw: all but the dragged device's uplink, which [`Self::strand`]
@@ -181,23 +201,36 @@ impl AppState {
         self.dragging.and_then(|id| self.snap(id))
     }
 
-    /// Ends a drag: the device joins the line it was dropped on, or stands alone, and the map
-    /// is laid out again around the change, making room where it went in. The devices on the
-    /// line it joined bob as it settles in.
+    /// Ends a drag: the device hangs from the trunk it was dropped on, where it was dropped, or
+    /// stands alone, and the map is laid out again around the change. The devices on the trunk
+    /// it joined bob as it settles in.
     fn drop_dragged(&mut self) {
-        if let Some(id) = self.dragging.take() {
-            let snap = self.snap(id);
-            let (upstream, before) = (snap.map(|s| s.upstream), snap.and_then(|s| s.before));
-            self.network.connect(id, upstream, before);
-            self.positions = tree_layout(&self.network);
-            if let Some(upstream) = upstream {
-                let links = self.network.connections().iter();
-                let line = links
-                    .filter(|c| c.upstream == upstream && c.downstream != id)
-                    .map(|c| c.downstream);
-                self.motion.jiggle(line.chain([upstream]));
+        let Some(id) = self.dragging.take() else {
+            return;
+        };
+        let snap = self.snap(id);
+        self.network.connect(id, snap.map(|s| s.upstream));
+        match snap {
+            Some(snap) => {
+                let arrangement = &mut self.arrangement;
+                arrangement.place(&self.network, id, snap.upstream, snap.slot);
+                let others = self.network.behind(snap.upstream).filter(|&d| d != id);
+                self.motion.jiggle(others.chain([snap.upstream]));
             }
+            None => self.arrangement.remove(id),
         }
+        self.lay_out();
+    }
+
+    fn lay_out(&mut self) {
+        self.positions = tree_layout(&self.network, &self.arrangement);
+    }
+
+    /// Back to the connections as found, laid out afresh with nothing the user arranged.
+    fn reset_layout(&mut self) {
+        self.network.restore_connections();
+        self.arrangement.clear();
+        self.lay_out();
     }
 
     /// Moves the map one frame on; true once everything has settled.
@@ -254,10 +287,7 @@ fn connect_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         Rc::new(move || animate(&ui, &state, &timer))
     };
 
-    let reset = handler(ui, state, |st, ()| {
-        st.network.restore_connections();
-        st.positions = tree_layout(&st.network);
-    });
+    let reset = handler(ui, state, |st, ()| st.reset_layout());
     let reset_settle = Rc::clone(&settle);
     bridge.on_reset_layout(move || {
         reset(());
@@ -630,35 +660,41 @@ mod tests {
     #[test]
     fn a_dropped_device_joins_the_line_it_was_previewing_on() {
         let mut state = AppState::new(mock_data::network());
-        let (router, switch, access_point, pc) =
-            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(5));
+        // The NAS hangs left of the router's trunk; the switch and access point to its right.
+        let (router, switch, access_point, nas) =
+            (DeviceId(1), DeviceId(2), DeviceId(3), DeviceId(4));
         state.drop_dragged();
         assert_eq!(
             state.positions,
-            tree_layout(&state.network),
+            tree_layout(&state.network, &state.arrangement),
             "no drag, no change"
         );
 
         // Dropped between the main switch and the access point.
         let x = |shown: &AppState, id| shown.positions[&id].x;
-        let (switch_x, access_point_x) = (x(&state, switch), x(&state, access_point));
+        let gap = |shown: &AppState| x(shown, access_point) - x(shown, switch);
+        let gap_before = gap(&state);
         let between = Point {
-            x: f32::midpoint(switch_x, access_point_x),
+            x: f32::midpoint(x(&state, switch), x(&state, access_point)),
             y: state.positions[&switch].y,
         };
-        state.drag_to(pc, between);
+        state.drag_to(nas, between);
         assert!(
-            state.links().iter().all(|c| c.downstream != pc),
+            state.links().iter().all(|c| c.downstream != nas),
             "old line hidden"
         );
         assert!(state.strand().is_some());
 
         state.drop_dragged();
         assert_eq!(state.dragging, None);
-        assert_eq!(state.network.uplink(pc).map(|c| c.upstream), Some(router));
-        assert_eq!(state.positions, tree_layout(&state.network), "tidied again");
-        assert!(x(&state, switch) < x(&state, pc) && x(&state, pc) < x(&state, access_point));
-        assert!(x(&state, access_point) > access_point_x, "pushed apart");
+        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(router));
+        assert_eq!(
+            state.positions,
+            tree_layout(&state.network, &state.arrangement),
+            "tidied again"
+        );
+        assert!(x(&state, switch) < x(&state, nas) && x(&state, nas) < x(&state, access_point));
+        assert!(gap(&state) > gap_before, "pushed apart");
 
         assert!(!state.step_motion(), "glides into place");
         assert!((0..600).any(|_| state.step_motion()), "and settles");
@@ -680,6 +716,38 @@ mod tests {
         assert_eq!(state.strand(), None);
         state.drop_dragged();
         assert!(state.network.uplink(pc).is_none());
+    }
+
+    #[test]
+    fn a_device_dropped_on_a_trunk_below_a_row_hangs_below_it_until_reset() {
+        let mut state = AppState::new(mock_data::network());
+        let (router, switch, nas) = (DeviceId(1), DeviceId(2), DeviceId(4));
+        let lowest_of_switch_row = |shown: &AppState| {
+            let behind = shown.network.behind(switch).filter(|&d| d != nas);
+            behind
+                .map(|d| shown.positions[&d].y)
+                .fold(f32::MIN, f32::max)
+        };
+        let row = lowest_of_switch_row(&state);
+
+        // Just left of the switch's trunk, below its row.
+        let below_left = Point {
+            x: state.positions[&switch].x - 10.0,
+            y: row + 90.0,
+        };
+        state.drag_to(nas, below_left);
+        state.drop_dragged();
+        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(switch));
+        assert!(state.positions[&nas].y > lowest_of_switch_row(&state));
+        assert!(state.positions[&nas].x < state.positions[&switch].x);
+        assert!(
+            state.trunks().iter().any(|(id, _)| *id == nas),
+            "with a trunk of its own"
+        );
+
+        state.reset_layout();
+        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(router));
+        assert_eq!(state.arrangement, Arrangement::default());
     }
 
     #[test]
