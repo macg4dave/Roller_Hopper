@@ -1,28 +1,24 @@
 //! Connects the AI settings window to [`crate::ai`]: installs models in the background, loads
-//! the one picked, and runs it on the prompt and evidence, so the window stays responsive
-//! through downloads of gigabytes and answers that take minutes.
+//! and unloads the one picked, and runs it on the prompt and evidence, so the window stays
+//! responsive through downloads of gigabytes and answers that take minutes.
 
 mod generation;
+mod install;
 
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 
-use slint::{
-    CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel, Weak,
-};
+use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
 use crate::ai::{
-    self, Answered, End, Generation, InstallError, Job, MODELS, Model, RunError, Worker,
-    WorkerEvent,
+    self, Answered, Choice, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent,
 };
-use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, InstallOutcome, ModelState};
+use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
 /// Opens the window from Settings, bringing back the same window each time.
 pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     let window = AiSettingsWindow::new()?;
-    show_offers(&window);
+    install::connect(&window);
+    show_installed(&window);
     restore_texts(&window);
     restore_generation(&window);
     window.set_max_answer_tokens(i32::try_from(ai::MAX_ANSWER_TOKENS).unwrap_or(i32::MAX));
@@ -41,11 +37,12 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
             restore_generation(&open);
         }
     });
-
-    let cancel = Arc::new(AtomicBool::new(false));
-    let (weak, flag) = (window.as_weak(), Arc::clone(&cancel));
-    window.on_install(move |index| start_install(&weak, &flag, index));
-    window.on_cancel_install(move || cancel.store(true, Ordering::Relaxed));
+    let refreshing = window.as_weak();
+    window.on_refresh(move || {
+        if let Some(open) = refreshing.upgrade() {
+            show_installed(&open);
+        }
+    });
     connect_worker(&window);
 
     // The app runs until its last window closes, so the main window takes this one with it.
@@ -84,20 +81,28 @@ fn connect_worker(window: &AiSettingsWindow) {
     let (loading, loader) = (window.as_weak(), Rc::clone(&worker));
     window.on_load(move |index| {
         if let Some(open) = loading.upgrade() {
-            let model = installed_model(&open, index);
-            open.set_can_think(model.is_some_and(Model::thinks));
-            let gpu = open.get_use_gpu();
-            send(&open, &loader, Job::Load { model, gpu });
+            let name = usize::try_from(index)
+                .ok()
+                .and_then(|i| open.get_models().row_data(i))
+                .unwrap_or_default();
+            load(&open, &loader, &name, open.get_use_gpu());
         }
     });
-    // The picked model, if any, reloads on the other device.
+    let (unloading, unloader) = (window.as_weak(), Rc::clone(&worker));
+    window.on_unload(move || {
+        if let Some(open) = unloading.upgrade() {
+            let gpu = open.get_use_gpu();
+            send(&open, &unloader, Job::Load { model: None, gpu });
+        }
+    });
+    // The loaded model, if any, reloads on the other device.
     let (moving, mover) = (window.as_weak(), Rc::clone(&worker));
     window.on_set_gpu(move |gpu| {
-        if let Some(open) = moving.upgrade()
-            && let Some(model) = installed_model(&open, open.get_loaded_index())
-        {
-            let model = Some(model);
-            send(&open, &mover, Job::Load { model, gpu });
+        if let Some(open) = moving.upgrade() {
+            let name = open.get_loaded_name();
+            if !name.is_empty() {
+                load(&open, &mover, &name, gpu);
+            }
         }
     });
     let stopper = Rc::clone(&worker);
@@ -115,6 +120,27 @@ fn connect_worker(window: &AiSettingsWindow) {
             send(&open, &worker, job);
         }
     });
+}
+
+/// Asks the worker to load the model listed as `name`, on the GPU or the CPU.
+fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
+    window.set_can_think(false);
+    let Some(model) = choice_named(name) else {
+        // The file left the folder after the list was read.
+        window.set_loaded_name(SharedString::new());
+        window.set_state(ModelState::Missing);
+        show_installed(window);
+        return;
+    };
+    window.set_loaded_name(name.into());
+    send(
+        window,
+        worker,
+        Job::Load {
+            model: Some(model),
+            gpu,
+        },
+    );
 }
 
 fn restore_texts(window: &AiSettingsWindow) {
@@ -142,27 +168,34 @@ fn send(window: &AiSettingsWindow, worker: &Worker, job: Job) {
     }
 }
 
-/// The model the window lists at `index` among the installed ones.
-fn installed_model(window: &AiSettingsWindow, index: i32) -> Option<&'static Model> {
-    let name = window
-        .get_installed()
-        .row_data(usize::try_from(index).ok()?)?;
-    MODELS.iter().find(|m| m.name == name.as_str())
+/// The model the folder now holds under `name`, re-read so a file added or removed since the
+/// list was shown is found or reported missing.
+fn choice_named(name: &str) -> Option<Choice> {
+    let dir = ai::models_dir()?;
+    ai::installed(&dir).into_iter().find(|c| c.name() == name)
 }
 
 fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
     match event {
-        WorkerEvent::Unloaded => window.set_state(ModelState::None),
+        WorkerEvent::Unloaded => {
+            window.set_loaded_name(SharedString::new());
+            window.set_can_think(false);
+            window.set_state(ModelState::None);
+        }
         WorkerEvent::Loading => window.set_state(ModelState::Loading),
-        WorkerEvent::Ready => window.set_state(ModelState::Ready),
+        WorkerEvent::Ready { thinks } => {
+            window.set_can_think(thinks);
+            window.set_state(ModelState::Ready);
+        }
         WorkerEvent::Finished(Ok(answered)) => {
             show_answered(window, answered);
             window.set_state(ModelState::Ready);
         }
-        // Without a GPU the pick stays, so switching CUDA off loads it on the processor.
+        // Without a GPU the model stays chosen, so switching CUDA off loads it on the
+        // processor.
         WorkerEvent::LoadFailed(RunError::NoGpu) => window.set_state(ModelState::NoGpu),
         WorkerEvent::LoadFailed(e) => {
-            window.set_loaded_index(-1);
+            window.set_loaded_name(SharedString::new());
             window.set_state(state(e));
         }
         WorkerEvent::Running => {
@@ -180,112 +213,34 @@ fn state(error: RunError) -> ModelState {
         RunError::NoModel => ModelState::NoModel,
         RunError::Missing => ModelState::Missing,
         RunError::Broken => ModelState::Broken,
+        RunError::Unsupported => ModelState::Unsupported,
         RunError::NoGpu => ModelState::NoGpu,
         RunError::TooLong => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,
     }
 }
 
-fn show_offers(window: &AiSettingsWindow) {
-    let names: Vec<SharedString> = MODELS.iter().map(|m| m.name.into()).collect();
-    let sizes: Vec<f32> = MODELS.iter().map(|m| gigabytes(m.size())).collect();
-    window.set_offered_names(ModelRc::new(VecModel::from(names)));
-    window.set_offered_gb(ModelRc::new(VecModel::from(sizes)));
-    // An empty folder disables Install AI.
-    let folder = ai::models_dir().map(|d| d.display().to_string());
-    window.set_folder(folder.unwrap_or_default().into());
-    show_installed(window);
-}
-
-/// Re-reads the models folder, which may have changed outside the app, keeping the loaded
-/// model picked in the list.
+/// Re-reads the models folder, which may have changed outside the app, keeping the model
+/// picked in the list, or else the loaded one.
 fn show_installed(window: &AiSettingsWindow) {
-    let loaded = installed_model(window, window.get_loaded_index());
-    let installed = ai::models_dir()
-        .map(|d| ai::installed(&d))
-        .unwrap_or_default();
-    let flags: Vec<bool> = MODELS
-        .iter()
-        .map(|m| installed.iter().any(|i| std::ptr::eq(*i, m)))
-        .collect();
-    let names: Vec<SharedString> = installed.iter().map(|m| m.name.into()).collect();
-    let index = loaded
-        .and_then(|l| installed.iter().position(|i| std::ptr::eq(*i, l)))
+    let dir = ai::models_dir();
+    let models = dir.as_deref().map(ai::installed).unwrap_or_default();
+    let names: Vec<SharedString> = models.iter().map(|m| m.name().into()).collect();
+    let picked = usize::try_from(window.get_model_index())
+        .ok()
+        .and_then(|i| window.get_models().row_data(i));
+    let loaded = window.get_loaded_name();
+    let index = picked
+        .and_then(|p| names.iter().position(|n| *n == p))
+        .or_else(|| names.iter().position(|n| *n == loaded))
+        .or_else(|| (!names.is_empty()).then_some(0))
         .and_then(|i| i32::try_from(i).ok())
         .unwrap_or(-1);
+    let flags: Vec<bool> = MODELS
+        .iter()
+        .map(|m| dir.as_deref().is_some_and(|d| m.is_installed(d)))
+        .collect();
     window.set_offered_installed(ModelRc::new(VecModel::from(flags)));
-    window.set_installed(ModelRc::new(VecModel::from(names)));
-    window.set_loaded_index(index);
-}
-
-fn start_install(weak: &Weak<AiSettingsWindow>, cancel: &Arc<AtomicBool>, index: i32) {
-    let model = usize::try_from(index).ok().and_then(|i| MODELS.get(i));
-    let (Some(window), Some(model)) = (weak.upgrade(), model) else {
-        return;
-    };
-    let Some(dir) = ai::models_dir() else {
-        window.set_outcome(InstallOutcome::NoFolder);
-        return;
-    };
-    cancel.store(false, Ordering::Relaxed);
-    window.set_installing(true);
-    window.set_progress(0.0);
-    window.set_outcome(InstallOutcome::None);
-
-    let (weak, cancel) = (weak.clone(), Arc::clone(cancel));
-    // Detached: the app's close ends it, and nothing waits for it.
-    thread::spawn(move || {
-        let total = model.size().max(1);
-        let mut shown = 0;
-        let result = ai::install(model, &dir, &cancel, &mut |done| {
-            // Thousandths, so the window is not flooded with one update per read.
-            let step = done.saturating_mul(1000) / total;
-            if step != shown {
-                shown = step;
-                let fraction = thousandths(step);
-                // An error only means the app is closing, so there is no window to update.
-                weak.upgrade_in_event_loop(move |w| w.set_progress(fraction))
-                    .ok();
-            }
-        });
-        // As above: if the app is closing, nobody needs the outcome.
-        weak.upgrade_in_event_loop(move |w| {
-            w.set_installing(false);
-            w.set_outcome(outcome(result));
-            show_installed(&w);
-        })
-        .ok();
-    });
-}
-
-fn outcome(result: Result<(), InstallError>) -> InstallOutcome {
-    match result {
-        Ok(()) => InstallOutcome::Done,
-        Err(InstallError::Network) => InstallOutcome::Network,
-        Err(InstallError::Disk) => InstallOutcome::Disk,
-        Err(InstallError::Corrupt) => InstallOutcome::Corrupt,
-        Err(InstallError::Cancelled) => InstallOutcome::Cancelled,
-    }
-}
-
-/// Exact for anything up to a thousand, so for every progress step.
-fn thousandths(step: u64) -> f32 {
-    f32::from(u16::try_from(step.min(1000)).unwrap_or(1000)) / 1000.0
-}
-
-/// Decimal gigabytes, as download sizes are shown; a display value, so rounding is fine.
-fn gigabytes(bytes: u64) -> f32 {
-    f32::from(u16::try_from(bytes / 1_000_000).unwrap_or(u16::MAX)) / 1000.0
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn progress_and_sizes_are_shown_as_fractions_and_gigabytes() {
-        assert!((thousandths(250) - 0.25).abs() < f32::EPSILON);
-        assert!((thousandths(5000) - 1.0).abs() < f32::EPSILON);
-        assert!((gigabytes(2_508_702_910) - 2.508).abs() < 1e-6);
-    }
+    window.set_models(ModelRc::new(VecModel::from(names)));
+    window.set_model_index(index);
 }

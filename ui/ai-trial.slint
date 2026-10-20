@@ -1,4 +1,4 @@
-import { Button, TextEdit } from "std-widgets.slint";
+import { Button, ProgressIndicator, TextEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Note, SectionTitle } from "ai-text.slint";
 
@@ -49,15 +49,22 @@ export component AiTrial inherits VerticalLayout {
     }
 
     HorizontalLayout {
+        padding-top: Theme.space-xs;
+        padding-bottom: Theme.space-xs;
         spacing: Theme.space-s;
-        if !running: Button {
+        Button {
             text: @tr("ai-settings.run");
+            icon: @image-url("icons/play.svg");
+            colorize-icon: true;
             primary: true;
-            enabled: root.can-run;
+            enabled: root.can-run && !root.running;
             clicked => { root.run(root.prompt, root.input); }
         }
-        if running: Button {
+        Button {
             text: @tr("ai-settings.stop");
+            icon: @image-url("icons/stop.svg");
+            colorize-icon: true;
+            enabled: root.running;
             clicked => { root.stop(); }
         }
         Rectangle { horizontal-stretch: 1; }
@@ -69,6 +76,7 @@ export component AiTrial inherits VerticalLayout {
     }
 
     SectionTitle { text: @tr("ai-settings.output"); }
+    if running: ProgressIndicator { indeterminate: true; }
     TextEdit {
         text: root.output;
         read-only: true;

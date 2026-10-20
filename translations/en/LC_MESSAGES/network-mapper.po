@@ -42,17 +42,61 @@ msgstr "Install a model"
 
 # {0} is the model's name.
 msgid "ai-settings.offer-installed"
-msgstr "{0} is installed. Choose it under Loaded model to use it."
+msgstr "{0} is installed. Choose it under Model and select Load to use it."
 
 msgid "ai-settings.model"
-msgstr "Loaded model"
+msgstr "Model"
 
-# Under the loaded-model list when nothing is installed.
+# Under the model list when there is nothing to load.
 msgid "ai-settings.no-model"
-msgstr "No model installed yet. Install one above."
+msgstr "No model installed yet. Install one below, or add your own GGUF file."
+
+# {0} is the models folder.
+msgid "ai-settings.own-models"
+msgstr "To use a model of your own, put its GGUF file in {0} and refresh the list. Qwen3, Qwen2 and Llama models whose tokenizer is in the file can run."
+
+# Starts the chosen model: reads it into memory.
+msgid "ai-settings.load"
+msgstr "Load"
+
+# Stops the loaded model and frees its memory.
+msgid "ai-settings.unload"
+msgstr "Unload"
+
+# Re-reads the models folder.
+msgid "ai-settings.refresh"
+msgstr "Refresh the model list"
+
+# The status lights at the top of the window. {0} is the model's name.
+msgid "ai-settings.light-loading"
+msgstr "Loading {0}"
+
+msgid "ai-settings.light-running"
+msgstr "{0} answering"
+
+msgid "ai-settings.light-loaded"
+msgstr "{0} loaded"
+
+msgid "ai-settings.light-none"
+msgstr "No model loaded"
+
+msgid "ai-settings.light-failed"
+msgstr "Model not loaded"
+
+msgid "ai-settings.light-cuda-on"
+msgstr "CUDA on"
+
+msgid "ai-settings.light-cuda-off"
+msgstr "CUDA off"
+
+msgid "ai-settings.light-cuda-no-gpu"
+msgstr "CUDA: no graphics card"
+
+msgid "ai-settings.light-cuda-not-built"
+msgstr "CUDA not built in"
 
 msgid "ai-settings.state-none"
-msgstr "No model loaded. Choose one to load it."
+msgstr "No model loaded. Choose one and select Load."
 
 msgid "ai-settings.state-loading"
 msgstr "Loading the model…"
@@ -73,10 +117,13 @@ msgid "ai-settings.state-no-model"
 msgstr "Load a model before running it."
 
 msgid "ai-settings.state-missing"
-msgstr "This model's files are missing. Install it again."
+msgstr "This model's files are missing. Install it again, or put its file back in the models folder."
 
 msgid "ai-settings.state-broken"
-msgstr "This model's files could not be read. Install it again."
+msgstr "This model's files could not be read as a model. Install it again, or replace its file."
+
+msgid "ai-settings.state-unsupported"
+msgstr "This model is of a kind the app cannot run. Qwen3, Qwen2 and Llama models whose tokenizer is in the file can run."
 
 msgid "ai-settings.state-too-long"
 msgstr "The prompt and evidence are too long for the model. Shorten them and run again."

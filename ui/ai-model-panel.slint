@@ -1,0 +1,108 @@
+import { Button, ComboBox, Switch } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Card, Note } from "ai-text.slint";
+
+// The loaded model: none, on its way, ready, answering, or why it is not.
+export enum ModelState { none, loading, ready, running, no-model, missing, broken, unsupported, no-gpu, too-long, failed }
+
+// Choosing a model, starting and stopping it (Load and Unload), and whether it runs on the
+// graphics card.
+export component AiModelPanel inherits VerticalLayout {
+    // The models ready to load, by name, and which is picked (-1 for none).
+    in property <[string]> models;
+    in-out property <int> model-index: -1;
+    // The model loaded or on its way, by name; empty for none.
+    in property <string> loaded-name;
+    in property <ModelState> state;
+    // Where models are installed, and where the user's own GGUF files go.
+    in property <string> folder;
+    // Whether this build can use an NVIDIA GPU, and whether models load onto it.
+    in property <bool> gpu-built;
+    in-out property <bool> use-gpu;
+
+    // A model, by its index in `models`, is to be loaded.
+    callback load(int);
+    callback unload();
+    // Re-reads the models folder.
+    callback refresh();
+    // The CUDA switch changed; the loaded model moves to the GPU or the CPU.
+    callback set-gpu(bool);
+
+    property <bool> busy: state == ModelState.loading || state == ModelState.running;
+    property <bool> picked-is-loaded: model-index >= 0 && models[model-index] == loaded-name
+        && state != ModelState.no-gpu;
+
+    pure function state-text(state: ModelState) -> string {
+        if state == ModelState.none { return @tr("ai-settings.state-none"); }
+        if state == ModelState.loading { return @tr("ai-settings.state-loading"); }
+        if state == ModelState.ready { return use-gpu ? @tr("ai-settings.state-ready-gpu") : @tr("ai-settings.state-ready-cpu"); }
+        if state == ModelState.running { return @tr("ai-settings.state-running"); }
+        if state == ModelState.no-model { return @tr("ai-settings.state-no-model"); }
+        if state == ModelState.missing { return @tr("ai-settings.state-missing"); }
+        if state == ModelState.broken { return @tr("ai-settings.state-broken"); }
+        if state == ModelState.unsupported { return @tr("ai-settings.state-unsupported"); }
+        if state == ModelState.no-gpu { return @tr("ai-settings.state-no-gpu"); }
+        if state == ModelState.too-long { return @tr("ai-settings.state-too-long"); }
+        if state == ModelState.failed { return @tr("ai-settings.state-failed"); }
+        return "";
+    }
+
+    Card {
+        title: @tr("ai-settings.model");
+
+        ComboBox {
+            model: models;
+            current-index <=> model-index;
+            enabled: models.length > 0 && !busy;
+        }
+        HorizontalLayout {
+            spacing: Theme.space-s;
+            Button {
+                text: @tr("ai-settings.load");
+                icon: @image-url("icons/play.svg");
+                colorize-icon: true;
+                primary: true;
+                enabled: model-index >= 0 && !busy && !picked-is-loaded;
+                clicked => { root.load(model-index); }
+            }
+            Button {
+                text: @tr("ai-settings.unload");
+                icon: @image-url("icons/stop.svg");
+                colorize-icon: true;
+                enabled: loaded-name != "" && !busy;
+                clicked => { root.unload(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                icon: @image-url("icons/refresh.svg");
+                colorize-icon: true;
+                accessible-label: @tr("ai-settings.refresh");
+                enabled: !busy;
+                clicked => { root.refresh(); }
+            }
+        }
+        Text {
+            text: models.length == 0 ? @tr("ai-settings.no-model") : state-text(state);
+            color: state == ModelState.ready || state == ModelState.none || busy ? Theme.text-muted : Theme.warning;
+            font-size: Theme.font-small;
+            wrap: word-wrap;
+        }
+        Note {
+            text: @tr("ai-settings.own-models", folder);
+        }
+
+        VerticalLayout {
+            padding-top: Theme.space-s;
+            spacing: Theme.space-xs;
+            Switch {
+                text: @tr("ai-settings.cuda");
+                checked <=> root.use-gpu;
+                enabled: gpu-built && !busy;
+                toggled => { root.set-gpu(self.checked); }
+            }
+            Note {
+                text: gpu-built ? @tr("ai-settings.cuda-explained") : @tr("ai-settings.cuda-not-built");
+            }
+        }
+    }
+}

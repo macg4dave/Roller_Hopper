@@ -1,0 +1,39 @@
+import { Theme } from "../theme.slint";
+
+// A small glowing status light in a pill, with what it stands for, such as whether CUDA is on.
+// The text says the state too, so it does not rely on colour alone.
+export component Light inherits Rectangle {
+    in property <color> colour;
+    in property <string> text;
+
+    height: 26px;
+    border-radius: self.height / 2;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.background;
+
+    HorizontalLayout {
+        padding-left: Theme.space-s + 2px;
+        padding-right: Theme.space-m;
+        spacing: Theme.space-s;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: self.width / 2;
+                background: root.colour;
+                drop-shadow-blur: 6px;
+                drop-shadow-color: root.colour.with-alpha(0.7);
+            }
+        }
+        Text {
+            text: root.text;
+            color: Theme.text;
+            font-size: Theme.font-small;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+}

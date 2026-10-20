@@ -1,0 +1,90 @@
+import { Button, ComboBox, ProgressIndicator } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Card, Note } from "ai-text.slint";
+
+// How the last install ended, if one ran since the window opened.
+export enum InstallOutcome { none, done, cancelled, no-folder, network, disk, corrupt }
+
+// Install AI: pick one of the offered models and download it, with its progress and outcome.
+export component AiInstallPanel inherits VerticalLayout {
+    // The models offered for install, with their download sizes and whether each is installed.
+    in property <[string]> offered-names;
+    in property <[float]> offered-gb;
+    in property <[bool]> offered-installed;
+    in-out property <int> offer-index: 0;
+    // Where models are installed; empty when the system has no application data folder.
+    in property <string> folder;
+    in property <bool> installing;
+    // Of the install, from 0 to 1.
+    in property <float> progress;
+    in property <InstallOutcome> outcome;
+
+    callback install(int);
+    callback cancel-install();
+
+    pure function outcome-text(outcome: InstallOutcome) -> string {
+        if outcome == InstallOutcome.done { return @tr("ai-settings.outcome-done"); }
+        if outcome == InstallOutcome.cancelled { return @tr("ai-settings.outcome-cancelled"); }
+        if outcome == InstallOutcome.no-folder { return @tr("ai-settings.outcome-no-folder"); }
+        if outcome == InstallOutcome.network { return @tr("ai-settings.outcome-network"); }
+        if outcome == InstallOutcome.disk { return @tr("ai-settings.outcome-disk"); }
+        if outcome == InstallOutcome.corrupt { return @tr("ai-settings.outcome-corrupt"); }
+        return "";
+    }
+
+    // Sizes to one decimal place, or two below 1 GB so a small model does not show as 0.1.
+    pure function gb(value: float) -> string {
+        return value < 1 ? Math.round(value * 100) / 100 : Math.round(value * 10) / 10;
+    }
+
+    Card {
+        title: @tr("ai-settings.install-title");
+
+        ComboBox {
+            model: offered-names;
+            current-index <=> offer-index;
+            enabled: !installing;
+        }
+        if offered-installed[offer-index] && !installing: Note {
+            text: @tr("ai-settings.offer-installed", offered-names[offer-index]);
+        }
+        if !offered-installed[offer-index] && !installing: VerticalLayout {
+            spacing: Theme.space-s;
+            Note {
+                text: @tr("ai-settings.install-note", offered-names[offer-index], gb(offered-gb[offer-index]), folder);
+            }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: @tr("ai-settings.install");
+                    primary: true;
+                    enabled: folder != "";
+                    clicked => { root.install(offer-index); }
+                }
+            }
+        }
+        if installing: VerticalLayout {
+            spacing: Theme.space-s;
+            ProgressIndicator { progress: root.progress; }
+            HorizontalLayout {
+                spacing: Theme.space-s;
+                Text {
+                    text: @tr("ai-settings.downloading", offered-names[offer-index], gb(offered-gb[offer-index] * progress), gb(offered-gb[offer-index]));
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
+                Button {
+                    text: @tr("ai-settings.cancel");
+                    clicked => { root.cancel-install(); }
+                }
+            }
+        }
+        if outcome != InstallOutcome.none && !installing: Text {
+            text: outcome-text(outcome);
+            color: outcome == InstallOutcome.done ? Theme.text : Theme.warning;
+            wrap: word-wrap;
+        }
+    }
+}

@@ -21,7 +21,7 @@ honest: simulated results are never presented as real.
 - Keep the code small and modular. Avoid a monolithic Rust file or Slint component; equally, do not add unnecessary architectural layers.
 - Everything runs in the app's process and ships with it, apart from the AI model the user installs: no separate scanner, capture driver, helper program, service or server, and no shelling out to OS commands.
 - Scanning uses upstream **netscli-core** through ordinary Cargo updates: no fork, copied or patched scanner, and no home-made replacement engine.
-- AI is a pretrained model of about 4B parameters (Qwen3-4B first; Qwen3-0.6B and SmolLM2-135M are offered as smaller choices), not bundled: **Install AI** downloads it on request into the user's application data folder (`%APPDATA%` on Windows), pinned by revision, size and hash. It runs locally on the CPU, or on an NVIDIA GPU through CUDA when the user switches that on. One installed model is used at a time, chosen from a list. No other downloads, telemetry or self-training.
+- AI is a pretrained model of about 4B parameters (Qwen3-4B first; Qwen3-0.6B and SmolLM2-135M are offered as smaller choices), not bundled: **Install AI** downloads it on request into the user's application data folder (`%APPDATA%` on Windows), pinned by revision, size and hash. A GGUF file the user puts in the models folder themselves is listed beside those and can be loaded if the app can run its kind. It runs locally on the CPU, or on an NVIDIA GPU through CUDA when the user switches that on. One installed model is used at a time, chosen from a list. No other downloads, telemetry or self-training.
 - Intended scale: home and small-office networks of roughly 250 devices.
 
 ## Design direction

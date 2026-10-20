@@ -1,6 +1,7 @@
-//! The AI models the user can install, where they go, and running the loaded one. Each model's
-//! files are pinned by revision, size and SHA-256, so an install is either exactly those files
-//! or nothing.
+//! The AI models the user can install, where they go, and running the loaded one. Each offered
+//! model's files are pinned by revision, size and SHA-256, so an install is either exactly
+//! those files or nothing. GGUF files the user puts in the models folder themselves can be
+//! loaded too.
 
 mod generation;
 mod install;
@@ -35,14 +36,36 @@ pub(crate) struct Model {
     tokenizer: ModelFile,
 }
 
-/// How a model's weights are laid out, which decides how they load and how a chat is framed.
-/// Both mark turns with `<|im_start|>` and `<|im_end|>`.
+/// How a model's weights are laid out, which decides how they load.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Arch {
-    /// Qwen3, answering with its thinking switched off.
     Qwen3,
-    /// Llama-style, such as `SmolLM2`.
+    /// Qwen2 and Qwen2.5.
+    Qwen2,
+    /// Llama-style, such as `SmolLM2` and Llama 3.
     Llama,
+}
+
+/// A model ready to load: an offered one that is installed, or a GGUF file the user put in the
+/// models folder, which carries its own tokenizer.
+#[derive(Debug, Clone)]
+pub(crate) enum Choice {
+    Offered(&'static Model),
+    Own(PathBuf),
+}
+
+impl Choice {
+    /// The name the model list shows: an offered model's own name, or the file's name, so the
+    /// two never clash.
+    pub(crate) fn name(&self) -> String {
+        match self {
+            Self::Offered(model) => model.name.to_owned(),
+            Self::Own(path) => path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        }
+    }
 }
 
 /// The identification prompt, shared with the evaluation tool so both ask the same thing. The
@@ -132,14 +155,6 @@ impl Model {
     fn path(&self, dir: &Path) -> PathBuf {
         dir.join(self.folder)
     }
-
-    /// Whether it can reason before answering (see [`Generation::think`]).
-    pub(crate) fn thinks(&self) -> bool {
-        match self.arch {
-            Arch::Qwen3 => true,
-            Arch::Llama => false,
-        }
-    }
 }
 
 impl ModelFile {
@@ -159,7 +174,47 @@ pub(crate) fn gpu_built() -> bool {
     candle_core::utils::cuda_is_available()
 }
 
-/// The models fully installed in `dir`, in offer order.
-pub(crate) fn installed(dir: &Path) -> Vec<&'static Model> {
-    MODELS.iter().filter(|m| m.is_installed(dir)).collect()
+/// The models ready to load from `dir`: the offered ones fully installed, in offer order, then
+/// the GGUF files at the top of the folder, by name. Whether a file is a model the app can run
+/// is only known once it loads.
+pub(crate) fn installed(dir: &Path) -> Vec<Choice> {
+    let offered = MODELS.iter().filter(|m| m.is_installed(dir));
+    // A missing folder or an unreadable entry holds nothing that could load.
+    let mut own: Vec<PathBuf> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("gguf"))
+        })
+        .collect();
+    own.sort();
+    offered
+        .map(Choice::Offered)
+        .chain(own.into_iter().map(Choice::Own))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gguf_files_at_the_top_of_the_folder_are_listed_after_offered_models() {
+        let dir = std::env::temp_dir().join(format!("network-mapper-own-{}", std::process::id()));
+        fs::remove_dir_all(&dir).ok();
+        fs::create_dir_all(dir.join("nested")).unwrap();
+        for name in ["b.gguf", "A.GGUF", "notes.txt", "nested/c.gguf"] {
+            fs::write(dir.join(name), "").unwrap();
+        }
+        fs::create_dir_all(dir.join("folder.gguf")).unwrap();
+        let names: Vec<String> = installed(&dir).iter().map(Choice::name).collect();
+        assert_eq!(names, ["A.GGUF", "b.gguf"]);
+        fs::remove_dir_all(&dir).ok();
+        assert!(installed(&dir).is_empty());
+    }
 }

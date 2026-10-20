@@ -1,6 +1,7 @@
 import { Theme } from "theme.slint";
 
-// The AI settings window's text styles: a section heading and a small explanatory note.
+// The AI settings window's building blocks: a card grouping one part of it, a section heading
+// and a small explanatory note.
 export component SectionTitle inherits Text {
     font-size: Theme.font-heading;
     font-weight: 600;
@@ -11,4 +12,22 @@ export component Note inherits Text {
     font-size: Theme.font-small;
     color: Theme.text-muted;
     wrap: word-wrap;
+}
+
+// A white panel on the window's grey background, with a heading unless `title` is empty.
+export component Card inherits Rectangle {
+    in property <string> title;
+
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: Theme.radius * 1.5;
+
+    VerticalLayout {
+        padding: Theme.space-l;
+        spacing: Theme.space-s;
+
+        if root.title != "": SectionTitle { text: root.title; }
+        @children
+    }
 }

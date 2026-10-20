@@ -4,7 +4,9 @@ A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-me
 only — there is no real network discovery or scanning. Settings → AI settings installs an AI
 model (Qwen3-4B, 2.5 GB; Qwen3-0.6B, 0.6 GB; or SmolLM2-135M, 0.15 GB) into the user's
 application data folder,
-loads one, and runs it on an editable prompt and sample device file.
+loads one, and runs it on an editable prompt and sample device file. A GGUF file of your own
+(Qwen3, Qwen2 or Llama, with its tokenizer in the file) placed directly in that `models` folder
+— `%APPDATA%\Network Mapper\models\` on Windows — is listed beside them.
 
 ## Run
 
@@ -69,9 +71,11 @@ src/model/         pure data and logic (devices with their network cards, virtua
                    containers; the map's tree of network cards, roles, groups,
                    layout; the simulated discovery run) — no Slint imports
 src/ai.rs          the AI models offered, pinned by revision and hash, where they are
-                   installed, the prompt and sample; ai/ downloads and checks them and runs
-                   the loaded one with Candle (CPU or CUDA) — no Slint imports
-src/ai_settings.rs the AI settings window: install, load, GPU switch and Run in the background
+                   installed, the user's own GGUF files, the prompt and sample; ai/ downloads
+                   and checks them and runs the loaded one with Candle (CPU or CUDA) — no
+                   Slint imports
+src/ai_settings.rs the AI settings window: install, load/unload, GPU switch and Run in the
+                   background
 src/mock_data.rs   the sample network, and in mock_data/ the hosts a discovery run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
 src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,
