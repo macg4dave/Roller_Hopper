@@ -249,8 +249,8 @@ msgstr "Cancel"
 msgid "edit.confirm-add"
 msgstr "Add"
 
-# The network cards of the device being edited, which are listed under it. A new card starts
-# blank and is selected, so its IP address and the rest can be filled in.
+# The network cards of the device being edited, each opened from its row to edit it. A new card
+# starts blank and is selected, so its IP address and the rest can be filled in.
 msgid "edit.cards"
 msgstr "Network cards"
 
@@ -289,9 +289,19 @@ msgstr "Enter an IPv4 address, such as 192.168.1.1."
 msgid "edit.card-mac-hint"
 msgstr "Enter six pairs of hexadecimal digits, such as 3C:22:FB:1A:2B:3C."
 
-# Adding a virtual machine or container to the device being edited (see guest.*).
+# The virtual machines and containers on the device being edited, listed with adding more (see
+# guest.*). Each is edited on its own, opened from its row.
 msgid "edit.guests"
 msgstr "Guests"
+
+# Under a guest's name in that list: what it runs as, then its IP address.
+msgid "edit.guest-summary"
+msgstr "{} · {}"
+
+# The button leading from a virtual machine or container back to its host, which is named on
+# the button.
+msgid "edit.guest-back"
+msgstr "Back to the host"
 
 msgid "edit.guest-kind"
 msgstr "Type"

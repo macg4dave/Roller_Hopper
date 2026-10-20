@@ -2,12 +2,14 @@ import { Button, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
+import { ChildRow } from "components/child-row.slint";
 import { DetailField } from "components/detail-field.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { GuestEditor } from "guest-editor.slint";
 
-// The selected device's editable fields: icon, name, role, a new network card, guests, notes,
-// and forgetting it. Used on the edit page and in the details panel's edit mode.
+// The selected device's editable fields: icon, name, role, its network cards and guests with
+// adding more, notes, and forgetting it. Used on the edit page and in the details panel's edit
+// mode.
 export component DeviceForm inherits VerticalLayout {
     // Forgetting asks first; a new selection drops the question.
     property <bool> confirm-forget;
@@ -16,6 +18,19 @@ export component DeviceForm inherits VerticalLayout {
 
     alignment: start;
     spacing: Theme.space-xs;
+
+    // A guest is a child of its host, which it leads back to.
+    if Bridge.details.host-id >= 0: HorizontalLayout {
+        alignment: start;
+        padding-bottom: Theme.space-s;
+        Button {
+            text: Labels.device-name(Bridge.details.host-name);
+            icon: @image-url("icons/chevron-left.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.guest-back");
+            clicked => { Bridge.select(Bridge.details.host-id); }
+        }
+    }
 
     HorizontalLayout {
         spacing: Theme.space-m;
@@ -28,7 +43,7 @@ export component DeviceForm inherits VerticalLayout {
             tint: Theme.group-colour(Bridge.details.colour, Theme.accent);
             reset-text: @tr("edit.icon-from-role");
             can-reset: Bridge.details.custom-icon;
-            picked(icon) => { Bridge.set-icon(icon.id); }
+            picked(icon) => { Bridge.set-icon(Bridge.selected-id, icon.id); }
             reset => { Bridge.reset-icon(); }
         }
         VerticalLayout {
@@ -66,22 +81,45 @@ export component DeviceForm inherits VerticalLayout {
             selected => { Bridge.choose-role(self.current-index); }
         }
     }
-    // The cards themselves are listed under the device, where a new one is selected.
+    // Cards and guests are each edited on their own, opened from their row; a new card is
+    // selected to be filled in.
     DetailField {
         label: @tr("edit.cards");
-        HorizontalLayout {
-            alignment: start;
-            Button {
-                text: @tr("edit.card-add");
-                icon: @image-url("icons/plus.svg");
-                colorize-icon: true;
-                clicked => { Bridge.add-card(); }
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            for card in Bridge.cards: ChildRow {
+                icon: card.icon;
+                start-category: Bridge.card-icon-category;
+                name: Labels.card-name(card.name, card.index);
+                detail: Labels.card(card.ip, card.via-name, card.via-card, card.via-index, card.inferred);
+                picked(icon) => { Bridge.set-card-icon(card.id, icon.id); }
+                clicked => { Bridge.select-card(card.id); }
+            }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: @tr("edit.card-add");
+                    icon: @image-url("icons/plus.svg");
+                    colorize-icon: true;
+                    clicked => { Bridge.add-card(); }
+                }
             }
         }
     }
     DetailField {
         label: @tr("edit.guests");
-        GuestEditor { }
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            for guest in Bridge.guests: ChildRow {
+                icon: guest.icon;
+                tint: Theme.group-colour(guest.colour, Theme.accent);
+                name: Labels.device-name(guest.name);
+                detail: Labels.guest-summary(guest.kind, guest.ip);
+                picked(icon) => { Bridge.set-icon(guest.id, icon.id); }
+                clicked => { Bridge.select(guest.id); }
+            }
+            GuestEditor { }
+        }
     }
     DetailField {
         label: @tr("details.notes");

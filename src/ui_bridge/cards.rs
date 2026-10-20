@@ -1,7 +1,8 @@
 //! Network cards in the UI. A card is a child of its device: a row under it in the lists, and a
 //! node on the map drawn with the device's icon and name. This module builds their views and
 //! handles editing the selected card (its IPv4 settings, where it is plugged in, removing it),
-//! adding cards, and adding virtual machines and containers to the selected device.
+//! adding cards, and listing and adding the virtual machines and containers on the selected
+//! device.
 
 use std::cell::RefCell;
 use std::net::Ipv4Addr;
@@ -13,7 +14,7 @@ use slint::{ComponentHandle, SharedString};
 use super::icons::Icons;
 use super::{AppState, Selection, convert, handler, update};
 use crate::model::{
-    CardId, ConnectionKind, Device, GuestKind, Icon, MacAddr, Network, NetworkCard,
+    CardId, ConnectionKind, Device, DeviceId, GuestKind, Icon, MacAddr, Network, NetworkCard,
 };
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
@@ -108,6 +109,23 @@ pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> V
         }
     });
     views.collect()
+}
+
+/// The virtual machines and containers running straight on `host`, in device order; those on
+/// them are listed with their own host.
+pub(super) fn guest_views(network: &Network, icons: &Icons, host: DeviceId) -> Vec<ui::GuestView> {
+    let guests = network.devices().iter().filter_map(|device| {
+        let guest = device.guest.filter(|g| g.host == host)?;
+        Some(ui::GuestView {
+            id: convert::ui_id(device.id),
+            kind: convert::guest_kind(Some(guest.kind)),
+            name: device.name.trim().into(),
+            ip: device.primary_card().map(ip).unwrap_or_default(),
+            icon: icons.choice(&network.icon(device)),
+            colour: convert::colour(network.colour(device)),
+        })
+    });
+    guests.collect()
 }
 
 /// A subnet prefix as typed: a mask such as `255.255.255.0`, or a length such as `24` or `/24`.
@@ -301,7 +319,6 @@ pub(super) fn connect_child_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>)
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::DeviceId;
 
     const PC: DeviceId = DeviceId(5);
     const DOCKER_HOST: DeviceId = DeviceId(19);
@@ -465,5 +482,31 @@ mod tests {
         let host = CardId(DOCKER_HOST.0);
         assert!(state.positions[&web].y > state.positions[&host].y);
         assert_eq!(state.motion.shown(), &state.positions, "laid out at rest");
+    }
+
+    #[test]
+    fn a_hosts_guests_are_those_running_straight_on_it() {
+        let network = mock_data::network();
+        let icons = Icons::default();
+        let ids = |host| {
+            guest_views(&network, &icons, host)
+                .into_iter()
+                .map(|g| g.id)
+        };
+        let on_docker: Vec<i32> = network
+            .devices()
+            .iter()
+            .filter(|d| network.host(d.id) == Some(DOCKER_HOST))
+            .map(|d| convert::ui_id(d.id))
+            .collect();
+        assert!(!on_docker.is_empty());
+        assert_eq!(ids(DOCKER_HOST).collect::<Vec<_>>(), on_docker);
+        let on_linux_server: Vec<i32> = ids(network.host(DOCKER_HOST).unwrap()).collect();
+        assert!(on_linux_server.contains(&convert::ui_id(DOCKER_HOST)));
+        assert!(
+            on_docker.iter().all(|id| !on_linux_server.contains(id)),
+            "not the guests of its guests"
+        );
+        assert_eq!(ids(PC).count(), 0);
     }
 }

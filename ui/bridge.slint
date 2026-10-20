@@ -105,6 +105,17 @@ export struct CardView {
     icon: IconChoice,
 }
 
+/// A virtual machine or container running straight on the selected device, in device order.
+export struct GuestView {
+    id: int,
+    kind: GuestKind,
+    name: string,
+    // Of its first network card; empty when it has none.
+    ip: string,
+    icon: IconChoice,
+    colour: GroupColour,
+}
+
 /// A setting of the selected network card, typed on the edit page.
 export enum CardField { name, address, mask, gateway, mac }
 
@@ -122,8 +133,9 @@ export struct DeviceDetails {
     // Already translated, like DeviceView.role.
     role: string,
     notes: string,
-    // What it runs as, and the name of the device it runs on.
+    // What it runs as, and the id and name of the device it runs on (-1 for none).
     guest: GuestKind,
+    host-id: int,
     host-name: string,
     manufacturer: string,
     model: string,
@@ -206,6 +218,7 @@ export global Bridge {
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[CardView]> cards;
+    in property <[GuestView]> guests;
     // The selected network card, -1 for none, and its view.
     in property <int> selected-card: -1;
     in property <CardView> card;
@@ -262,8 +275,9 @@ export global Bridge {
     // an empty id is the Unknown icon.
     callback refresh-icons();
     callback edit-notes(string);
-    // The selected device's own icon, or back to its role's icon.
-    callback set-icon(string);
+    // Gives the device with this id its own icon (the selected one, or one of its guests); or
+    // the selected device back its role's icon.
+    callback set-icon(int, string);
     callback reset-icon();
     // Removes the selected device until the app restarts.
     callback forget();

@@ -90,6 +90,11 @@ export global Labels {
         return @tr("guest.virtual-machine");
     }
 
+    // A guest's line under its name on the edit page: what it runs as, and its address.
+    public pure function guest-summary(kind: GuestKind, ip: string) -> string {
+        return ip == "" ? guest-kind(kind) : @tr("edit.guest-summary", guest-kind(kind), ip);
+    }
+
     // The device a guest runs on, and what it runs as.
     public pure function runs-on(host-name: string, kind: GuestKind) -> string {
         if kind == GuestKind.container { return @tr("runs-on.container", device-name(host-name)); }

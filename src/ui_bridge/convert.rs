@@ -192,7 +192,7 @@ pub(super) fn guest_kind_from_ui(kind: ui::GuestKind) -> Option<GuestKind> {
     }
 }
 
-fn guest_kind(kind: Option<GuestKind>) -> ui::GuestKind {
+pub(super) fn guest_kind(kind: Option<GuestKind>) -> ui::GuestKind {
     match kind {
         None => ui::GuestKind::None,
         Some(GuestKind::VirtualMachine) => ui::GuestKind::VirtualMachine,
@@ -230,7 +230,6 @@ pub(super) fn details(
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let host = device.guest.and_then(|guest| network.device(guest.host));
-    let host = host.map(|d| d.name.trim());
     ui::DeviceDetails {
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
@@ -241,7 +240,8 @@ pub(super) fn details(
         role,
         notes: device.notes.as_str().into(),
         guest: guest_kind(device.guest.map(|guest| guest.kind)),
-        host_name: text(host),
+        host_id: host.map_or(-1, |d| ui_id(d.id)),
+        host_name: text(host.map(|d| d.name.trim())),
         manufacturer: text(device.manufacturer),
         model: text(device.model),
         hostname: text(device.hostname),

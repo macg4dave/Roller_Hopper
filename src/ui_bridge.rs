@@ -142,6 +142,13 @@ impl AppState {
         }
     }
 
+    /// Gives device `id` its own icon: the selected device, or one of its guests from their row.
+    fn set_icon(&mut self, id: DeviceId, icon: Icon) {
+        if let Some(device) = self.network.device_mut(id) {
+            device.icon = Some(icon);
+        }
+    }
+
     fn role(&self, index: usize) -> Option<Role> {
         self.network.roles().into_iter().nth(index)
     }
@@ -522,9 +529,12 @@ fn connect_device_edits(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_choose_role(handler(ui, state, |st, index| {
         st.choose_role(convert::index(index));
     }));
-    bridge.on_set_icon(handler(ui, state, |st, icon: SharedString| {
-        st.edit_selected(|d| d.icon = Some(convert::icon_from_ui(&icon)));
-    }));
+    let set_icon = handler(ui, state, |st, (id, icon): (i32, SharedString)| {
+        if let Some(id) = convert::device_id(id) {
+            st.set_icon(id, convert::icon_from_ui(&icon));
+        }
+    });
+    bridge.on_set_icon(move |id, icon| set_icon((id, icon)));
     let reset_icon = handler(ui, state, |st, ()| st.edit_selected(|d| d.icon = None));
     bridge.on_reset_icon(move || reset_icon(()));
     let forget = handler(ui, state, |st, ()| st.forget_selected());
@@ -1091,6 +1101,26 @@ mod tests {
         assert_eq!(payload_card(&card_payload(42)), Some(42));
         assert_eq!(payload_card("42"), None, "text from another app");
         assert_eq!(payload_card(&format!("{CARD_PAYLOAD}x")), None);
+    }
+
+    #[test]
+    fn a_guest_takes_its_own_icon_while_its_host_stays_selected() {
+        let mut state = state_with(19);
+        let web_server = DeviceId(24);
+        let lamp = Icon::new("Smart home/Smart light");
+        let icon_of = |st: &AppState, id| st.network.device(id).and_then(|d| d.icon.clone());
+        let host_icon = icon_of(&state, DeviceId(19));
+        state.set_icon(web_server, lamp.clone());
+        assert_eq!(icon_of(&state, web_server), Some(lamp));
+        assert_eq!(
+            icon_of(&state, DeviceId(19)),
+            host_icon,
+            "the host keeps its own"
+        );
+        assert_eq!(state.selected, Some(Selection::Device(DeviceId(19))));
+        let before = state.network.clone();
+        state.set_icon(DeviceId(999), Icon::new("Network/Router"));
+        assert_eq!(state.network, before, "no such device");
     }
 
     #[test]

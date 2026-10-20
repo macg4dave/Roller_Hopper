@@ -172,7 +172,8 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     }
 }
 
-/// The selected device (that of the selected card, if a card is selected) and its cards.
+/// The selected device (that of the selected card, if a card is selected), its cards and its
+/// guests.
 fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let selected = state
         .selected_device()
@@ -198,6 +199,12 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         .unwrap_or_default();
     if let Some(model) = sync(&bridge.get_cards(), cards) {
         bridge.set_cards(model);
+    }
+    let guests = selected
+        .map(|d| cards::guest_views(&state.network, &state.icons, d.id))
+        .unwrap_or_default();
+    if let Some(model) = sync(&bridge.get_guests(), guests) {
+        bridge.set_guests(model);
     }
     bridge.set_selected_id(id);
 }
