@@ -31,6 +31,11 @@ cargo tool cuda rebuild
 before rebuilding it. The cache is mistral.rs's supported shared CUDA build root, so it is reused
 across Cargo output directories. The CUDA build needs:
 
+Every ordinary build, run, test and gate keeps CUDA enabled and reuses this cache. No permission is
+needed to consume it. Populating a missing cache or rebuilding invalidated objects requires the
+user's explicit permission; agents must stop an unexpected `nvcc`, `cicc` or `ptxas` run rather
+than silently regenerating kernels. See [AGENTS.md](../AGENTS.md#protected-cuda-cache).
+
 | Need | Version | Notes |
 | --- | --- | --- |
 | NVIDIA CUDA Toolkit, normal system install | 13.0–13.3 (13.2 in use) | mistral.rs 0.9.4 rejects 13.4. `winget install --id Nvidia.CUDA --version 13.2` sets `CUDA_PATH` and puts its `bin` and `bin\x64` folders on `PATH`. |
@@ -46,8 +51,10 @@ Restart the terminal or editor after installing so it sees the new environment v
   carry no code for other generations.
 - **The first cache build takes about 12 minutes**, almost all of it CUDA kernels. Later builds
   reuse the shared objects even across Cargo profiles.
-- **Explicitly rebuild after changing build inputs.** After changing CUDA, cuDNN, MSVC, the GPU
-  compute capability or kernel flags, run `cargo tool cuda rebuild`.
+- **Explicitly rebuild after changing build inputs.** After changing CUDA, cuDNN, MSVC, Mistral,
+  the GPU compute capability, features or kernel flags, a human may run
+  `cargo tool cuda rebuild`; an AI agent must first obtain permission for that exact cache
+  invalidation. Source-only app changes continue to reuse the existing cache.
 
 ## The CPU-only build
 

@@ -40,6 +40,25 @@ Change only on explicit user request:
 - the module that only wraps Slint's generated code;
 - agent tool settings (such as `.claude/settings.json`).
 
+## Protected CUDA cache
+
+`cuda-cache/` is expensive, shared build state. Agents MUST preserve and reuse it.
+
+- Ordinary `cargo build`, `cargo run`, tests and the quality gate MUST keep the default CUDA feature
+  enabled. `.cargo/config.toml` directs every one of those commands to `cuda-cache/`; use that cache
+  normally without asking for permission.
+- MUST obtain the user's explicit permission before populating a missing cache, running
+  `cargo tool cuda rebuild`, or building after CUDA, cuDNN, MSVC, compute-capability, Mistral,
+  feature or kernel-flag changes would invalidate its objects.
+- MUST NOT delete, clean, move, truncate or bypass `cuda-cache/`, or run `cargo clean` against CUDA
+  crates, without the user's explicit permission for that exact invalidation.
+- `cargo tool cuda build` is the maintained explicit build command; it uses the same default CUDA
+  feature and cache as plain Cargo. Use `cargo tool cuda rebuild` only when the user explicitly
+  authorises discarding and recreating the cache.
+- If `nvcc`, `cicc` or `ptxas` starts unexpectedly, stop the build, preserve completed cache files
+  and report what caused the miss. Do not silently wait for or retry the recompilation.
+- CPU-only checks are only for a machine that cannot build CUDA and do not qualify the normal app.
+
 ## Quality gate
 
 Run all four, in this order, before reporting any task as done:
@@ -53,6 +72,8 @@ cargo build
 
 - MUST NOT claim success if any step fails. Report the failure and its output honestly.
 - MUST NOT make the gate pass by silencing lints, loosening config, or removing tests.
+- The gate uses the default CUDA feature and protected cache. Stop and report an unexpected cache
+  miss instead of falling back to a CPU-only gate.
 
 ## Task report
 

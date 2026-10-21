@@ -83,6 +83,12 @@ built around them.
   `cargo test --release -- --ignored llama sampling_settings` (CUDA is a default feature; for
   the CPU only, add `--no-default-features`). Run the larger models' tests (Qwen3-0.6B, Qwen3-4B) only when the task is measuring
   usefulness or speed, or the user asks.
+- **CUDA builds use the cache.** Keep the default CUDA feature enabled for ordinary builds, runs,
+  tests and gates; `.cargo/config.toml` makes all of them reuse `cuda-cache/`. Permission is needed
+  to populate, invalidate or rebuild that cache, not to consume it. If `nvcc`, `cicc` or `ptxas`
+  starts unexpectedly, stop and report the cache miss. Never substitute `cargo clean`, a new target
+  directory or a CPU-only build for the normal cached CUDA build. Follow the protected-cache rules
+  in [AGENTS.md](../../AGENTS.md#protected-cuda-cache).
 
 ### Tests are not the source of truth
 

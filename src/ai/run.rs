@@ -223,6 +223,16 @@ impl Question<'_> {
             .add_message(TextMessageRole::System, plain(self.system))
             .add_message(TextMessageRole::User, plain(self.user))
     }
+
+    fn context_limit(&self, model: &Model) -> usize {
+        model
+            .config()
+            .ok()
+            .and_then(|config| config.max_seq_len)
+            .map_or(self.settings.context_tokens, |own| {
+                own.min(self.settings.context_tokens)
+            })
+    }
 }
 
 /// Writes the answer as the engine streams it, until the model ends its turn, the answer
@@ -248,10 +258,7 @@ async fn answer(
         .map_err(|_| RunError::Failed)?;
     // A context beyond the model's own would outrun what it was built for. A model that does
     // not say keeps the user's limit.
-    let model_limit = model.config().ok().and_then(|c| c.max_seq_len);
-    let limit = model_limit.map_or(question.settings.context_tokens, |own| {
-        own.min(question.settings.context_tokens)
-    });
+    let limit = question.context_limit(model);
     let Some(room) = limit.checked_sub(prompt.len()).filter(|&r| r > 0) else {
         return Err(RunError::TooLong {
             prompt_tokens: prompt.len(),

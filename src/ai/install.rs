@@ -50,7 +50,7 @@ pub(crate) fn install(
             // the read itself.
             let body = response.body_mut().as_reader();
             save(body, file, &folder, cancel, &mut |done| {
-                progress(before + done)
+                progress(before + done);
             })?;
         }
         before += file.size;
