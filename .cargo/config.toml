@@ -7,4 +7,5 @@ tool = "run --manifest-path tools/Cargo.toml --"
 # `<string>` in every kernel because mistral.rs's Marlin kernels use `std::to_string`
 # without it. A value already in the environment wins.
 [env]
+MISTRALRS_CUDA_BUILD_ROOT = { value = "cuda-cache", relative = true }
 NVCC_APPEND_FLAGS = "-Xcompiler /Zc:preprocessor -Xcompiler /MD -include string"

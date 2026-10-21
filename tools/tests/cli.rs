@@ -76,18 +76,22 @@ fn gate_plan_keeps_required_order_and_scope() -> io::Result<()> {
             .filter_map(|line| line.split_once("] cargo "))
             .map(|(_, command)| command)
             .collect();
-        let expected = [
+        let tools = [
             "fmt --all --check",
-            "clippy --all-targets --all-features -- -D warnings",
-            "test --all-targets",
-            "build",
+            "clippy --locked --all-targets --all-features -- -D warnings",
+            "test --locked --all-targets",
+            "build --locked",
         ];
-        assert_eq!(
-            commands,
-            expected.repeat(if scope == "all" { 2 } else { 1 })
-        );
+        let app = tools;
+        let expected = match scope {
+            "all" => [tools.as_slice(), app.as_slice()].concat(),
+            "tools" => tools.to_vec(),
+            "app" => app.to_vec(),
+            _ => unreachable!(),
+        };
+        assert_eq!(commands, expected);
         let tools_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let tools_label = format!("[{}]", tools_manifest.display());
+        let tools_label = format!("[{}:", tools_manifest.display());
         // Windows paths ignore case, and the command hook may build the tool through a
         // lower-case drive letter while Cargo builds this test with an upper-case one.
         let shown = if cfg!(windows) {
@@ -97,6 +101,23 @@ fn gate_plan_keeps_required_order_and_scope() -> io::Result<()> {
         };
         assert_eq!(shown, scope != "app");
     }
+
+    let output = tool()
+        .args([
+            "checks",
+            "gate",
+            "--scope",
+            "app",
+            "--cpu",
+            "--offline",
+            "--dry-run",
+        ])
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("clippy --offline --locked --all-targets --no-default-features"));
+    assert!(stdout.contains("test --offline --locked --all-targets --no-default-features"));
+    assert!(stdout.contains("build --offline --locked --no-default-features"));
     Ok(())
 }
 

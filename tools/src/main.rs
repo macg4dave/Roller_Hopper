@@ -4,6 +4,8 @@
 mod ai;
 #[path = "../checks/cli.rs"]
 mod checks;
+#[path = "../cuda/cli.rs"]
+mod cuda;
 #[path = "../icons/cli.rs"]
 mod icons;
 #[path = "../text/cli.rs"]
@@ -28,6 +30,11 @@ enum Area {
         #[command(subcommand)]
         command: checks::Command,
     },
+    /// Build the app with the persistent CUDA kernel cache.
+    Cuda {
+        #[command(subcommand)]
+        command: cuda::Command,
+    },
     /// Inspect and edit text files with explicit write control.
     Text {
         #[command(subcommand)]
@@ -51,6 +58,7 @@ fn main() -> io::Result<()> {
         .ok_or_else(|| io::Error::other("tooling crate has no repository parent"))?;
     match Cli::parse().area {
         Area::Checks { command } => checks::run(command, root),
+        Area::Cuda { command } => cuda::run(command, root),
         Area::Text { command } => text::run(command, root),
         Area::Icons { command } => icons::run(command, root),
         Area::Ai { command } => ai::run(command, root),

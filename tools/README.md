@@ -13,6 +13,7 @@ cargo tool <area> <command> --help
 | --- | --- | --- |
 | Text editing | [text/](text/README.md) | `text normalize-eol`, `text replace-text` |
 | Development checks | [checks/](checks/README.md) | `checks gate`, `checks agent-command` |
+| CUDA build cache | [cuda/](cuda/README.md) | `cuda build`, `cuda rebuild` |
 | Runtime icon library | [icons/](icons/README.md) | `icons audit` |
 | Model evaluation | [ai/](ai/README.md) | `ai run` (feature `ai`), `ai score` |
 

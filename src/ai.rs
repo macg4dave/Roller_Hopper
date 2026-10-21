@@ -188,7 +188,11 @@ impl Model {
     /// Its GGUF file, or else its folder of safetensors.
     fn load_path(&self, dir: &Path) -> PathBuf {
         let folder = self.path(dir);
-        match self.files.iter().find(|f| has_extension(Path::new(f.name), "gguf")) {
+        match self
+            .files
+            .iter()
+            .find(|f| has_extension(Path::new(f.name), "gguf"))
+        {
             Some(gguf) => folder.join(gguf.name),
             None => folder,
         }
@@ -328,10 +332,7 @@ mod tests {
         let names: Vec<String> = listed.iter().map(Choice::name).collect();
         // By path, so the top folder's "Tiny" comes before "hf/Small".
         assert_eq!(names, ["Tiny", "Small", "z.gguf"]);
-        assert_eq!(
-            listed.first().map(|c| c.file(&dir)),
-            Some(dir.join("Tiny"))
-        );
+        assert_eq!(listed.first().map(|c| c.file(&dir)), Some(dir.join("Tiny")));
         fs::remove_dir_all(&dir).ok();
     }
 

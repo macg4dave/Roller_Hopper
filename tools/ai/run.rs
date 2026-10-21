@@ -54,7 +54,7 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
     let mut output = BufWriter::new(File::create(&args.output)?);
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
-        let model = load(&args.model).await?;
+        let model = Box::pin(load(&args.model)).await?;
         let name = args
             .model
             .file_name()
@@ -83,10 +83,11 @@ async fn load(path: &Path) -> io::Result<Model> {
         .file_name()
         .ok_or_else(|| io::Error::other("--model must name a .gguf file"))?;
     let started = Instant::now();
-    let model = GgufModelBuilder::new(folder.to_string_lossy(), vec![file.to_string_lossy()])
-        .build()
-        .await
-        .map_err(|error| io::Error::other(format!("cannot load {}: {error}", path.display())))?;
+    let model = Box::pin(
+        GgufModelBuilder::new(folder.to_string_lossy(), vec![file.to_string_lossy()]).build(),
+    )
+    .await
+    .map_err(|error| io::Error::other(format!("cannot load {}: {error}", path.display())))?;
     let mut progress = io::stderr().lock();
     writeln!(
         progress,

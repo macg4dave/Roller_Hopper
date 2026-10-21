@@ -49,7 +49,9 @@ pub(crate) fn install(
             // body is exactly the limit, so every complete download looked broken. save bounds
             // the read itself.
             let body = response.body_mut().as_reader();
-            save(body, file, &folder, cancel, &mut |done| progress(before + done))?;
+            save(body, file, &folder, cancel, &mut |done| {
+                progress(before + done)
+            })?;
         }
         before += file.size;
         progress(before);

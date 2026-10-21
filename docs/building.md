@@ -17,10 +17,19 @@ unconfirmed (backlog BLK-009). What a machine needs only to *run* a built copy i
 Without prebuilt Skia binaries for the platform, `skia-bindings` builds Skia itself and then
 also needs LLVM (clang), Python 3 and Ninja.
 
-## The CUDA build (the default)
+## The default CUDA build
 
-The `cuda` feature is on by default, so a plain `cargo build`, `cargo test` and the quality
-gate all compile mistral.rs's CUDA kernels. That needs:
+CUDA is a default feature. Plain `cargo build`, `cargo test` and the quality gate produce and
+validate the GPU-capable app. Use the maintained command when you only need a CUDA build:
+
+```sh
+cargo tool cuda build
+cargo tool cuda rebuild
+```
+
+`cuda build` reuses `cuda-cache/`. `cuda rebuild` is the explicit command that deletes that cache
+before rebuilding it. The cache is mistral.rs's supported shared CUDA build root, so it is reused
+across Cargo output directories. The CUDA build needs:
 
 | Need | Version | Notes |
 | --- | --- | --- |
@@ -35,11 +44,10 @@ Restart the terminal or editor after installing so it sees the new environment v
 - **The output runs only on the GPU generation it was built for.** The kernels are compiled
   for the build machine's compute capability (12.0, `sm_120a`, for an RTX 50-series card) and
   carry no code for other generations.
-- **The first build takes about 12 minutes**, almost all of it CUDA kernels. Debug and release
-  builds compile them separately, and so does rust-analyzer's own debug build.
-- **Kernel builds do not notice every changed setting.** After changing the toolkit, cuDNN or
-  MSVC, run `cargo clean --release -p candle-kernels -p mistralrs-quant`. On the main
-  development PC, AGENTS.md protects the release kernel cache: ask before cleaning it.
+- **The first cache build takes about 12 minutes**, almost all of it CUDA kernels. Later builds
+  reuse the shared objects even across Cargo profiles.
+- **Explicitly rebuild after changing build inputs.** After changing CUDA, cuDNN, MSVC, the GPU
+  compute capability or kernel flags, run `cargo tool cuda rebuild`.
 
 ## The CPU-only build
 
@@ -47,14 +55,22 @@ Restart the terminal or editor after installing so it sees the new environment v
 cargo build --release --no-default-features
 ```
 
+For the complete portable source gate on a machine without CUDA:
+
+```sh
+cargo tool checks gate --scope app --cpu
+```
+
+This portable CPU-only gate does not replace the required default CUDA gate. Add `--offline` after
+dependencies have been fetched to prove the build uses only the lockfile and local Cargo cache.
+
 It needs nothing from the CUDA section. On the CPU the model is far faster with AVX2:
 
 ```sh
 RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run --release --no-default-features
 ```
 
-A build made with that flag runs only on processors with AVX2. The quality gate's
-`cargo clippy --all-features` still builds the CUDA feature (backlog BLK-011).
+A build made with that flag runs only on processors with AVX2.
 
 ## Development tools
 

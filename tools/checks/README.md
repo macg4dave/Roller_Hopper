@@ -8,14 +8,22 @@ cargo tool checks gate --help
 cargo tool checks gate
 cargo tool checks gate --scope tools
 cargo tool checks gate --scope app --dry-run
+cargo tool checks gate --scope app --cpu
+cargo tool checks gate --offline
 ```
 
 Each crate runs fmt check, strict clippy, tests and build, in that order. The default scope
 checks tools first and then the app. Any failure stops the gate and produces a non-zero exit
-code; Cargo output is inherited. `--dry-run` prints the plan without running checks.
+code; Cargo output is inherited. Dependency-resolving steps use `Cargo.lock`, so the gate never
+silently updates dependency resolution. `--dry-run` prints the plan without running checks.
 
-The gate does not format or repair source files. Real checks can update Cargo lock files and
-build artefacts. `cli.rs` dispatches commands; `gate.rs` owns the shared check plan.
+The default app gate checks CUDA because CUDA is a default product feature. `--cpu` provides a
+portable source gate with `--no-default-features`, but does not replace the full gate. `--offline`
+also tells Cargo not to access the network and fails if the locked dependencies are not already
+cached. The output labels and times every crate/stage so a failure is immediately attributable.
+
+The gate does not format or repair source files. Real checks update build artefacts but not Cargo
+lock files. `cli.rs` dispatches commands; `gate.rs` owns the shared check plan.
 
 ## Claude command hook
 
