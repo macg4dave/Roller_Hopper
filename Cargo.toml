@@ -27,8 +27,8 @@ ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 slint-build = "1.18.1"
 
 [features]
-# NVIDIA CUDA is the normal app build. Building it needs the repository CUDA launcher, which
-# supplies the toolkit (nvcc), MSVC settings and runtime DLLs; see README "AI on the GPU".
+# NVIDIA CUDA is the normal app build. Building it needs the system CUDA toolkit, cuDNN and
+# MSVC; see docs/building.md.
 default = ["cuda"]
 cuda = ["mistralrs/cuda", "mistralrs/cudnn", "mistralrs/flash-attn"]
 

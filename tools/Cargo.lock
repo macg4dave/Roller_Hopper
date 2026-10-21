@@ -3127,7 +3127,6 @@ name = "network-mapper-tools"
 version = "0.1.0"
 dependencies = [
  "clap",
- "find-msvc-tools",
  "mistralrs",
  "regex",
  "serde_json",

@@ -51,6 +51,25 @@ Change only on explicit user request:
 - the module that only wraps Slint's generated code;
 - agent tool settings (such as `.claude/settings.json`).
 
+## Protected CUDA kernel cache
+
+The compiled CUDA kernels under
+`C:\Users\dave\.cargo-target\text-game\release\build\` take hours to produce and MUST be
+preserved.
+
+- Agents MUST NOT delete, clean, move, overwrite, invalidate or rebuild these cached kernel
+  artifacts without the user's explicit permission for that specific action.
+- A request to build, run, test or fix the app does **not** grant permission to rebuild CUDA
+  kernels. Reuse the existing target directory and matching CUDA/MSVC environment.
+- Agents MUST NOT run `cargo clean`, remove the shared target directory, change CUDA kernel
+  features/toolkit/compiler settings, or otherwise alter Cargo fingerprints when that could
+  trigger a kernel rebuild without explicit permission.
+- Before a CUDA command, inspect the cache and active build processes. If an unapproved command
+  unexpectedly starts `nvcc`, `cicc` or `ptxas`, stop it immediately, preserve completed
+  artifacts and report what happened.
+- Rust-only incremental compilation and linking may proceed when the native kernel artifacts
+  are demonstrably being reused.
+
 ## Quality gate
 
 Run all four, in this order, before reporting any task as done:
