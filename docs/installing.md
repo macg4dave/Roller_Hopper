@@ -37,9 +37,7 @@ on the processor, and the larger model needs more.
 The standard build includes CUDA, so it can run the AI on an NVIDIA graphics card. That build
 needs all of the following, even if you only use the processor:
 
-- **An NVIDIA graphics card of the same generation as the computer that built it.** A copy
-  built on a PC with an RTX 50-series card runs its AI only on RTX 50-series (and other
-  compute capability 12.0) cards.
+- **An NVIDIA graphics card**
 - **A recent NVIDIA graphics driver**, version 580 or later.
 - **NVIDIA's CUDA 13 and cuDNN 9 runtime files**, either from a CUDA Toolkit installation (as
   set up for building) or copied beside `network-mapper.exe`:

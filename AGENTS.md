@@ -29,17 +29,6 @@ The [roadmap](docs/roadmap.md) says what to do next; the [backlog](docs/.backlog
 blockers and bigger needs found along the way. Both are living documents that every task keeps
 current ([workflow.md](docs/agents/workflow.md#planning-roadmap-and-backlog)).
 
-## Architecture
-
-- Keep the network model free of UI code: it MUST NOT depend on Slint. That separation is what
-  lets real scanning, files and AI feed the same model the UI already shows — no extra
-  abstraction is needed beyond it.
-- Rust owns the data and the logic; the UI presents it. One thin bridge converts between them.
-  Background work hands owned results back to that one Rust-owned project; there is no second
-  copy of the inventory.
-- Change the layout only through delete → combine ([workflow.md](docs/agents/workflow.md)), and
-  keep [README.md](README.md) in step when you do.
-
 ## Protected files
 
 Change only on explicit user request:
@@ -50,25 +39,6 @@ Change only on explicit user request:
   manifest;
 - the module that only wraps Slint's generated code;
 - agent tool settings (such as `.claude/settings.json`).
-
-## Protected CUDA kernel cache
-
-The compiled CUDA kernels under
-`C:\Users\dave\.cargo-target\text-game\release\build\` take hours to produce and MUST be
-preserved.
-
-- Agents MUST NOT delete, clean, move, overwrite, invalidate or rebuild these cached kernel
-  artifacts without the user's explicit permission for that specific action.
-- A request to build, run, test or fix the app does **not** grant permission to rebuild CUDA
-  kernels. Reuse the existing target directory and matching CUDA/MSVC environment.
-- Agents MUST NOT run `cargo clean`, remove the shared target directory, change CUDA kernel
-  features/toolkit/compiler settings, or otherwise alter Cargo fingerprints when that could
-  trigger a kernel rebuild without explicit permission.
-- Before a CUDA command, inspect the cache and active build processes. If an unapproved command
-  unexpectedly starts `nvcc`, `cicc` or `ptxas`, stop it immediately, preserve completed
-  artifacts and report what happened.
-- Rust-only incremental compilation and linking may proceed when the native kernel artifacts
-  are demonstrably being reused.
 
 ## Quality gate
 

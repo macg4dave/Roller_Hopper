@@ -89,8 +89,8 @@ Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
   data only". Settings holds a pointer to the View menu and opens the AI settings window:
-  install Qwen3-4B, Qwen3-0.6B or SmolLM2-135M, or list the user's own GGUF files from the
-  models folder; Load or Unload one with mistral.rs (CPU, or GPU in a `cuda` build, with a
+  install Qwen3-4B, LFM2-700M, Qwen3-0.6B or SmolLM2-135M, or list the user's own GGUF files and
+  safetensors folders from the models folder; Load or Unload one with mistral.rs (CPU, or GPU in a `cuda` build, with a
   CUDA light), and Run it on
   an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings. The
   settings and edited texts are not saved. Its output is shown raw, not checked against the

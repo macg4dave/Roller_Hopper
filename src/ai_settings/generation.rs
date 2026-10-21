@@ -10,8 +10,10 @@ pub(super) fn to_ui(settings: &Generation) -> GenerationSettings {
         temperature: settings.temperature,
         top_p: settings.top_p,
         top_k: count(settings.top_k),
+        min_p: settings.min_p,
         repeat_penalty: settings.repeat_penalty,
         max_tokens: count(settings.max_tokens),
+        context_tokens: count(settings.context_tokens),
         think: settings.think,
     }
 }
@@ -23,8 +25,10 @@ pub(super) fn from_ui(settings: &GenerationSettings) -> Generation {
         temperature: settings.temperature,
         top_p: settings.top_p,
         top_k: count(settings.top_k),
+        min_p: settings.min_p,
         repeat_penalty: settings.repeat_penalty,
         max_tokens: count(settings.max_tokens),
+        context_tokens: count(settings.context_tokens),
         think: settings.think,
     }
     .bounded()
@@ -40,8 +44,10 @@ mod tests {
             temperature: 0.75,
             top_p: 0.5,
             top_k: 40,
+            min_p: 0.125,
             repeat_penalty: 1.25,
             max_tokens: 2000,
+            context_tokens: 16_384,
             think: true,
         };
         assert_eq!(from_ui(&to_ui(&settings)), settings);

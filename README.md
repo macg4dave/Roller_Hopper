@@ -2,13 +2,15 @@
 
 A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-memory mock data
 only — there is no real network discovery or scanning. Settings → AI settings installs an AI
-model (Qwen3-4B, 2.5 GB; Qwen3-0.6B, 0.6 GB; or SmolLM2-135M, 0.15 GB) into the user's
+model (Qwen3-4B, 2.5 GB; LFM2-700M safetensors, 1.5 GB; Qwen3-0.6B, 0.6 GB; or SmolLM2-135M,
+0.15 GB) into the user's
 application data folder,
 loads one with [mistral.rs](https://github.com/EricLBuehler/mistral.rs), and runs it on an
 editable prompt and sample device file. A GGUF file of your own (Llama, Mistral, Phi,
-Starcoder2 or Qwen; mistral.rs 0.8.1 cannot run others such as LFM2 or Gemma) placed in that
-`models` folder — `%APPDATA%\Network Mapper\models\` on Windows — or in a folder of its own
-there is listed beside them; its own tokenizer and chat template are used.
+Starcoder2 or Qwen), or a Hugging Face safetensors model folder (`config.json`, tokenizer files
+and `*.safetensors`; also Gemma, LFM2 and other kinds mistral.rs runs), placed in that `models`
+folder — `%APPDATA%\Network Mapper\models\` on Windows — or one folder down there is listed
+beside them; its own tokenizer and chat template are used.
 
 ## Run
 

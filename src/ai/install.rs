@@ -1,6 +1,7 @@
-//! Downloading a model's file. It is written beside its final name as `.part`, hashed as it
+//! Downloading a model's files. Each is written beside its final name as `.part`, hashed as it
 //! arrives, and renamed into place only when its size and SHA-256 match, so a failed, corrupt
-//! or cancelled download never looks installed.
+//! or cancelled download never looks installed. A model is installed only once all its files
+//! are.
 
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read, Write};
@@ -25,8 +26,8 @@ pub(crate) enum InstallError {
     Cancelled,
 }
 
-/// Downloads `model`'s file into its folder in `dir`, unless it is already complete.
-/// `progress` gets the bytes done so far; `cancel` stops it between reads.
+/// Downloads `model`'s files into its folder in `dir`, skipping those already complete.
+/// `progress` gets the bytes done so far across all of them; `cancel` stops it between reads.
 pub(crate) fn install(
     model: &Model,
     dir: &Path,
@@ -34,21 +35,25 @@ pub(crate) fn install(
     progress: &mut dyn FnMut(u64),
 ) -> Result<(), InstallError> {
     let folder = model.path(dir);
-    let file = &model.file;
-    if !file.is_complete(&folder) {
-        fs::create_dir_all(&folder).map_err(|_| InstallError::Disk)?;
-        // The status alone tells the user what to do: try again later.
-        let mut response = agent()
-            .get(file.url)
-            .call()
-            .map_err(|_| InstallError::Network)?;
-        // Not ureq's own body limit: it fails the read after the last byte even when the body
-        // is exactly the limit, so every complete download looked broken. save bounds the
-        // read itself.
-        let body = response.body_mut().as_reader();
-        save(body, file, &folder, cancel, progress)?;
+    let agent = agent();
+    let mut before: u64 = 0;
+    for file in model.files {
+        if !file.is_complete(&folder) {
+            fs::create_dir_all(&folder).map_err(|_| InstallError::Disk)?;
+            // The status alone tells the user what to do: try again later.
+            let mut response = agent
+                .get(&model.url(file))
+                .call()
+                .map_err(|_| InstallError::Network)?;
+            // Not ureq's own body limit: it fails the read after the last byte even when the
+            // body is exactly the limit, so every complete download looked broken. save bounds
+            // the read itself.
+            let body = response.body_mut().as_reader();
+            save(body, file, &folder, cancel, &mut |done| progress(before + done))?;
+        }
+        before += file.size;
+        progress(before);
     }
-    progress(file.size);
     Ok(())
 }
 
@@ -139,7 +144,6 @@ mod tests {
 
     const HELLO: ModelFile = ModelFile {
         name: "hello.bin",
-        url: "https://example.invalid/hello.bin",
         size: 5,
         sha256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
     };
@@ -240,19 +244,31 @@ mod tests {
     }
 
     #[test]
-    fn a_model_counts_as_installed_only_with_its_file_at_full_size() {
+    fn a_model_counts_as_installed_only_with_all_its_files_at_full_size() {
+        const FILES: &[ModelFile] = &[
+            HELLO,
+            ModelFile {
+                name: "config.json",
+                ..HELLO
+            },
+        ];
         let dir = folder("installed");
         let model = Model {
             name: "Test",
             folder: "test",
-            file: HELLO,
+            source: "https://example.invalid/",
+            files: FILES,
         };
+        assert_eq!(model.size(), 10);
         assert!(!model.is_installed(&dir));
         let folder = model.path(&dir);
         fs::create_dir_all(&folder).unwrap();
         fs::write(folder.join("hello.bin"), "hell").unwrap();
         assert!(!model.is_installed(&dir));
         fs::write(folder.join("hello.bin"), "hello").unwrap();
+        // One file is still missing.
+        assert!(!model.is_installed(&dir));
+        fs::write(folder.join("config.json"), "hello").unwrap();
         assert!(model.is_installed(&dir));
         // Only the offered models count, and none of them is in this folder.
         assert_eq!(super::super::installed(&dir).len(), 0);
@@ -260,9 +276,15 @@ mod tests {
 
     #[test]
     fn offered_models_are_pinned_to_a_revision_over_https() {
-        for file in MODELS.iter().map(|m| &m.file) {
-            assert!(file.url.starts_with("https://huggingface.co/"));
-            assert!(file.url.contains("/resolve/") && file.url.ends_with(file.name));
+        for model in MODELS {
+            assert!(model.source.starts_with("https://huggingface.co/"));
+            // A full 40-character commit, not a branch that can move.
+            let revision = model.source.split("/resolve/").nth(1).unwrap();
+            let revision = revision.strip_suffix('/').unwrap();
+            assert_eq!(revision.len(), 40);
+            assert!(!model.files.is_empty());
+        }
+        for file in MODELS.iter().flat_map(|m| m.files) {
             assert_eq!(file.sha256.len(), 64);
             assert!(
                 file.sha256
@@ -281,12 +303,12 @@ mod tests {
         let model = Model {
             name: "Tokenizer only",
             folder: "live",
-            file: ModelFile {
+            source: "https://huggingface.co/Qwen/Qwen3-4B/resolve/1cfa9a7208912126459214e8b04321603b3df60c/",
+            files: &[ModelFile {
                 name: "tokenizer.json",
-                url: "https://huggingface.co/Qwen/Qwen3-4B/resolve/1cfa9a7208912126459214e8b04321603b3df60c/tokenizer.json",
                 size: 11_422_654,
                 sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
-            },
+            }],
         };
         // Once to download, then again with nothing left to fetch.
         for _ in 0..2 {

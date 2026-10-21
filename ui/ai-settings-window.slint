@@ -49,12 +49,15 @@ export component AiSettingsWindow inherits Window {
     in-out property <string> input;
     in property <string> output;
 
-    // How the model picks each word, and the most tokens an answer may have.
+    // How the model picks each word, and the most tokens a prompt and its answer may hold.
     in-out property <GenerationSettings> generation;
-    in property <int> max-answer-tokens;
-    // The last answer: its length in tokens, how long it took and how it ended.
+    in property <int> max-context-tokens;
+    // The last answer: its length in tokens, how long it took and how it ended, with its
+    // prompt's length and the time to its first token.
     in property <int> answer-tokens;
     in property <float> answer-seconds;
+    in property <int> prompt-tokens;
+    in property <float> first-token-seconds;
     in property <AnswerEnd> answer-end;
 
     callback install(int);
@@ -191,7 +194,7 @@ export component AiSettingsWindow inherits Window {
                     Card {
                         GenerationPanel {
                             settings <=> root.generation;
-                            max-answer-tokens: root.max-answer-tokens;
+                            max-context-tokens: root.max-context-tokens;
                             enabled: state != ModelState.running;
                             restore-defaults => { root.restore-generation(); }
                         }
@@ -224,6 +227,8 @@ export component AiSettingsWindow inherits Window {
                     running: state == ModelState.running;
                     answer-tokens: root.answer-tokens;
                     answer-seconds: root.answer-seconds;
+                    prompt-tokens: root.prompt-tokens;
+                    first-token-seconds: root.first-token-seconds;
                     answer-end: root.answer-end;
                     run(prompt, input) => { root.run(prompt, input); }
                     stop => { root.stop(); }

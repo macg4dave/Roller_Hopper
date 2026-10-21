@@ -20,7 +20,7 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     show_installed(&window);
     restore_texts(&window);
     restore_generation(&window);
-    window.set_max_answer_tokens(i32::try_from(ai::MAX_ANSWER_TOKENS).unwrap_or(i32::MAX));
+    window.set_max_context_tokens(i32::try_from(ai::MAX_CONTEXT_TOKENS).unwrap_or(i32::MAX));
     // A CUDA build uses the GPU unless the user switches it off.
     window.set_gpu_built(ai::gpu_built());
     window.set_use_gpu(ai::gpu_built());
@@ -151,6 +151,9 @@ fn restore_generation(window: &AiSettingsWindow) {
 fn show_answered(window: &AiSettingsWindow, answered: Answered) {
     window.set_answer_tokens(i32::try_from(answered.tokens).unwrap_or(i32::MAX));
     window.set_answer_seconds(answered.elapsed.as_secs_f32());
+    window.set_prompt_tokens(i32::try_from(answered.prompt_tokens).unwrap_or(i32::MAX));
+    // No answer token came, so the window shows no time to it.
+    window.set_first_token_seconds(answered.first_token.map_or(0.0, |t| t.as_secs_f32()));
     window.set_answer_end(match answered.end {
         End::Complete => AnswerEnd::Complete,
         End::Limit => AnswerEnd::Limit,

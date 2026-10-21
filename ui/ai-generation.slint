@@ -8,8 +8,10 @@ export struct GenerationSettings {
     temperature: float,
     top-p: float,
     top-k: int,
+    min-p: float,
     repeat-penalty: float,
     max-tokens: int,
+    context-tokens: int,
     think: bool,
 }
 
@@ -79,8 +81,8 @@ component NumberSetting inherits VerticalLayout {
 
 export component GenerationPanel inherits VerticalLayout {
     in-out property <GenerationSettings> settings;
-    // The most tokens an answer may have.
-    in property <int> max-answer-tokens;
+    // The most tokens a prompt and its answer may hold together.
+    in property <int> max-context-tokens;
     // False while an answer is being written.
     in property <bool> enabled;
 
@@ -114,6 +116,14 @@ export component GenerationPanel inherits VerticalLayout {
         enabled: root.enabled && root.settings.temperature > 0;
     }
     SliderSetting {
+        text: @tr("ai-settings.min-p");
+        explanation: @tr("ai-settings.min-p-explained");
+        minimum: 0;
+        maximum: 1;
+        value <=> root.settings.min-p;
+        enabled: root.enabled && root.settings.temperature > 0;
+    }
+    SliderSetting {
         text: @tr("ai-settings.repeat-penalty");
         explanation: @tr("ai-settings.repeat-penalty-explained");
         minimum: 1;
@@ -125,9 +135,18 @@ export component GenerationPanel inherits VerticalLayout {
         text: @tr("ai-settings.max-tokens");
         explanation: @tr("ai-settings.max-tokens-explained");
         minimum: 1;
-        maximum: root.max-answer-tokens;
+        maximum: root.settings.context-tokens;
         step-size: 100;
         value <=> root.settings.max-tokens;
+        enabled: root.enabled;
+    }
+    NumberSetting {
+        text: @tr("ai-settings.context-tokens");
+        explanation: @tr("ai-settings.context-tokens-explained");
+        minimum: 512;
+        maximum: root.max-context-tokens;
+        step-size: 1024;
+        value <=> root.settings.context-tokens;
         enabled: root.enabled;
     }
     VerticalLayout {

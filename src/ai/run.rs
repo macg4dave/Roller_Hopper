@@ -13,23 +13,18 @@ use std::time::{Duration, Instant};
 use either::Either;
 use mistralrs::{
     ChatCompletionChunkResponse, Constraint, Device, GgufModelBuilder, Model, RequestBuilder,
-    Response, TextMessageRole, TextMessages, TokenSource,
+    Response, TextMessageRole, TextMessages, TextModelBuilder, TokenSource,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Runtime;
 
 use super::generation::Generation;
 
-/// The most tokens a prompt and its answer may hold together, which bounds the attention cache
-/// as well as the run. The engine cannot cap its plain (non-paged) cache itself, so the worker
-/// refuses longer prompts and stops the answer at the limit.
-const MAX_CONTEXT_TOKENS: usize = 8192;
-
 /// Something for the worker to do, in the order sent.
 #[derive(Debug)]
 pub(crate) enum Job {
-    /// Load the GGUF file at this path in place of the current model, on the GPU or the CPU,
-    /// or none to free its memory.
+    /// Load the GGUF file or safetensors folder at this path in place of the current model, on
+    /// the GPU or the CPU, or none to free its memory.
     Load { model: Option<PathBuf>, gpu: bool },
     /// Answer `user` with the loaded model, following `system`, picking tokens by `settings`.
     Run {
@@ -52,10 +47,14 @@ pub(crate) enum WorkerEvent {
     Finished(Result<Answered, RunError>),
 }
 
-/// A finished answer: how many tokens it has, how long it took and why it ended.
+/// A finished answer: how many tokens it and its prompt have, how long it took and why it ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Answered {
     pub(crate) tokens: usize,
+    pub(crate) prompt_tokens: usize,
+    /// From Run to the first answer token, which is mostly reading the prompt; none if the
+    /// answer ended before one came.
+    pub(crate) first_token: Option<Duration>,
     pub(crate) elapsed: Duration,
     pub(crate) end: End,
 }
@@ -172,29 +171,43 @@ fn work(runtime: &Runtime, inbox: &Receiver<Job>, stop: &AtomicBool, report: &dy
     }
 }
 
-/// Loads the GGUF file at `path` with the tokenizer and chat template inside it, from the
-/// local file only.
+/// Loads the GGUF file at `path` with the tokenizer and chat template inside it, or the
+/// safetensors folder at `path` with those beside its weights, from local files only.
 async fn load(path: &Path, gpu: bool) -> Result<Model, RunError> {
+    // The GGUF and safetensors builders are separate types with the same settings.
+    macro_rules! build_local {
+        ($builder:expr) => {{
+            let builder = $builder
+                // No Hugging Face token. The engine reads a local path's own files and never
+                // fetches for it.
+                .with_token_source(TokenSource::None)
+                // One answer at a time, and nothing kept from one answer for the next.
+                .with_max_num_seqs(1)
+                .with_prefix_cache_n(None);
+            let builder = if gpu {
+                let device = Device::new_cuda(0).map_err(|_| RunError::NoGpu)?;
+                // The engine's PagedAttention stays off: its CUDA kernels are built only on Unix.
+                builder.with_device(device)
+            } else {
+                builder.with_force_cpu()
+            };
+            builder.build().await.map_err(|_| RunError::Broken)
+        }};
+    }
+
+    if path.is_dir() {
+        return build_local!(TextModelBuilder::new(path.to_string_lossy()));
+    }
     let (Some(folder), Some(file)) = (path.parent(), path.file_name()) else {
         return Err(RunError::Missing);
     };
     if !path.is_file() {
         return Err(RunError::Missing);
     }
-    let builder = GgufModelBuilder::new(folder.to_string_lossy(), vec![file.to_string_lossy()])
-        // No Hugging Face token: nothing is fetched for a local file.
-        .with_token_source(TokenSource::None)
-        // One answer at a time, and nothing kept from one answer for the next.
-        .with_max_num_seqs(1)
-        .with_prefix_cache_n(None);
-    let builder = if gpu {
-        let device = Device::new_cuda(0).map_err(|_| RunError::NoGpu)?;
-        // The engine's PagedAttention stays off: its CUDA kernels are built only on Unix.
-        builder.with_device(device)
-    } else {
-        builder.with_force_cpu()
-    };
-    builder.build().await.map_err(|_| RunError::Broken)
+    build_local!(GgufModelBuilder::new(
+        folder.to_string_lossy(),
+        vec![file.to_string_lossy()]
+    ))
 }
 
 /// One run's texts and settings.
@@ -233,13 +246,16 @@ async fn answer(
         )
         .await
         .map_err(|_| RunError::Failed)?;
-    let Some(room) = MAX_CONTEXT_TOKENS
-        .checked_sub(prompt.len())
-        .filter(|&r| r > 0)
-    else {
+    // A context beyond the model's own would outrun what it was built for. A model that does
+    // not say keeps the user's limit.
+    let model_limit = model.config().ok().and_then(|c| c.max_seq_len);
+    let limit = model_limit.map_or(question.settings.context_tokens, |own| {
+        own.min(question.settings.context_tokens)
+    });
+    let Some(room) = limit.checked_sub(prompt.len()).filter(|&r| r > 0) else {
         return Err(RunError::TooLong {
             prompt_tokens: prompt.len(),
-            limit: MAX_CONTEXT_TOKENS,
+            limit,
         });
     };
     let mut sampling = question.settings.sampling();
@@ -253,6 +269,7 @@ async fn answer(
         .await
         .map_err(|_| RunError::Failed)?;
     let mut draft = Draft::default();
+    let mut first_token = None;
     // Leaving the loop drops the stream, which cancels the rest of the answer.
     let end = loop {
         if stop.load(Ordering::Relaxed) {
@@ -265,6 +282,7 @@ async fn answer(
             return Err(RunError::Failed);
         };
         let end = draft.add(chunk);
+        first_token = first_token.or_else(|| (draft.tokens > 0).then(|| started.elapsed()));
         output(draft.text.clone());
         if let Some(end) = end {
             break end;
@@ -272,6 +290,8 @@ async fn answer(
     };
     Ok(Answered {
         tokens: draft.tokens,
+        prompt_tokens: prompt.len(),
+        first_token,
         elapsed: started.elapsed(),
         end,
     })
@@ -510,6 +530,13 @@ mod tests {
         answers_the_sky_question("SmolLM2-135M");
     }
 
+    /// As above for a safetensors folder: installs LFM2-700M (1.5 GB) if needed.
+    #[test]
+    #[ignore = "may download 1.5 GB"]
+    fn a_loaded_safetensors_model_answers() {
+        answers_the_sky_question("LFM2-700M");
+    }
+
     fn answers_the_sky_question(name: &str) {
         let jobs = vec![
             load_model(name),
@@ -548,9 +575,10 @@ mod tests {
             temperature: 0.8,
             top_p: 0.9,
             top_k: 40,
+            min_p: 0.05,
             repeat_penalty: 1.3,
             max_tokens: 5,
-            think: false,
+            ..Generation::default()
         };
         let jobs = vec![
             load_model("SmolLM2-135M"),
@@ -620,7 +648,10 @@ mod tests {
             let mut timing = std::io::stderr().lock();
             writeln!(
                 timing,
-                "{name}: {} tokens in {:.1} s answering, {:.1} s with loading",
+                "{name}: {} prompt tokens, first token after {:.1} s, {} tokens in {:.1} s \
+                 answering, {:.1} s with loading",
+                answered.prompt_tokens,
+                answered.first_token.unwrap_or_default().as_secs_f32(),
                 answered.tokens,
                 answered.elapsed.as_secs_f32(),
                 started.elapsed().as_secs_f32()

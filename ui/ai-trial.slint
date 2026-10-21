@@ -15,6 +15,8 @@ export component AiTrial inherits VerticalLayout {
     in property <bool> running;
     in property <int> answer-tokens;
     in property <float> answer-seconds;
+    in property <int> prompt-tokens;
+    in property <float> first-token-seconds;
     in property <AnswerEnd> answer-end;
 
     callback run(string, string);
@@ -85,6 +87,13 @@ export component AiTrial inherits VerticalLayout {
     }
     if answer-end != AnswerEnd.none && !running: Note {
         text: @tr("ai-settings.answer-stats" | "ai-settings.answer-stats.plural" % answer-tokens, tenths(answer-seconds), tenths(answer-seconds > 0 ? answer-tokens / answer-seconds : 0));
+    }
+    if answer-end != AnswerEnd.none && !running: Note {
+        text: @tr("ai-settings.prompt-stats" | "ai-settings.prompt-stats.plural" % prompt-tokens);
+    }
+    // No time to show when the answer ended before its first token.
+    if answer-end != AnswerEnd.none && answer-tokens > 0 && !running: Note {
+        text: @tr("ai-settings.first-token", tenths(first-token-seconds));
     }
     if answer-end != AnswerEnd.none && answer-end != AnswerEnd.complete && !running: Text {
         text: end-text(answer-end);

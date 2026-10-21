@@ -49,11 +49,11 @@ msgstr "Model"
 
 # Under the model list when there is nothing to load.
 msgid "ai-settings.no-model"
-msgstr "No model installed yet. Install one below, or add your own GGUF file."
+msgstr "No model installed yet. Install one below, or add your own GGUF file or safetensors folder."
 
 # {0} is the models folder.
 msgid "ai-settings.own-models"
-msgstr "To use a model of your own, put its GGUF file in {0}, or in a folder of its own there, and refresh the list. Llama, Mistral, Phi, Starcoder2 and Qwen text models can run; others, such as LFM2 or Gemma, cannot yet."
+msgstr "To use a model of your own, put its GGUF file in {0}, or in a folder of its own there, and refresh the list. A Hugging Face model folder (config.json, tokenizer files and safetensors weights) can go there too. GGUF runs Llama, Mistral, Phi, Starcoder2 and Qwen text models; safetensors also runs others, such as Gemma and LFM2, but is usually larger and needs more memory."
 
 # Starts the chosen model: reads it into memory.
 msgid "ai-settings.load"
@@ -123,7 +123,7 @@ msgid "ai-settings.state-broken"
 msgstr "This model could not be loaded: its file is damaged or of a kind the app cannot run. Install it again, or use another file."
 
 msgid "ai-settings.state-too-long"
-msgstr "The prompt and evidence are too long for the model. Shorten them and run again."
+msgstr "The prompt and evidence are too long for the context limit or the model. Shorten them, or raise the context limit, and run again."
 
 msgid "ai-settings.state-failed"
 msgstr "The model stopped with an error part-way through its answer."
@@ -154,6 +154,16 @@ msgid_plural "ai-settings.answer-stats.plural"
 msgstr[0] "{n} token in {0} s ({1} tokens a second)"
 msgstr[1] "{n} tokens in {0} s ({1} tokens a second)"
 
+# Under the output. {n} is the length in tokens of the prompt and evidence together.
+msgid "ai-settings.prompt-stats"
+msgid_plural "ai-settings.prompt-stats.plural"
+msgstr[0] "Prompt: {n} token"
+msgstr[1] "Prompt: {n} tokens"
+
+# Under the output. {0} is the seconds from Run to the answer's first token.
+msgid "ai-settings.first-token"
+msgstr "First token after {0} s"
+
 msgid "ai-settings.end-limit"
 msgstr "The answer reached the answer limit. Raise the limit to let the model finish."
 
@@ -182,6 +192,12 @@ msgstr "Top-k"
 msgid "ai-settings.top-k-explained"
 msgstr "Picks only among this many likeliest words; 0 means no limit. Applies above temperature 0."
 
+msgid "ai-settings.min-p"
+msgstr "Min-p"
+
+msgid "ai-settings.min-p-explained"
+msgstr "Leaves out words less than this share as likely as the likeliest one; 0 is off. Applies above temperature 0."
+
 msgid "ai-settings.repeat-penalty"
 msgstr "Repeat penalty"
 
@@ -193,6 +209,12 @@ msgstr "Answer limit (tokens)"
 
 msgid "ai-settings.max-tokens-explained"
 msgstr "Stops the answer after this many tokens. A token is a word or part of one."
+
+msgid "ai-settings.context-tokens"
+msgstr "Context limit (tokens)"
+
+msgid "ai-settings.context-tokens-explained"
+msgstr "The most tokens the prompt, evidence and answer may hold together. Higher allows longer prompts but uses more memory; the model's own limit still applies."
 
 msgid "ai-settings.think"
 msgstr "Let the model think first"
