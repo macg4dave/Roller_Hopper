@@ -19,8 +19,10 @@ use tokio::runtime::Runtime;
 
 use super::generation::Generation;
 
-/// Longer prompts are refused rather than left to run for minutes.
-const MAX_PROMPT_TOKENS: usize = 8192;
+/// The most tokens a prompt and its answer may hold together, which bounds the attention cache
+/// as well as the run. The engine cannot cap its plain (non-paged) cache itself, so the worker
+/// refuses longer prompts and stops the answer at the limit.
+const MAX_CONTEXT_TOKENS: usize = 2048;
 
 /// Something for the worker to do, in the order sent.
 #[derive(Debug)]
@@ -177,9 +179,14 @@ async fn load(path: &Path, gpu: bool) -> Result<Model, RunError> {
     }
     let builder = GgufModelBuilder::new(folder.to_string_lossy(), vec![file.to_string_lossy()])
         // No Hugging Face token: nothing is fetched for a local file.
-        .with_token_source(TokenSource::None);
+        .with_token_source(TokenSource::None)
+        // One answer at a time, and nothing kept from one answer for the next.
+        .with_max_num_seqs(1)
+        .with_prefix_cache_n(None);
     let builder = if gpu {
-        builder.with_device(Device::new_cuda(0).map_err(|_| RunError::NoGpu)?)
+        let device = Device::new_cuda(0).map_err(|_| RunError::NoGpu)?;
+        // The engine's PagedAttention stays off: its CUDA kernels are built only on Unix.
+        builder.with_device(device)
     } else {
         builder.with_force_cpu()
     };
@@ -222,11 +229,13 @@ async fn answer(
         )
         .await
         .map_err(|_| RunError::Failed)?;
-    if prompt.len() > MAX_PROMPT_TOKENS {
+    let Some(room) = MAX_CONTEXT_TOKENS.checked_sub(prompt.len()).filter(|&r| r > 0) else {
         return Err(RunError::TooLong);
-    }
+    };
+    let mut sampling = question.settings.sampling();
+    sampling.max_len = Some(question.settings.max_tokens.min(room));
     let request = RequestBuilder::from(messages)
-        .set_sampling(question.settings.sampling())
+        .set_sampling(sampling)
         .enable_thinking(think);
     let mut stream = model
         .stream_chat_request(request)
@@ -305,6 +314,7 @@ fn plain(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write as _;
     use std::sync::mpsc::RecvTimeoutError;
 
     use mistralrs::{ChunkChoice, Delta, Usage};
@@ -527,23 +537,89 @@ mod tests {
     }
 
     /// The window's default prompt and sample, as Run sends them, get an answer in the
-    /// schema's shape (whether it is right is the evaluation tool's job). Run as above.
+    /// schema's shape (whether it is right is the evaluation tool's job). Run as above; for
+    /// measuring speed only (docs/agents/rust.md), with `--nocapture` to see the timing.
     #[test]
     #[ignore = "may download 640 MB; slow outside release builds"]
     fn the_identification_prompt_gets_an_answer() {
+        answers_the_identification_prompt("Qwen3-0.6B");
+    }
+
+    /// As above on the recommended model: may download 2.5 GB.
+    #[test]
+    #[ignore = "may download 2.5 GB; slow outside release builds"]
+    fn the_recommended_model_answers_the_identification_prompt() {
+        answers_the_identification_prompt("Qwen3-4B");
+    }
+
+    fn answers_the_identification_prompt(name: &str) {
         let jobs = vec![
-            load_model("Qwen3-0.6B"),
+            load_model(name),
             Job::Run {
                 system: crate::ai::PROMPT.into(),
                 user: crate::ai::SAMPLE_EVIDENCE.into(),
                 settings: Generation::default(),
             },
         ];
+        let started = Instant::now();
         let seen = events(jobs, |e| {
             matches!(e, WorkerEvent::Finished(_) | WorkerEvent::LoadFailed(_))
         });
+        if let Some(WorkerEvent::Finished(Ok(answered))) = seen.last() {
+            let mut timing = std::io::stderr().lock();
+            writeln!(
+                timing,
+                "{name}: {} tokens in {:.1} s answering, {:.1} s with loading",
+                answered.tokens,
+                answered.elapsed.as_secs_f32(),
+                started.elapsed().as_secs_f32()
+            )
+            .unwrap();
+        }
         assert!(ended(&seen, End::Complete));
         assert!(last_output(&seen).contains("\"os_family\""));
+    }
+
+    // TEMPORARY diagnosis of decode speed; removed before the task ends.
+    #[test]
+    #[ignore = "diagnostic"]
+    fn diag_decode_speed() {
+        let long = Generation {
+            max_tokens: 300,
+            ..Generation::default()
+        };
+        for gpu in [true] {
+            for (label, system, user) in [
+                ("short", "Be helpful.", "Write a long story about a router."),
+                ("long", crate::ai::PROMPT, crate::ai::SAMPLE_EVIDENCE),
+            ] {
+                let Job::Load { model, .. } = load_model("SmolLM2-135M") else {
+                    unreachable!()
+                };
+                let jobs = vec![
+                    Job::Load { model, gpu },
+                    Job::Run {
+                        system: system.into(),
+                        user: user.into(),
+                        settings: long,
+                    },
+                ];
+                let seen = events(jobs, |e| {
+                    matches!(e, WorkerEvent::Finished(_) | WorkerEvent::LoadFailed(_))
+                });
+                if let Some(WorkerEvent::Finished(Ok(a))) = seen.last() {
+                    let secs = a.elapsed.as_secs_f32();
+                    let mut out = std::io::stderr().lock();
+                    writeln!(
+                        out,
+                        "DIAG gpu={gpu} prompt={label}: {} tokens in {secs:.2} s = {:.1} tok/s",
+                        a.tokens,
+                        a.tokens as f32 / secs
+                    )
+                    .unwrap();
+                }
+            }
+        }
     }
 
     /// Loads the model called `name` from the user's models folder, installed first if it is

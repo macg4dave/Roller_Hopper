@@ -53,7 +53,7 @@ msgstr "No model installed yet. Install one below, or add your own GGUF file."
 
 # {0} is the models folder.
 msgid "ai-settings.own-models"
-msgstr "To use a model of your own, put its GGUF file in {0} and refresh the list. Most Llama, Mistral, Phi and Qwen text models can run."
+msgstr "To use a model of your own, put its GGUF file in {0}, or in a folder of its own there, and refresh the list. Llama, Mistral, Phi, Starcoder2 and Qwen text models can run; others, such as LFM2 or Gemma, cannot yet."
 
 # Starts the chosen model: reads it into memory.
 msgid "ai-settings.load"

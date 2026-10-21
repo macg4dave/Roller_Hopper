@@ -1,2 +1,11 @@
 [alias]
 tool = "run --manifest-path tools/Cargo.toml --"
+
+# The `cuda` feature's build settings, for the CUDA toolkit unpacked in `cuda-toolkit/` (see
+# README "AI on the GPU"). The compute capability comes from nvidia-smi. The machine-specific
+# settings (the toolkit's bin folders on PATH, MSVC's folder) live in the user's environment.
+[env]
+CUDA_PATH = { value = "cuda-toolkit", relative = true }
+CUDA_HOME = { value = "cuda-toolkit", relative = true }
+NVCC = { value = "cuda-toolkit/bin/nvcc.exe", relative = true }
+CUDARC_CUDA_VERSION = "13020"

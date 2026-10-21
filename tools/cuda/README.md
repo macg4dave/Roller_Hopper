@@ -18,8 +18,11 @@ cargo tool cuda cargo --dry-run build --release --features cuda
 - `CUDA_PATH`, `CUDA_HOME` and `NVCC` pointing into `cuda-toolkit/`;
 - `CUDARC_CUDA_VERSION` read from `nvcc --version` (13.2 gives `13020`);
 - `CUDA_COMPUTE_CAP` from `nvidia-smi` (12.0 gives `120`), unless it is already set;
+- `CUDAFORGE_THREADS` as the machine's thread count, unless it is already set, so the build
+  scripts that compile CUDA kernels use every core rather than cudaforge's default half;
 - on Windows, `NVCC_CCBIN` (MSVC's `cl.exe` folder, found as the `cc` crate finds it) and
-  `NVCC_APPEND_FLAGS` (`/Zc:preprocessor` for CUDA 13's headers, `/MD` to match Skia);
+  `NVCC_APPEND_FLAGS` (`/Zc:preprocessor` for CUDA 13's headers, `/MD` to match Skia,
+  `-include string` for mistral.rs's Marlin kernels, which use `std::to_string` without it);
 - the toolkit's `bin` and `bin\x64` first on `PATH`, because mistral.rs runs bare `nvcc`.
 
 These apply to that Cargo run only; they override any `[env]` in a user Cargo config. Before

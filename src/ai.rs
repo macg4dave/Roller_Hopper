@@ -148,16 +148,20 @@ pub(crate) fn gpu_built() -> bool {
 }
 
 /// The models ready to load from `dir`: the offered ones fully installed, in offer order, then
-/// the GGUF files at the top of the folder, by name. Whether a file is a model the app can run
-/// is only known once it loads.
+/// the user's GGUF files, by path: those at the top of the folder and those one folder down,
+/// apart from the offered models' own folders. Whether a file is a model the app can run is
+/// only known once it loads.
 pub(crate) fn installed(dir: &Path) -> Vec<Choice> {
     let offered = MODELS.iter().filter(|m| m.is_installed(dir));
-    // A missing folder or an unreadable entry holds nothing that could load.
-    let mut own: Vec<PathBuf> = fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
+    let offered_folders: Vec<PathBuf> = MODELS.iter().map(|m| m.path(dir)).collect();
+    let mut own: Vec<PathBuf> = entries(dir)
+        .flat_map(|path| {
+            if path.is_dir() && !offered_folders.contains(&path) {
+                entries(&path).collect()
+            } else {
+                vec![path]
+            }
+        })
         .filter(|path| {
             path.is_file()
                 && path
@@ -172,22 +176,42 @@ pub(crate) fn installed(dir: &Path) -> Vec<Choice> {
         .collect()
 }
 
+/// What `dir` holds; a missing folder or an unreadable entry holds nothing that could load.
+fn entries(dir: &Path) -> impl Iterator<Item = PathBuf> {
+    fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn gguf_files_at_the_top_of_the_folder_are_listed_after_offered_models() {
+    fn gguf_files_at_the_top_and_one_folder_down_are_listed_after_offered_models() {
         let dir = std::env::temp_dir().join(format!("network-mapper-own-{}", std::process::id()));
         fs::remove_dir_all(&dir).ok();
-        fs::create_dir_all(dir.join("nested")).unwrap();
-        for name in ["b.gguf", "A.GGUF", "notes.txt", "nested/c.gguf"] {
+        let offered = MODELS.first().unwrap().path(&dir);
+        for folder in [dir.join("nested").join("deeper"), offered.clone()] {
+            fs::create_dir_all(folder).unwrap();
+        }
+        for name in [
+            "b.gguf",
+            "A.GGUF",
+            "notes.txt",
+            "nested/c.gguf",
+            "nested/deeper/d.gguf",
+        ] {
             fs::write(dir.join(name), "").unwrap();
         }
+        // An offered model's folder holding a partial download is not the user's model.
+        fs::write(offered.join("Qwen3-4B-Q4_K_M.gguf"), "").unwrap();
         fs::create_dir_all(dir.join("folder.gguf")).unwrap();
         let listed = installed(&dir);
         let names: Vec<String> = listed.iter().map(Choice::name).collect();
-        assert_eq!(names, ["A.GGUF", "b.gguf"]);
+        assert_eq!(names, ["A.GGUF", "b.gguf", "c.gguf"]);
         assert_eq!(
             listed.first().map(|c| c.file(&dir)),
             Some(dir.join("A.GGUF"))

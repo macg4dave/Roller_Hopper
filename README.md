@@ -5,9 +5,10 @@ only — there is no real network discovery or scanning. Settings → AI setting
 model (Qwen3-4B, 2.5 GB; Qwen3-0.6B, 0.6 GB; or SmolLM2-135M, 0.15 GB) into the user's
 application data folder,
 loads one with [mistral.rs](https://github.com/EricLBuehler/mistral.rs), and runs it on an
-editable prompt and sample device file. A GGUF file of your own (most Llama, Mistral, Phi and
-Qwen text models) placed directly in that `models` folder — `%APPDATA%\Network Mapper\models\`
-on Windows — is listed beside them; its own tokenizer and chat template are used.
+editable prompt and sample device file. A GGUF file of your own (Llama, Mistral, Phi,
+Starcoder2 or Qwen; mistral.rs 0.8.1 cannot run others such as LFM2 or Gemma) placed in that
+`models` folder — `%APPDATA%\Network Mapper\models\` on Windows — or in a folder of its own
+there is listed beside them; its own tokenizer and chat template are used.
 
 ## Run
 

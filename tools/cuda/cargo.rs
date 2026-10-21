@@ -7,15 +7,17 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{self, Write};
+use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
 
 /// Where the toolkit is unpacked, relative to the repository root; ignored by git.
 const TOOLKIT: &str = "cuda-toolkit";
 
 #[derive(Debug, clap::Args)]
 #[command(
-    after_help = "Examples:\n  cargo tool cuda cargo build --release --features cuda\n  cargo tool cuda cargo run --release --features cuda\n  cargo tool cuda cargo test --release --features cuda -- --ignored llama sampling_settings\n  cargo tool cuda cargo clippy --all-targets --all-features -- -D warnings\n  cargo tool cuda cargo --dry-run build --release --features cuda\n\nSets CUDA_PATH, CUDA_HOME, NVCC, CUDARC_CUDA_VERSION (from nvcc), CUDA_COMPUTE_CAP\n(from nvidia-smi unless already set) and, on Windows, NVCC_CCBIN (MSVC's cl.exe folder)\nand NVCC_APPEND_FLAGS, and puts the toolkit's bin folders first on PATH. Before running\nCargo it copies the toolkit's runtime DLLs into the profile folder and its deps folder of\nthe target directory, skipping files already there at the same size."
+    after_help = "Examples:\n  cargo tool cuda cargo build --release --features cuda\n  cargo tool cuda cargo run --release --features cuda\n  cargo tool cuda cargo test --release --features cuda -- --ignored llama sampling_settings\n  cargo tool cuda cargo clippy --all-targets --all-features -- -D warnings\n  cargo tool cuda cargo --dry-run build --release --features cuda\n\nSets CUDA_PATH, CUDA_HOME, NVCC, CUDARC_CUDA_VERSION (from nvcc), CUDA_COMPUTE_CAP\n(from nvidia-smi unless already set), CUDAFORGE_THREADS (every thread, unless already\nset, so nvcc kernel builds use all cores) and, on Windows, NVCC_CCBIN (MSVC's cl.exe folder)\nand NVCC_APPEND_FLAGS, and puts the toolkit's bin folders first on PATH. Before running\nCargo it copies the toolkit's runtime DLLs into the profile folder and its deps folder of\nthe target directory, skipping files already there at the same size."
 )]
 pub(crate) struct Args {
     /// Print the settings and command without running Cargo or copying files.
@@ -89,6 +91,15 @@ fn settings(toolkit: &Path, nvcc: &Path) -> io::Result<Vec<(&'static str, OsStri
         Some(set) => set,
         None => compute_cap()?.into(),
     };
+    // cudaforge gives each kernel-compiling build script half the threads by default, which
+    // leaves the rest idle once that script is all that remains to build.
+    let threads = match env::var_os("CUDAFORGE_THREADS") {
+        Some(set) => set,
+        None => thread::available_parallelism()
+            .map_or(1, NonZero::get)
+            .to_string()
+            .into(),
+    };
     let bin = toolkit.join("bin");
     let path = env::var_os("PATH").unwrap_or_default();
     let path = env::join_paths(
@@ -103,6 +114,7 @@ fn settings(toolkit: &Path, nvcc: &Path) -> io::Result<Vec<(&'static str, OsStri
         ("NVCC", nvcc.as_os_str().to_owned()),
         ("CUDARC_CUDA_VERSION", version.into()),
         ("CUDA_COMPUTE_CAP", compute_cap),
+        ("CUDAFORGE_THREADS", threads),
         ("PATH", path),
     ];
     settings.extend(msvc_settings()?);
@@ -110,7 +122,8 @@ fn settings(toolkit: &Path, nvcc: &Path) -> io::Result<Vec<(&'static str, OsStri
 }
 
 /// nvcc needs MSVC's compiler, its conforming preprocessor for CUDA 13's headers, and `/MD`
-/// to match Skia's C runtime.
+/// to match Skia's C runtime. `<string>` is included in every kernel because mistral.rs's
+/// Marlin kernels use `std::to_string` without it, which MSVC's headers do not bring in.
 #[cfg(windows)]
 fn msvc_settings() -> io::Result<Vec<(&'static str, OsString)>> {
     let cl = find_msvc_tools::find_tool("x86_64", "cl.exe")
@@ -123,7 +136,7 @@ fn msvc_settings() -> io::Result<Vec<(&'static str, OsString)>> {
         ("NVCC_CCBIN", folder.as_os_str().to_owned()),
         (
             "NVCC_APPEND_FLAGS",
-            "-Xcompiler /Zc:preprocessor -Xcompiler /MD".into(),
+            "-Xcompiler /Zc:preprocessor -Xcompiler /MD -include string".into(),
         ),
     ])
 }
