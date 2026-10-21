@@ -1,11 +1,2 @@
 [alias]
 tool = "run --manifest-path tools/Cargo.toml --"
-
-# The `cuda` feature finds the system CUDA install through CUDA_PATH and PATH, and MSVC's
-# cl.exe through NVCC_CCBIN (see docs/building.md). On Windows nvcc also needs MSVC's
-# conforming preprocessor for CUDA 13's headers, `/MD` to match Skia's C runtime, and
-# `<string>` in every kernel because mistral.rs's Marlin kernels use `std::to_string`
-# without it. These repository build requirements override stale user-level flags.
-[env]
-MISTRALRS_CUDA_BUILD_ROOT = { value = "cuda-cache", relative = true }
-NVCC_APPEND_FLAGS = { value = "-Xcompiler /Zc:preprocessor -Xcompiler /MD --pre-include=string", force = true }

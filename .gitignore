@@ -1,5 +1,7 @@
 /target
+/target-ai
 /tools/target/
+/tools/a.i.testmodels
 # The CUDA toolkit `cargo tool cuda` builds with: NVIDIA redistributables, about 2 GB.
 /cuda-toolkit/
 /cuda-cache/

@@ -78,11 +78,12 @@ built around them.
   change testable logic.
 - Test behaviour, not implementation details. No tests that only restate a constant.
 - A bug fix comes with a test that fails without the fix, where the logic is testable.
-- **AI checks use the small model.** To check that the AI loads and answers, or that CUDA
-  works, run only the live tests on SmolLM2-135M:
-  `cargo test --release -- --ignored llama sampling_settings` (CUDA is a default feature; for
-  the CPU only, add `--no-default-features`). Run the larger models' tests (Qwen3-0.6B, Qwen3-4B) only when the task is measuring
-  usefulness or speed, or the user asks.
+- **AI checks use the local smoke model.** The ignored inference tests load the
+  Qwen2.5-0.5B-Instruct GGUF and safetensors fixtures under `tools/a.i.testmodels/` and only
+  prove that each format loads and produces output; they do not measure accuracy, usefulness
+  or speed. Run them in release mode with
+  `cargo test --release -- --ignored local_`. CUDA is a default feature; for a CPU-only smoke
+  check, add `--no-default-features`.
 - **CUDA builds use the cache.** Keep the default CUDA feature enabled for ordinary builds, runs,
   tests and gates; `.cargo/config.toml` makes all of them reuse `cuda-cache/`. Permission is needed
   to populate, invalidate or rebuild that cache, not to consume it. If `nvcc`, `cicc` or `ptxas`

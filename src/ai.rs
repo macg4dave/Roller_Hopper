@@ -1,9 +1,10 @@
 //! The AI models the user can install, where they go, and running the loaded one. Each offered
 //! model is one GGUF file or a safetensors folder's files, each pinned by revision, size and
 //! SHA-256, so an install is either exactly those files or not installed. GGUF files and Hugging Face safetensors folders the user puts in the
-//! models folder themselves can be loaded too; every model carries its own tokenizer and chat
-//! template, in its GGUF file or beside its safetensors.
+//! models folder themselves can be loaded too; every model supplies its own tokenizer in its GGUF
+//! metadata or beside its safetensors.
 
+mod engine;
 mod generation;
 mod install;
 mod run;
@@ -75,9 +76,6 @@ pub(crate) const PROMPT: &str = concat!(
     "\nAnswer with JSON matching this schema:\n",
     include_str!("../tools/ai/schema.json"),
 );
-
-/// The answer shape used for constrained decoding as well as shown in the editable prompt.
-pub(crate) const SCHEMA: &str = include_str!("../tools/ai/schema.json");
 
 /// A sample device to try the prompt on, in the form the evaluation tool sends.
 pub(crate) const SAMPLE_EVIDENCE: &str = include_str!("ai/sample-evidence.txt");

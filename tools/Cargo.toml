@@ -12,13 +12,14 @@ clap = { version = "4.6.7", default-features = false, features = ["derive", "std
 walkdir = "2.5.0"
 regex = { version = "1.12.4", default-features = false, features = ["std", "perf", "unicode-perl"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
-# Model evaluation only: heavy, so the hook's default build leaves it out. Keep the exact
-# engine revision aligned with the app; v0.9.4 is not published on crates.io.
-mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs", rev = "4400935451da5e2dc7379a3f92fbbada66557f6c", optional = true }
-tokio = { version = "1.49.0", default-features = false, features = ["rt-multi-thread"], optional = true }
+candle-core = { version = "0.11.0", optional = true }
+candle-nn = { version = "0.11.0", optional = true }
+candle-transformers = { version = "0.11.0", optional = true }
+tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"], optional = true }
 
 [features]
-ai = ["dep:mistralrs", "dep:tokio"]
+ai = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers"]
+cuda = ["ai", "candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 
 # Protected: see docs/agents/rust.md and AGENTS.md "Protected files". Do not loosen without explicit user approval.
 [lints.rust]

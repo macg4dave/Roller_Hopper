@@ -90,7 +90,7 @@ Gaps the UI shows against the plan:
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
   data only". Settings holds a pointer to the View menu and opens the AI settings window:
   install Qwen3-4B, LFM2-700M, Qwen3-0.6B or SmolLM2-135M, or list the user's own GGUF files and
-  safetensors folders from the models folder; Load or Unload one with mistral.rs (CPU, or GPU in a `cuda` build, with a
+  safetensors folders from the models folder; Load or Unload one with Candle (CPU, or GPU in a `cuda` build, with a
   CUDA light), and Run it on
   an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings. The
   settings and edited texts are not saved. Its output is shown raw, not checked against the
@@ -282,10 +282,9 @@ Gaps the UI shows against the plan:
   Qwen3-0.6B Q8_0 answers the identification prompt and sample: 154 s on the CPU in a plain
   release build, 24.5 s with `target-cpu=x86-64-v3`, 8.9 s on the GPU (CUDA 13.3, warm;
   the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
-- **Runtime now mistral.rs 0.9.4** at pinned release commit `4400935`, shared by the app and
-  evaluation tool: GGUF files with their own tokenizer and chat template, one file per offered
-  model. It replaces 0.8.1 to pick up upstream x86 inference improvements and Windows CUDA
-  detection; the Candle timings above predate it and need re-measuring.
+- **Runtime now Candle 0.11**, shared by the app and evaluation tool: direct GGUF and
+  Hugging Face safetensors loading with local tokenizers. Both formats now use one small,
+  synchronous inference path. The timings above need re-measuring in the integrated path.
 - Earlier alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
@@ -411,8 +410,8 @@ These extend the product brief's wording, which needs updating first (BLK-010).
 | Item | Format | Next unused ID |
 | --- | --- | --- |
 | Milestone | `M-001` | `M-021` |
-| Task or backlog need | `BE-0001` | `BE-0110` |
-| Blocker (in the backlog) | `BLK-001` | `BLK-014` |
+| Task or backlog need | `BE-0001` | `BE-0111` |
+| Blocker (in the backlog) | `BLK-001` | `BLK-015` |
 
 Take the next ID from this table and advance it in the same edit. Never reuse an ID, even after
 its item is deleted. Splitting a task keeps the original ID for what remains.
@@ -658,7 +657,7 @@ Goal: one qualified model useful inside the existing discovery and details workf
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0082 | Load the model installed by Install AI with mistral.rs (tokenizer and template from its GGUF), output held to the schema by its JSON-schema constraint as the evaluation tool does, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
+| BE-0082 | Load an installed GGUF file or Hugging Face safetensors model folder with Candle (using embedded GGUF metadata or adjacent Hugging Face configuration and tokenizer), with the schema in the prompt as the evaluation tool does, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
 | BE-0109 | Harden Install AI: check free space before starting, resume a broken download, fail a stalled read, remove an installed model; test against a local server, not the internet. | BE-0082 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
 | BE-0084 | Show type/OS-family/description suggestions with evidence, reasons and labelled confidence; explicit accept/edit/reject; suggestions never become observations. | BE-0083 |

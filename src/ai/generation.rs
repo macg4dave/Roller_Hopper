@@ -1,7 +1,7 @@
 //! How the model picks each token of an answer: the settings the user can change in the AI
 //! settings window, kept within limits that keep a run bounded.
 
-use mistralrs::SamplingParams;
+use candle_transformers::generation::Sampling;
 
 /// The most tokens a prompt and its answer may hold together, whatever the user sets (Qwen3's
 /// own context). The limit bounds the attention cache as well as the run: the engine cannot cap
@@ -81,25 +81,23 @@ impl Generation {
 
     /// The engine's sampling for these settings: greedy at temperature 0, otherwise narrowed
     /// by top-k, top-p and min-p when they are set.
-    pub(crate) fn sampling(&self) -> SamplingParams {
-        let warm = self.temperature > 0.0;
-        let base = if warm {
-            SamplingParams::neutral()
-        } else {
-            SamplingParams::deterministic()
-        };
-        SamplingParams {
-            temperature: warm.then_some(f64::from(self.temperature)),
-            top_k: if warm {
-                (self.top_k > 0).then_some(self.top_k)
-            } else {
-                base.top_k
+    pub(crate) fn sampling(&self) -> Sampling {
+        if self.temperature <= 0.0 {
+            return Sampling::ArgMax;
+        }
+        let temperature = f64::from(self.temperature);
+        match (self.top_k, self.top_p < 1.0) {
+            (0, false) => Sampling::All { temperature },
+            (k, false) => Sampling::TopK { k, temperature },
+            (0, true) => Sampling::TopP {
+                p: f64::from(self.top_p),
+                temperature,
             },
-            top_p: (warm && self.top_p < 1.0).then_some(f64::from(self.top_p)),
-            min_p: (warm && self.min_p > 0.0).then_some(f64::from(self.min_p)),
-            repetition_penalty: (self.repeat_penalty > 1.0).then_some(self.repeat_penalty),
-            max_len: Some(self.max_tokens),
-            ..base
+            (k, true) => Sampling::TopKThenTopP {
+                k,
+                p: f64::from(self.top_p),
+                temperature,
+            },
         }
     }
 }
@@ -109,30 +107,25 @@ mod tests {
     use super::*;
 
     /// The sampling settings that decide how a token is picked.
-    type Picking = (
-        Option<f64>,
-        Option<usize>,
-        Option<f64>,
-        Option<f64>,
-        Option<f32>,
-    );
+    type Picking = (f64, Option<usize>, Option<f64>);
 
     fn picking(settings: &Generation) -> Picking {
-        let s = settings.sampling();
-        (
-            s.temperature,
-            s.top_k,
-            s.top_p,
-            s.min_p,
-            s.repetition_penalty,
-        )
+        match settings.sampling() {
+            Sampling::ArgMax => (0.0, Some(1), None),
+            Sampling::All { temperature } | Sampling::GumbelSoftmax { temperature } => {
+                (temperature, None, None)
+            }
+            Sampling::TopK { k, temperature } => (temperature, Some(k), None),
+            Sampling::TopP { p, temperature } => (temperature, None, Some(p)),
+            Sampling::TopKThenTopP { k, p, temperature } => (temperature, Some(k), Some(p)),
+        }
     }
 
     #[test]
     fn the_default_is_greedy_and_fits_an_identification_answer() {
         let default = Generation::default();
-        assert_eq!(picking(&default), (None, Some(1), None, None, None));
-        assert_eq!(default.sampling().max_len, Some(700));
+        assert_eq!(picking(&default), (0.0, Some(1), None));
+        assert_eq!(default.max_tokens, 700);
         assert!(!default.think);
         assert_eq!(default.bounded(), default);
     }
@@ -144,7 +137,7 @@ mod tests {
             temperature: 0.75,
             ..Generation::default()
         };
-        assert_eq!(picking(&warm), (Some(0.75), None, None, None, None));
+        assert_eq!(picking(&warm), (0.75, None, None));
         let narrowed = Generation {
             top_k: 40,
             top_p: 0.5,
@@ -152,17 +145,14 @@ mod tests {
             repeat_penalty: 1.25,
             ..warm
         };
-        assert_eq!(
-            picking(&narrowed),
-            (Some(0.75), Some(40), Some(0.5), Some(0.125), Some(1.25))
-        );
+        assert_eq!(picking(&narrowed), (0.75, Some(40), Some(0.5)));
         // Top-k, top-p and min-p only narrow sampling; at temperature 0 the answer stays
         // greedy.
         let cold = Generation {
             temperature: 0.0,
             ..narrowed
         };
-        assert_eq!(picking(&cold), (None, Some(1), None, None, Some(1.25)));
+        assert_eq!(picking(&cold), (0.0, Some(1), None));
     }
 
     #[test]

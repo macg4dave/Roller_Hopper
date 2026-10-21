@@ -3,6 +3,9 @@
 #[path = "cases.rs"]
 mod cases;
 #[cfg(feature = "ai")]
+#[path = "../../src/ai/engine.rs"]
+mod engine;
+#[cfg(feature = "ai")]
 #[path = "run.rs"]
 mod run;
 #[path = "score.rs"]

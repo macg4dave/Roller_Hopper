@@ -8,29 +8,25 @@ license = "MIT"
 publish = false
 
 [dependencies]
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+candle-transformers = "0.11.0"
 dirs = "7.0.0"
-# mistralrs's tokenize takes the chat as Either::Left.
-either = "1.19.0"
 ipnet = { version = "2.12.2", default-features = false, features = ["std"] }
-# The AI engine: loads any GGUF with its own tokenizer and chat template. v0.9.4 is pinned
-# because it is not published on crates.io and includes the Windows CUDA detection fix.
-mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs", rev = "4400935451da5e2dc7379a3f92fbbada66557f6c" }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 sha2 = { version = "0.11.1", default-features = false }
 # Skia draws the scaled map (text, lines, icons) more cleanly than the default FemtoVG renderer.
 slint = { version = "1.18.1", features = ["renderer-skia"] }
-# mistralrs is async; the AI worker thread runs it on its own runtime.
-tokio = { version = "1.49.0", default-features = false, features = ["rt-multi-thread"] }
+tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"] }
 ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 
 [build-dependencies]
 slint-build = "1.18.1"
 
 [features]
-# NVIDIA CUDA is the normal app build. Its kernels use the persistent cache configured below;
-# building still needs the prerequisites in docs/building.md.
+# NVIDIA CUDA is the normal app build; see docs/building.md for prerequisites.
 default = ["cuda"]
-cuda = ["mistralrs/cuda", "mistralrs/cudnn", "mistralrs/flash-attn"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 
 # Protected: see docs/agents/rust.md and AGENTS.md "Protected files". Do not loosen without explicit user approval.
 [lints.rust]

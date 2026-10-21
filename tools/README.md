@@ -13,7 +13,7 @@ cargo tool <area> <command> --help
 | --- | --- | --- |
 | Text editing | [text/](text/README.md) | `text normalize-eol`, `text replace-text` |
 | Development checks | [checks/](checks/README.md) | `checks gate`, `checks agent-command` |
-| CUDA build cache | [cuda/](cuda/README.md) | `cuda build`, `cuda rebuild` |
+| CUDA build | [cuda/](cuda/README.md) | `cuda build` |
 | Runtime icon library | [icons/](icons/README.md) | `icons audit` |
 | Model evaluation | [ai/](ai/README.md) | `ai run` (feature `ai`), `ai score` |
 
@@ -30,8 +30,8 @@ tools/
 
 Use installed utilities directly for established tasks, such as `rg` for text search. The
 custom text commands supply checked mechanical edits. Dependencies and build output remain
-separate from the product; the tools do not import product code. `clap` supplies CLI parsing
-and help; `walkdir` supplies icon traversal; `mistralrs` (optional `ai` feature) runs local
+separate from the product; the AI evaluator shares the app's Candle engine source. `clap` supplies CLI parsing
+and help; `walkdir` supplies icon traversal; Candle (optional `ai` feature) runs local
 models for evaluation.
 
 The previous `repo` command group is replaced by `checks` and `text`. See each area's README
