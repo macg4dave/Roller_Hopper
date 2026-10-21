@@ -12,8 +12,9 @@ clap = { version = "4.6.7", default-features = false, features = ["derive", "std
 walkdir = "2.5.0"
 regex = { version = "1.12.4", default-features = false, features = ["std", "perf", "unicode-perl"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
-# Model evaluation only: heavy, so the hook's default build leaves it out.
-mistralrs = { version = "0.8.1", optional = true }
+# Model evaluation only: heavy, so the hook's default build leaves it out. Keep the exact
+# engine revision aligned with the app; v0.9.4 is not published on crates.io.
+mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs", rev = "4400935451da5e2dc7379a3f92fbbada66557f6c", optional = true }
 tokio = { version = "1.49.0", default-features = false, features = ["rt-multi-thread"], optional = true }
 
 [target.'cfg(windows)'.dependencies]

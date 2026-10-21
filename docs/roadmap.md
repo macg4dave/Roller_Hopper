@@ -282,9 +282,10 @@ Gaps the UI shows against the plan:
   Qwen3-0.6B Q8_0 answers the identification prompt and sample: 154 s on the CPU in a plain
   release build, 24.5 s with `target-cpu=x86-64-v3`, 8.9 s on the GPU (CUDA 13.3, warm;
   the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
-- **Runtime now mistral.rs 0.8.1**, the evaluation tool's engine: GGUF files with their own
-  tokenizer and chat template, one file per offered model. The Candle timings above predate
-  it and need re-measuring; it seeds sampling once per engine, so there is no per-answer seed.
+- **Runtime now mistral.rs 0.9.4** at pinned release commit `4400935`, shared by the app and
+  evaluation tool: GGUF files with their own tokenizer and chat template, one file per offered
+  model. It replaces 0.8.1 to pick up upstream x86 inference improvements and Windows CUDA
+  detection; the Candle timings above predate it and need re-measuring.
 - Earlier alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15

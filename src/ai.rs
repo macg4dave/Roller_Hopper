@@ -73,6 +73,9 @@ pub(crate) const PROMPT: &str = concat!(
     include_str!("../tools/ai/schema.json"),
 );
 
+/// The answer shape used for constrained decoding as well as shown in the editable prompt.
+pub(crate) const SCHEMA: &str = include_str!("../tools/ai/schema.json");
+
 /// A sample device to try the prompt on, in the form the evaluation tool sends.
 pub(crate) const SAMPLE_EVIDENCE: &str = include_str!("ai/sample-evidence.txt");
 

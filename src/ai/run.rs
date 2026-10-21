@@ -12,9 +12,10 @@ use std::time::{Duration, Instant};
 
 use either::Either;
 use mistralrs::{
-    ChatCompletionChunkResponse, Device, GgufModelBuilder, Model, RequestBuilder, Response,
-    TextMessageRole, TextMessages, TokenSource,
+    ChatCompletionChunkResponse, Constraint, Device, GgufModelBuilder, Model, RequestBuilder,
+    Response, TextMessageRole, TextMessages, TokenSource,
 };
+use serde_json::{Value, json};
 use tokio::runtime::Runtime;
 
 use super::generation::Generation;
@@ -22,7 +23,7 @@ use super::generation::Generation;
 /// The most tokens a prompt and its answer may hold together, which bounds the attention cache
 /// as well as the run. The engine cannot cap its plain (non-paged) cache itself, so the worker
 /// refuses longer prompts and stops the answer at the limit.
-const MAX_CONTEXT_TOKENS: usize = 2048;
+const MAX_CONTEXT_TOKENS: usize = 8192;
 
 /// Something for the worker to do, in the order sent.
 #[derive(Debug)]
@@ -79,7 +80,10 @@ pub(crate) enum RunError {
     Broken,
     /// The GPU was asked for, but this build has no CUDA or no NVIDIA GPU answered.
     NoGpu,
-    TooLong,
+    TooLong {
+        prompt_tokens: usize,
+        limit: usize,
+    },
     /// The model failed part-way through an answer.
     Failed,
 }
@@ -229,12 +233,19 @@ async fn answer(
         )
         .await
         .map_err(|_| RunError::Failed)?;
-    let Some(room) = MAX_CONTEXT_TOKENS.checked_sub(prompt.len()).filter(|&r| r > 0) else {
-        return Err(RunError::TooLong);
+    let Some(room) = MAX_CONTEXT_TOKENS
+        .checked_sub(prompt.len())
+        .filter(|&r| r > 0)
+    else {
+        return Err(RunError::TooLong {
+            prompt_tokens: prompt.len(),
+            limit: MAX_CONTEXT_TOKENS,
+        });
     };
     let mut sampling = question.settings.sampling();
     sampling.max_len = Some(question.settings.max_tokens.min(room));
     let request = RequestBuilder::from(messages)
+        .set_constraint(Constraint::JsonSchema(answer_schema(question.user)?))
         .set_sampling(sampling)
         .enable_thinking(think);
     let mut stream = model
@@ -264,6 +275,27 @@ async fn answer(
         elapsed: started.elapsed(),
         end,
     })
+}
+
+/// The fixed answer schema, narrowed to evidence IDs present in the user turn when it contains
+/// the expected JSON list. Malformed trial input still gets the fixed output shape.
+fn answer_schema(user: &str) -> Result<Value, RunError> {
+    let mut schema: Value = serde_json::from_str(super::SCHEMA).map_err(|_| RunError::Failed)?;
+    let ids = user
+        .find('[')
+        .and_then(|start| serde_json::from_str::<Value>(&user[start..]).ok())
+        .and_then(|evidence| evidence.as_array().cloned())
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.get("id").and_then(Value::as_str).map(str::to_owned))
+        .collect::<Vec<_>>();
+    if !ids.is_empty() {
+        let slot = schema
+            .pointer_mut("/properties/evidence_review/items/properties/id")
+            .ok_or(RunError::Failed)?;
+        slot["enum"] = json!(ids);
+    }
+    Ok(schema)
 }
 
 /// The answer as it streams in.
@@ -354,6 +386,18 @@ mod tests {
         assert!(!plain(injected).contains("<|"));
     }
 
+    #[test]
+    fn the_answer_schema_only_allows_ids_from_the_evidence() {
+        let schema =
+            answer_schema("Evidence:\n[{\"id\":\"E1\",\"fact\":{}},{\"id\":\"E7\",\"fact\":{}}]")
+                .unwrap();
+        assert_eq!(
+            schema.pointer("/properties/evidence_review/items/properties/id/enum"),
+            Some(&json!(["E1", "E7"]))
+        );
+        assert!(answer_schema("editable trial text").is_ok());
+    }
+
     /// A streamed chunk with one choice.
     fn chunk(
         content: &str,
@@ -364,6 +408,7 @@ mod tests {
             id: String::new(),
             choices: vec![ChunkChoice {
                 finish_reason: finish.map(str::to_owned),
+                stop_sequence: None,
                 index: 0,
                 delta: Delta {
                     content: Some(content.to_owned()),
@@ -381,6 +426,7 @@ mod tests {
                 completion_tokens,
                 prompt_tokens: 0,
                 total_tokens: 0,
+                prompt_tokens_details: None,
                 avg_tok_per_sec: 0.0,
                 avg_prompt_tok_per_sec: 0.0,
                 avg_compl_tok_per_sec: 0.0,
@@ -388,6 +434,8 @@ mod tests {
                 total_prompt_time_sec: 0.0,
                 total_completion_time_sec: 0.0,
             }),
+            adapter_generation: None,
+            session_id: None,
         }
     }
 
@@ -484,7 +532,10 @@ mod tests {
                 ][..]
             )
         );
-        assert!(ended(&seen, End::Complete));
+        assert!(
+            ended(&seen, End::Complete),
+            "model did not complete: {seen:?}"
+        );
         assert!(last_output(&seen).to_lowercase().contains("blue"));
     }
 
@@ -576,50 +627,11 @@ mod tests {
             )
             .unwrap();
         }
-        assert!(ended(&seen, End::Complete));
+        assert!(
+            ended(&seen, End::Complete),
+            "model did not complete: {seen:?}"
+        );
         assert!(last_output(&seen).contains("\"os_family\""));
-    }
-
-    // TEMPORARY diagnosis of decode speed; removed before the task ends.
-    #[test]
-    #[ignore = "diagnostic"]
-    fn diag_decode_speed() {
-        let long = Generation {
-            max_tokens: 300,
-            ..Generation::default()
-        };
-        for gpu in [true] {
-            for (label, system, user) in [
-                ("short", "Be helpful.", "Write a long story about a router."),
-                ("long", crate::ai::PROMPT, crate::ai::SAMPLE_EVIDENCE),
-            ] {
-                let Job::Load { model, .. } = load_model("SmolLM2-135M") else {
-                    unreachable!()
-                };
-                let jobs = vec![
-                    Job::Load { model, gpu },
-                    Job::Run {
-                        system: system.into(),
-                        user: user.into(),
-                        settings: long,
-                    },
-                ];
-                let seen = events(jobs, |e| {
-                    matches!(e, WorkerEvent::Finished(_) | WorkerEvent::LoadFailed(_))
-                });
-                if let Some(WorkerEvent::Finished(Ok(a))) = seen.last() {
-                    let secs = a.elapsed.as_secs_f32();
-                    let mut out = std::io::stderr().lock();
-                    writeln!(
-                        out,
-                        "DIAG gpu={gpu} prompt={label}: {} tokens in {secs:.2} s = {:.1} tok/s",
-                        a.tokens,
-                        a.tokens as f32 / secs
-                    )
-                    .unwrap();
-                }
-            }
-        }
     }
 
     /// Loads the model called `name` from the user's models folder, installed first if it is

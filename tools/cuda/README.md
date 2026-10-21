@@ -6,14 +6,14 @@ Build, run and test the app's `cuda` feature against the CUDA toolkit kept in th
 ```sh
 cargo tool cuda --help
 cargo tool cuda cargo --help
-cargo tool cuda cargo build --release --features cuda
-cargo tool cuda cargo run --release --features cuda
-cargo tool cuda cargo test --release --features cuda -- --ignored llama sampling_settings
+cargo tool cuda cargo build --release
+cargo tool cuda cargo run --release
+cargo tool cuda cargo test --release -- --ignored llama sampling_settings
 cargo tool cuda cargo clippy --all-targets --all-features -- -D warnings
-cargo tool cuda cargo --dry-run build --release --features cuda
+cargo tool cuda cargo --dry-run build --release
 ```
 
-`cuda cargo` runs Cargo in the repository root with:
+CUDA is an app default feature. `cuda cargo` runs Cargo in the repository root with:
 
 - `CUDA_PATH`, `CUDA_HOME` and `NVCC` pointing into `cuda-toolkit/`;
 - `CUDARC_CUDA_VERSION` read from `nvcc --version` (13.2 gives `13020`);
@@ -33,7 +33,7 @@ skipped. `--dry-run` prints the settings and command and copies nothing.
 
 ## The toolkit
 
-mistral.rs 0.8.1 accepts CUDA 11.4 to 13.2. `cuda-toolkit/` holds NVIDIA's CUDA 13.2.2
+mistral.rs 0.9.4 is built here with CUDA 13.2.2. `cuda-toolkit/` holds NVIDIA's CUDA 13.2.2
 Windows redistributables (`cuda_nvcc`, `cuda_crt`, `libnvvm`, `cuda_cccl`, `cuda_cudart`,
 `cuda_nvrtc`, `libcublas`, `libcurand`) from
 <https://developer.download.nvidia.com/compute/cuda/redist/redistrib_13.2.2.json>, each

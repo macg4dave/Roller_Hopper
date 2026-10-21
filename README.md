@@ -12,28 +12,30 @@ there is listed beside them; its own tokenizer and chat template are used.
 
 ## Run
 
+On the supported NVIDIA Windows machine, run with the repository's CUDA environment:
+
 ```sh
-cargo run
+cargo tool cuda cargo run
 ```
 
 The AI model is far faster in a release build with AVX2 (on the CPU, about 25 s rather than
 150 s for one answer from Qwen3-0.6B):
 
 ```sh
-RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run --release
+RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run --release --no-default-features
 ```
 
 ### AI on the GPU (NVIDIA, Windows)
 
-The `cuda` feature runs the model on an NVIDIA graphics card. It builds against the CUDA
+CUDA support is enabled by default and runs the model on an NVIDIA graphics card. It builds against the CUDA
 13.2 toolkit unpacked in the repository's `cuda-toolkit/` folder (ignored by git; how to fill
 it is in [tools/cuda](tools/cuda/README.md)), with Visual Studio's C++ tools and an NVIDIA
 driver. Run Cargo through the repository command, which sets the build settings, puts the
 toolkit on `PATH` for that run and copies the CUDA DLLs beside the app and its tests:
 
 ```sh
-cargo tool cuda cargo run --release --features cuda
-cargo tool cuda cargo test --release --features cuda -- --ignored llama sampling_settings
+cargo tool cuda cargo run --release
+cargo tool cuda cargo test --release -- --ignored llama sampling_settings
 cargo tool cuda cargo clippy --all-targets --all-features -- -D warnings
 ```
 

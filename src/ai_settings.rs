@@ -207,7 +207,7 @@ fn state(error: RunError) -> ModelState {
         RunError::Missing => ModelState::Missing,
         RunError::Broken => ModelState::Broken,
         RunError::NoGpu => ModelState::NoGpu,
-        RunError::TooLong => ModelState::TooLong,
+        RunError::TooLong { .. } => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,
     }
 }
