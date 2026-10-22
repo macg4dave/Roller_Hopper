@@ -52,7 +52,13 @@ const PROHIBITED_COMMANDS: &[&str] = &[
     "& $helper -c code",
     "if true; then python helper.py; fi",
     "& './temporary.ps1'",
-    "./tools/looks-maintained.py",
+    "python tools/../helper.py",
+    "python ../tools/helper.py",
+    "python C:/elsewhere/tools/helper.py",
+    "python -c 'print(1)' tools/helper.py",
+    "bash -c tools/helper.sh",
+    "pwsh -Command tools/helper.ps1",
+    "python tools/",
     "bash -c 'python helper.py'",
     "pwsh -EncodedCommand abc",
     "cmd /c helper.cmd",
@@ -87,7 +93,7 @@ fn prohibited_commands_return_actionable_denials() -> io::Result<()> {
                 .as_str()
                 .unwrap();
             assert!(reason.contains("cargo tool --help"), "{command}");
-            assert!(reason.contains("smallest tested Rust command"));
+            assert!(reason.contains("saved in the tools/ folder"));
             assert_eq!(output.stderr, b"");
         }
     }
@@ -114,6 +120,16 @@ fn ordinary_commands_preserve_normal_permissions() -> io::Result<()> {
             "python -m json.tool input.json",
             "Get-Content -Raw input.json | py -m json.tool",
             "& 'C:\\Program Files\\Python\\python.exe' -m json.tool input.json",
+            // Scripts saved in tools/ and run from there.
+            "./tools/looks-maintained.py",
+            "tools/scripts/report.sh --out report.txt",
+            "& './tools/check.ps1'",
+            "python tools/scripts/report.py --out report.txt",
+            "py -I tools\\scripts\\report.py",
+            "bash tools/run.sh",
+            "powershell -ExecutionPolicy Bypass -File tools\\check.ps1",
+            "cmd /c tools\\check.cmd",
+            "cargo test; node ./tools/helper.js",
         ] {
             let output = invoke(&event(tool, command))?;
             assert!(output.status.success(), "{command}: {output:?}");

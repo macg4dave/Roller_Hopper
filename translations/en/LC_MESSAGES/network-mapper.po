@@ -649,6 +649,10 @@ msgstr "Windows ports 135 and 445"
 msgid "os-clue.ttl"
 msgstr "Ping TTL {}"
 
+# The OS family was filled in by Import with AI.
+msgid "os-clue.ai"
+msgstr "Suggested by AI"
+
 msgid "details.last-seen"
 msgstr "Last seen"
 
@@ -1206,6 +1210,37 @@ msgid "discovery.import"
 msgid_plural "discovery.import.plural"
 msgstr[0] "Import {n} new host to the map"
 msgstr[1] "Import {n} new hosts to the map"
+
+# Beside Import: the same hosts, each with the empty fields the AI is confident about filled in
+# (type, OS family, notes) before it is added.
+msgid "discovery.ai-import"
+msgstr "Import with AI"
+
+msgid "discovery.ai-import.stop"
+msgstr "Stop AI import"
+
+msgid "discovery.ai-import.loading"
+msgstr "Loading the AI model…"
+
+# {0} is the host the AI is looking at now, {1} how many it began with.
+msgid "discovery.ai-import.identifying"
+msgstr "AI identifying host {0} of {1}…"
+
+# {n} is how many hosts the AI looked at; each was added to the map.
+msgid "discovery.ai-import.finished"
+msgid_plural "discovery.ai-import.finished.plural"
+msgstr[0] "AI import added {n} host"
+msgstr[1] "AI import added {n} hosts"
+
+# {0} hosts were identified and added before the user stopped, of {1}.
+msgid "discovery.ai-import.stopped"
+msgstr "AI import stopped after {0} of {1} hosts"
+
+msgid "discovery.ai-import.no-model"
+msgstr "Install the AI first, in Settings › AI settings"
+
+msgid "discovery.ai-import.failed"
+msgstr "The AI could not load or answer; see AI settings"
 
 msgid "discovery.show-on-map"
 msgstr "Show on map"

@@ -1,5 +1,6 @@
 import { Button, ListView } from "std-widgets.slint";
-import { Bridge, DiscoveryPhase, FoundFilter, FoundSort } from "bridge.slint";
+import { AiImportPhase, Bridge, DiscoveryPhase, FoundFilter, FoundSort } from "bridge.slint";
+import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { FoundColumns, FoundRow } from "components/found-row.slint";
 
@@ -45,6 +46,8 @@ component SortableHeading inherits Rectangle {
 // The hosts the discovery run found, each with its network cards, with filters for the ones
 // worth a look.
 export component DiscoveryResults inherits VerticalLayout {
+    // Import with AI is loading the model or identifying hosts.
+    property <bool> ai-busy: Bridge.discovery.ai-import == AiImportPhase.loading || Bridge.discovery.ai-import == AiImportPhase.identifying;
     spacing: Theme.space-s;
 
     HorizontalLayout {
@@ -60,12 +63,35 @@ export component DiscoveryResults inherits VerticalLayout {
             clicked => { Bridge.set-found-filter(tab.filter); }
         }
         Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: Labels.ai-import(Bridge.discovery);
+            font-size: Theme.font-small;
+            color: Bridge.discovery.ai-import == AiImportPhase.failed || Bridge.discovery.ai-import == AiImportPhase.no-model
+                ? Theme.warning : Theme.text-muted;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            horizontal-alignment: right;
+        }
         Button {
             text: @tr("discovery.import" | "discovery.import.plural" % Bridge.discovery.importable);
             icon: @image-url("icons/plus.svg");
             colorize-icon: true;
-            enabled: Bridge.discovery.importable > 0;
+            enabled: Bridge.discovery.importable > 0 && !root.ai-busy;
             clicked => { Bridge.import-found(); }
+        }
+        Button {
+            text: root.ai-busy ? @tr("discovery.ai-import.stop") : @tr("discovery.ai-import");
+            icon: root.ai-busy ? @image-url("icons/stop.svg") : @image-url("icons/plus.svg");
+            colorize-icon: true;
+            enabled: root.ai-busy || (Bridge.discovery.importable > 0 && Bridge.discovery.phase != DiscoveryPhase.running);
+            clicked => {
+                if root.ai-busy {
+                    Bridge.stop-ai-import();
+                } else {
+                    Bridge.import-found-with-ai();
+                }
+            }
         }
     }
 

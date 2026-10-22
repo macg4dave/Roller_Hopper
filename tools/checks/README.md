@@ -53,8 +53,9 @@ settings and inspect `/hooks` to confirm registration. This requires a Claude ve
 exec-form command hooks and `onFailure`; see the
 [official hook reference](https://code.claude.com/docs/en/hooks).
 
-The [shared policy](../../docs/agents/tooling.md#command-enforcement) defines approved entry
-points and the required alternative when blocked. Tests cover common command forms, quoted
+The [scripts policy](../README.md#scripts) defines what may run: interpreters only on
+scripts saved under `tools/` (or the maintained entry points such as `python -m json.tool`),
+never inline code or scripts saved elsewhere. Tests cover common command forms, quoted
 paths and compound commands. The detector recognises command positions and quoted arguments;
 it does not evaluate shell syntax, variable expansion, aliases, encoded programs, executable
 contents or all obfuscations. Nested shells and dynamic shell programs are conservatively

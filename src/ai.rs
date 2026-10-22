@@ -6,6 +6,7 @@
 mod chat;
 mod engine;
 mod generation;
+mod identify;
 mod install;
 mod response;
 mod run;
@@ -13,8 +14,9 @@ mod samples;
 pub(crate) mod saved_prompt;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
+pub(crate) use identify::{Identity, evidence};
 pub(crate) use install::{InstallError, install};
-pub(crate) use run::{Answered, End, Job, RunError, Worker, WorkerEvent};
+pub(crate) use run::{Answered, Asker, End, IDLE_UNLOAD, Job, RunError, Worker, WorkerEvent};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -145,6 +147,13 @@ pub(crate) fn data_dir() -> Option<PathBuf> {
 /// Where models are installed, in the app's data folder.
 pub(crate) fn models_dir() -> Option<PathBuf> {
     data_dir().map(|d| d.join("models"))
+}
+
+/// The file Import with AI loads: the offered main application AI (Qwen3-4B), if installed.
+pub(crate) fn import_model() -> Option<PathBuf> {
+    let dir = models_dir()?;
+    let model = MODELS.first().filter(|m| m.is_installed(&dir))?;
+    Some(model.load_path(&dir))
 }
 
 /// Whether this build can run models on an NVIDIA GPU (built with the `cuda` feature).

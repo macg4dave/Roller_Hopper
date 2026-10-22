@@ -29,6 +29,8 @@ pub(crate) enum OsClue {
     WindowsPorts,
     /// The time-to-live of its ping reply, which each family starts at its own value.
     Ttl(u8),
+    /// The AI's suggestion from everything the scan found, filled in by Import with AI.
+    Ai,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

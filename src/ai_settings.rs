@@ -1,22 +1,31 @@
 //! Connects the AI settings window to [`crate::ai`]: installs models in the background, loads
 //! and unloads the one picked, and runs it on the prompt and evidence, so the window stays
 //! responsive through downloads of gigabytes and answers that take minutes.
+//!
+//! The window starts the app's one AI worker, which Import with AI shares: the model's loading
+//! and unloading show here whoever asked for them, and each run's events go to whoever asked.
 
 mod generation;
 mod install;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::mpsc::Sender;
 
-use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
 use crate::ai::{
-    self, Answered, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent, saved_prompt,
+    self, Answered, Asker, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent,
+    saved_prompt,
 };
 use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
-/// Opens the window from Settings, bringing back the same window each time.
-pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
+/// Opens the window from Settings, bringing back the same window each time. Returns the shared
+/// worker; the events of Import with AI's runs, and of loading and unloading, go to `import`.
+pub(crate) fn connect(
+    ui: &AppWindow,
+    import: Sender<WorkerEvent>,
+) -> Result<Rc<Worker>, slint::PlatformError> {
     let window = AiSettingsWindow::new()?;
     install::connect(&window);
     show_installed(&window);
@@ -64,37 +73,47 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
             show_installed(&open);
         }
     });
-    connect_worker(&window);
-
-    // The app runs until its last window closes, so the main window takes this one with it.
-    // A download or answer in progress stops with the app; a partial download is never taken
-    // as installed.
-    let closing = window.as_weak();
-    ui.window().on_close_requested(move || {
-        if let Some(open) = closing.upgrade() {
-            // A failure leaves the window open with nothing left to report it to; the user
-            // can still close it.
-            open.hide().ok();
-        }
-        CloseRequestResponse::HideWindow
-    });
+    let worker = connect_worker(&window, import);
+    // Closing the main window ends the app with this window (`ui_bridge::project`). A download
+    // or answer in progress stops with the app; a partial download is never taken as installed.
     ui.on_open_ai_settings(move || {
         show_installed(&window);
         // A failure only means the window did not appear; the main window carries on and
         // Settings can open it again.
         window.show().ok();
     });
-    Ok(())
+    Ok(worker)
 }
 
-/// Loading and running go to one worker, which keeps the loaded model between runs.
-fn connect_worker(window: &AiSettingsWindow) {
+/// The run an event belongs to, if it belongs to one.
+fn asker(event: &WorkerEvent) -> Option<Asker> {
+    match event {
+        WorkerEvent::Running(asker)
+        | WorkerEvent::Output(asker, _)
+        | WorkerEvent::Finished(asker, _) => Some(*asker),
+        WorkerEvent::Unloaded
+        | WorkerEvent::Loading
+        | WorkerEvent::Ready(_)
+        | WorkerEvent::LoadFailed(_) => None,
+    }
+}
+
+/// Loading and running go to one worker, which keeps the loaded model between runs until it
+/// has been idle for [`ai::IDLE_UNLOAD`].
+fn connect_worker(window: &AiSettingsWindow, import: Sender<WorkerEvent>) -> Rc<Worker> {
     let reporting = window.as_weak();
-    let worker = Rc::new(Worker::start(move |event| {
-        // An error only means the app is closing, so there is no window to update.
-        reporting
-            .upgrade_in_event_loop(move |w| show_event(&w, event))
-            .ok();
+    let worker = Rc::new(Worker::start(ai::IDLE_UNLOAD, move |event| {
+        let asker = asker(&event);
+        if asker != Some(Asker::Trial) {
+            // An error only means the app is closing, with no import left to tell.
+            import.send(event.clone()).ok();
+        }
+        if asker != Some(Asker::Import) {
+            // An error only means the app is closing, so there is no window to update.
+            reporting
+                .upgrade_in_event_loop(move |w| show_event(&w, event))
+                .ok();
+        }
     }));
 
     let (loading, loader) = (window.as_weak(), Rc::clone(&worker));
@@ -125,19 +144,21 @@ fn connect_worker(window: &AiSettingsWindow) {
     });
     let stopper = Rc::clone(&worker);
     window.on_stop(move || stopper.stop());
-    let running = window.as_weak();
+    let (running, runner) = (window.as_weak(), Rc::clone(&worker));
     window.on_run(move |prompt, input| {
         if let Some(open) = running.upgrade() {
             let (system, user) = (prompt.into(), input.into());
             let settings = generation::from_ui(&open.get_generation());
             let job = Job::Run {
+                asker: Asker::Trial,
                 system,
                 user,
                 settings,
             };
-            send(&open, &worker, job);
+            send(&open, &runner, job);
         }
     });
+    worker
 }
 
 /// Asks the worker to load the model listed as `name`, on the GPU or the CPU.
@@ -205,6 +226,16 @@ fn file_named(name: &str) -> Option<PathBuf> {
     Some(model.file(&dir))
 }
 
+/// The name the model list shows for the model file at `path`, which Import with AI may have
+/// loaded rather than this window.
+fn name_of(path: &Path) -> Option<String> {
+    let dir = ai::models_dir()?;
+    let model = ai::installed(&dir)
+        .into_iter()
+        .find(|c| c.file(&dir) == path)?;
+    Some(model.name())
+}
+
 fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
     match event {
         WorkerEvent::Unloaded => {
@@ -212,8 +243,13 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
             window.set_state(ModelState::None);
         }
         WorkerEvent::Loading => window.set_state(ModelState::Loading),
-        WorkerEvent::Ready => window.set_state(ModelState::Ready),
-        WorkerEvent::Finished(Ok(answered)) => {
+        WorkerEvent::Ready(path) => {
+            if let Some(name) = name_of(&path) {
+                window.set_loaded_name(name.into());
+            }
+            window.set_state(ModelState::Ready);
+        }
+        WorkerEvent::Finished(_, Ok(answered)) => {
             show_answered(window, answered);
             window.set_state(ModelState::Ready);
         }
@@ -226,13 +262,13 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
             window.set_loaded_name(SharedString::new());
             window.set_state(state(e));
         }
-        WorkerEvent::Running => {
+        WorkerEvent::Running(_) => {
             window.set_output(SharedString::new());
             window.set_answer_end(AnswerEnd::None);
             window.set_state(ModelState::Running);
         }
-        WorkerEvent::Output(text) => window.set_output(text.into()),
-        WorkerEvent::Finished(Err(e)) => window.set_state(state(e)),
+        WorkerEvent::Output(_, text) => window.set_output(text.into()),
+        WorkerEvent::Finished(_, Err(e)) => window.set_state(state(e)),
     }
 }
 

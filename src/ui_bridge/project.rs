@@ -110,6 +110,9 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
             close = st.ask_first(Then::Close);
         });
         if close {
+            // The app ends with its main window, taking the AI settings window with it. Failing
+            // means the event loop has already stopped, so the app is ending anyway.
+            slint::quit_event_loop().ok();
             CloseRequestResponse::HideWindow
         } else {
             CloseRequestResponse::KeepWindowShown

@@ -36,3 +36,15 @@ models for evaluation.
 
 The previous `repo` command group is replaced by `checks` and `text`. See each area's README
 for examples, write behaviour and limitations.
+
+## Scripts
+
+Agents may write scripts (Python, PowerShell, shell and so on) when no existing command fits,
+but every script MUST be saved under `tools/` and run by its path there, from the repository
+root: `python tools/<area>/<name>.py`, `powershell -File tools\<area>\<name>.ps1`,
+`./tools/<area>/<name>.sh`. Inline code (`python -c`, `node -e`, heredocs, code piped into an
+interpreter) and scripts saved anywhere else, including temporary folders, are blocked by the
+command hook ([checks/](checks/README.md#claude-command-hook)). Put a script in the folder of
+the task it serves, start it with a comment saying what it does, and delete it when it is no
+longer needed: git is the archive. A script that keeps being used is better made a tested
+`cargo tool` command.

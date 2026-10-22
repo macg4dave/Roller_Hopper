@@ -5,7 +5,7 @@ use std::io::{self, Read, Write};
 use regex::Regex;
 use serde_json::{Value, json};
 
-const GUIDANCE: &str = "Disposable scripts are prohibited. Read tools/README.md, run cargo tool --help and read the relevant command help. Use existing tooling; if inadequate, extend the closest command or add the smallest tested Rust command in tools/, then use it for the original task. See docs/agents/tooling.md.";
+const GUIDANCE: &str = "Scripts must be saved in the tools/ folder and run from there: inline code and scripts saved anywhere else are blocked. Read tools/README.md and run cargo tool --help first; use existing tooling when it fits, otherwise save the script under tools/ (see tools/README.md, Scripts) and run it by that path.";
 
 pub(super) fn run() -> io::Result<()> {
     let mut input = String::new();
@@ -85,6 +85,10 @@ fn check(command: &str) -> io::Result<Option<&'static str>> {
         {
             continue;
         }
+        if saved_tool_script(token) {
+            executable = false;
+            continue;
+        }
         if let Some(reason) = blocked_executable(&name, tokens.get(index + 1..).unwrap_or_default())
         {
             return Ok(Some(reason));
@@ -111,7 +115,10 @@ fn blocked_executable(name: &str, tail: &[&str]) -> Option<&'static str> {
         .take_while(|token| !matches!(**token, ";" | "&" | "|" | "\r" | "\n"))
         .map(|token| token.trim_matches(['\'', '"']))
         .collect();
-    if is_interpreter(name) && !maintained_entry_point(name, &arguments) {
+    if is_interpreter(name)
+        && !maintained_entry_point(name, &arguments)
+        && !runs_saved_script(&arguments)
+    {
         return Some("Unapproved interpreter or script invocation.");
     }
     if matches!(
@@ -182,6 +189,48 @@ fn is_interpreter(name: &str) -> bool {
                 | "wscript"
                 | "rust-script"
         )
+}
+
+/// An interpreter given a script saved under `tools/`, after only options that do not supply
+/// code themselves (`python -I tools/x.py`, `powershell -File tools/x.ps1`, `cmd /c tools\x.cmd`).
+fn runs_saved_script(arguments: &[&str]) -> bool {
+    let Some(script) = arguments.iter().position(|a| saved_tool_script(a)) else {
+        return false;
+    };
+    let mut before = arguments.iter().take(script);
+    let mut value_of_option = false;
+    before.all(|argument| {
+        let option = argument.to_ascii_lowercase();
+        if std::mem::take(&mut value_of_option) {
+            return !option.starts_with('-');
+        }
+        value_of_option = option == "-executionpolicy";
+        (option.starts_with('-') || option == "/c")
+            && !matches!(
+                option.as_str(),
+                "-" | "-c"
+                    | "-e"
+                    | "-p"
+                    | "-m"
+                    | "--eval"
+                    | "--print"
+                    | "-command"
+                    | "-encodedcommand"
+                    | "-ec"
+            )
+    })
+}
+
+/// A path to a script saved in the repository's `tools/` folder, relative to the repository
+/// root and never climbing out of it.
+fn saved_tool_script(token: &str) -> bool {
+    let path = token
+        .trim_matches(['\'', '"'])
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let path = path.strip_prefix("./").unwrap_or(&path);
+    path.strip_prefix("tools/")
+        .is_some_and(|rest| rest.split('/').all(|part| !matches!(part, "" | "." | "..")))
 }
 
 fn maintained_entry_point(name: &str, arguments: &[&str]) -> bool {

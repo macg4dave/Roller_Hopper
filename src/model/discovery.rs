@@ -3,10 +3,12 @@
 //! scanning itself is elsewhere (`crate::scan`); nothing here touches a network, so runs can be
 //! replayed in tests.
 
+mod ai_import;
 mod found;
 mod moves;
 mod target;
 
+pub(crate) use ai_import::AiImportPhase;
 pub(crate) use found::{Answer, Decision, Finding, Found, FoundFilter, FoundSort, Method};
 pub(crate) use moves::Parent;
 pub(crate) use target::TargetError;
@@ -135,6 +137,8 @@ pub(crate) struct Discovery {
     started: Option<Instant>,
     took: Option<Duration>,
     log: Vec<LogEntry>,
+    /// Import with AI over this run's hosts, once begun.
+    ai_import: Option<ai_import::AiImport>,
 }
 
 impl Discovery {

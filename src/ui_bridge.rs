@@ -4,9 +4,11 @@
 //!
 //! This module owns the state, the selection and the list's search, filter and folding. The
 //! rest is split by area: [`edit`] handles editing, [`map`] the topology map, [`discovery`] the
-//! discovery page's scan, [`project`] the project file, [`view`] sends the state to the UI,
-//! [`convert`] translates between model and UI types, and [`icons`] reads the icon folder.
+//! discovery page's scan, [`ai_import`] its Import with AI, [`project`] the project file,
+//! [`view`] sends the state to the UI, [`convert`] translates between model and UI types, and
+//! [`icons`] reads the icon folder.
 
+mod ai_import;
 mod convert;
 mod discovery;
 mod edit;
@@ -22,9 +24,11 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc::Receiver;
 
 use slint::{ComponentHandle, SharedString, Weak};
 
+use crate::ai::{Worker, WorkerEvent};
 use crate::model::{
     Arrangement, CardId, Device, DeviceId, Discovery, Network, NetworkCard, Positions,
     StatusFilter, tree_layout,
@@ -156,8 +160,14 @@ impl AppState {
     }
 }
 
-/// Wires every `Bridge` callback to the state and shows the initial state.
-pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+/// Wires every `Bridge` callback to the state and shows the initial state. Import with AI uses
+/// the shared AI `worker`, taking its `ai_events`.
+pub(crate) fn connect(
+    ui: &AppWindow,
+    state: &Rc<RefCell<AppState>>,
+    worker: Rc<Worker>,
+    ai_events: Receiver<WorkerEvent>,
+) {
     let bridge = ui.global::<Bridge<'_>>();
     bridge.on_select(handler(ui, state, |st, id| {
         st.selected = convert::device_id(id).map(Selection::Device);
@@ -179,6 +189,7 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     edit::connect(ui, state);
     map::connect(ui, state);
     discovery::connect(ui, state);
+    ai_import::connect(ui, state, worker, ai_events);
     project::connect(ui, state);
     let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_refresh_icons(move || icons::refresh(&icons_ui, &icons_state));

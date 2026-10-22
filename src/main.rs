@@ -13,6 +13,7 @@ mod ui_bridge;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::mpsc;
 
 use slint::ComponentHandle;
 
@@ -21,7 +22,9 @@ fn main() -> Result<(), slint::PlatformError> {
     ui_bridge::select_language(&ui);
     let network = model::Network::default();
     let state = Rc::new(RefCell::new(ui_bridge::AppState::new(network)));
-    ui_bridge::connect(&ui, &state);
-    ai_settings::connect(&ui)?;
+    // One AI worker, started with the AI settings window and shared with Import with AI.
+    let (ai_events, ai_inbox) = mpsc::channel();
+    let worker = ai_settings::connect(&ui, ai_events)?;
+    ui_bridge::connect(&ui, &state, worker, ai_inbox);
     ui.run()
 }

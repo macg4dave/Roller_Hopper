@@ -1,6 +1,8 @@
 //! This computer's own subnet, which the network box starts with: the IPv4 subnet of a network
 //! connection that is up, preferring the one the default route uses.
 
+use std::net::{IpAddr, Ipv4Addr, UdpSocket};
+
 use ipnet::{IpNet, Ipv4Net};
 use netscli_core::NetworkManager;
 
@@ -18,17 +20,43 @@ pub(crate) fn local_subnet() -> Option<Ipv4Net> {
         IpNet::V4(v4) => Some(*v4),
         IpNet::V6(_) => None,
     });
-    best(netscli_core::detect_default_ipv4_subnet(), addresses)
+    let default = netscli_core::detect_default_ipv4_subnet();
+    best(routed_address(), default, addresses)
 }
 
-/// The subnet to suggest for this computer's `addresses` (each with its prefix length): the
-/// first within the `default` route's subnet, or else the first at all.
-fn best(default: Option<Ipv4Net>, addresses: impl Iterator<Item = Ipv4Net>) -> Option<Ipv4Net> {
+/// The address this computer sends from to the internet, as its routing table says; none when
+/// it has no route (offline), and the other clues decide. Connecting a UDP socket only looks
+/// the route up; nothing is sent.
+fn routed_address() -> Option<Ipv4Addr> {
+    let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    // A documentation address (TEST-NET-1): routed like any other, never reached.
+    socket.connect((Ipv4Addr::new(192, 0, 2, 1), 9)).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(ip) if !ip.is_unspecified() => Some(ip),
+        IpAddr::V4(_) | IpAddr::V6(_) => None,
+    }
+}
+
+/// The subnet to suggest for this computer's `addresses` (each with its prefix length): that of
+/// the `routed` address, which outgoing traffic leaves from, else the first within the
+/// `default` subnet (the first connection's, which may be a virtual or VPN adapter), or else
+/// the first at all.
+fn best(
+    routed: Option<Ipv4Addr>,
+    default: Option<Ipv4Net>,
+    addresses: impl Iterator<Item = Ipv4Net>,
+) -> Option<Ipv4Net> {
     let subnets: Vec<Ipv4Net> = addresses.filter_map(subnet).collect();
-    let routed = subnets
+    let on_route = subnets
         .iter()
-        .find(|s| default.is_some_and(|d| d.contains(*s)));
-    routed
+        .find(|s| routed.is_some_and(|ip| s.contains(&ip)));
+    let in_default = || {
+        subnets
+            .iter()
+            .find(|s| default.is_some_and(|d| d.contains(*s)))
+    };
+    on_route
+        .or_else(in_default)
         .or(subnets.first())
         .copied()
         .or_else(|| default.and_then(subnet))
@@ -58,23 +86,35 @@ mod tests {
     }
 
     #[test]
-    fn the_default_routes_subnet_is_suggested_before_virtual_ones() {
-        let addresses = nets(&["172.30.64.1/20", "192.168.20.105/24", "172.21.240.1/20"]);
-        let default = "192.168.20.0/24".parse().ok();
-        let best = best(default, addresses.clone().into_iter());
-        assert_eq!(best, "192.168.20.0/24".parse().ok());
+    fn the_subnet_traffic_leaves_from_is_suggested_before_virtual_and_vpn_ones() {
+        // As on the user's PC: Hyper-V, VPN and WSL adapters alongside the Ethernet one.
+        let addresses = nets(&[
+            "172.30.64.1/20",
+            "10.188.4.98/16",
+            "192.168.20.105/24",
+            "172.21.240.1/20",
+        ]);
+        let lan = "192.168.20.0/24".parse().ok();
+        let routed = "192.168.20.105".parse().ok();
+        let vpn = "10.188.0.0/16".parse().ok();
+        assert_eq!(best(routed, vpn, addresses.clone().into_iter()), lan);
+        assert_eq!(
+            best(None, lan, addresses.clone().into_iter()),
+            lan,
+            "no route: the default subnet"
+        );
         let first = "172.30.64.0/20".parse().ok();
         assert_eq!(
-            super::best(None, addresses.into_iter()),
+            best(None, None, addresses.into_iter()),
             first,
-            "no default route"
+            "neither found"
         );
     }
 
     #[test]
     fn the_default_route_is_the_fallback_when_interfaces_have_no_ipv4_address() {
         let default = "192.168.20.0/24".parse().ok();
-        assert_eq!(best(default, std::iter::empty()), default);
+        assert_eq!(best(None, default, std::iter::empty()), default);
     }
 
     #[test]
@@ -82,7 +122,7 @@ mod tests {
         let addresses = nets(&["10.1.2.3/8"]);
         let default = "10.0.0.0/8".parse().ok();
         assert_eq!(
-            best(default, addresses.into_iter()),
+            best(None, default, addresses.into_iter()),
             "10.1.2.0/24".parse().ok()
         );
     }
@@ -95,6 +135,6 @@ mod tests {
             "10.9.0.2/32",
             "10.9.0.4/31",
         ]);
-        assert_eq!(best(None, addresses.into_iter()), None);
+        assert_eq!(best(None, None, addresses.into_iter()), None);
     }
 }

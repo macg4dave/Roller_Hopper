@@ -93,8 +93,15 @@ controls, changed only where the brief or an agreed decision says. It already de
   Duplicate?, Added and Ignored, with "Same MAC as"; a mapped card outside the scanned network
   shows Not seen. A mapped host gets its normal editor and Show on map; others get a pre-Add
   form, Add to map and Ignore. Import, above the results, adds every New host not yet added
-  or ignored in one go; possible duplicates stay for review. The log has Info and Warning lines, and the header shows
-  Scanning… while a run continues on another page.
+  or ignored in one go; possible duplicates stay for review. Import with AI (at the user's
+  request, ahead of M-016) does the same one host at a time: it loads the installed
+  Qwen3-4B-Q4_K_M, sends the host's and cards' facts with the default prompt, and fills only
+  empty fields from a medium/high-confidence answer (unknown type with its role, no OS family
+  as "Suggested by AI", empty notes from the description) before adding it; Stop leaves the
+  rest. The answer is schema-checked but unscored (BE-0011, BLK-008); Android has no OS family
+  in the app, so it is left empty. The AI settings window and the import share one worker,
+  which unloads the model after 5 idle minutes. The log has Info and Warning lines, and the
+  header shows Scanning… while a run continues on another page.
 - Icons come from an `icons` folder beside the program (the source tree as fallback), with
   subfolders as categories, re-read whenever the picker opens.
 
@@ -111,8 +118,9 @@ Gaps the UI shows against the plan:
   are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
 - The Network is a text box taking one IPv4 subnet (/16 to /32) or one address, checked as
-  typed; it starts with this computer's subnet when one is detected (on the user's PC the
-  earlier dropdown came up empty, cause not yet found); the two option checkboxes predate the agreed depth and
+  typed; it starts with the subnet of the address the routing table sends internet traffic
+  from (on the user's PC 192.168.20.0/24 rather than a Hyper-V, WSL or VPN adapter's); with a
+  VPN routing all traffic, that is the VPN's subnet (BE-0050); the two option checkboxes predate the agreed depth and
   pace presets; there is no confidence until the agreed Strong/Some/Weak lands (BE-0072).
 - The card IP hint promises an address "no other card has" (global uniqueness); manual ports
   have no transport; last seen is relative ("At last scan", "n minutes ago").
@@ -496,7 +504,8 @@ in its own worktree). A failed model check blocks the AI milestones but not inve
 ## M-002: Qualify critical dependencies
 
 Goal: find hard integration problems before committing to a scanner, save path or model
-runtime. Use minimal real integration checks in the app or `tools/`, not disposable scripts.
+runtime. Use minimal real integration checks in the app or `tools/`; any script is saved in
+`tools/` (`tools/README.md`, "Scripts").
 Live checks need user-approved targets.
 
 | Task ID | Task / completion check | Depends on |

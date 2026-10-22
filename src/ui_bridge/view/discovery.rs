@@ -7,8 +7,8 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use super::sync;
 use crate::model::{
-    Decision, Finding, Found, FoundFilter, FoundSort, LogEntry, LogEvent, Method, Parent, Phase,
-    ScanMode, TargetError,
+    AiImportPhase, Decision, Finding, Found, FoundFilter, FoundSort, LogEntry, LogEvent, Method,
+    Parent, Phase, ScanMode, TargetError,
 };
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::{AppState, convert};
@@ -25,6 +25,7 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let (swept, addresses) = discovery.progress();
     let (probed, planned) = discovery.ports();
     let count = |filter| int(discovery.count(filter));
+    let ai = discovery.ai_import();
     bridge.set_discovery(ui::DiscoveryView {
         phase: phase(discovery.phase()),
         target: target.map(|t| t.to_string()).unwrap_or_default().into(),
@@ -43,6 +44,9 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         count_unidentified: count(FoundFilter::Unidentified),
         count_duplicates: count(FoundFilter::Duplicates),
         importable: int(discovery.importable()),
+        ai_import: ai.map_or(ui::AiImportPhase::Idle, |i| ai_phase(i.phase)),
+        ai_done: ai.map_or(0, |i| int(i.done)),
+        ai_total: ai.map_or(0, |i| int(i.total)),
     });
 
     push_found(bridge, labels, state);
@@ -123,6 +127,17 @@ pub(super) fn parent_name(labels: &Labels<'_>, state: &AppState, parent: Parent)
             let name = state.network.device(id).map(|d| d.name.trim());
             labels.invoke_device_name(name.unwrap_or_default().into())
         }
+    }
+}
+
+fn ai_phase(phase: AiImportPhase) -> ui::AiImportPhase {
+    match phase {
+        AiImportPhase::Loading => ui::AiImportPhase::Loading,
+        AiImportPhase::Identifying => ui::AiImportPhase::Identifying,
+        AiImportPhase::Finished => ui::AiImportPhase::Finished,
+        AiImportPhase::Stopped => ui::AiImportPhase::Stopped,
+        AiImportPhase::NoModel => ui::AiImportPhase::NoModel,
+        AiImportPhase::Failed => ui::AiImportPhase::Failed,
     }
 }
 

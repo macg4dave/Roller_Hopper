@@ -132,7 +132,7 @@ export enum CardField { name, address, mask, gateway, mac }
 // A scan's guess at a device's operating system; unknown when it made none.
 export enum OsFamily { unknown, windows, macos, linux, ios, network }
 // What pointed the scan at an OS. `ttl` is the ping reply's time-to-live, for a ttl clue.
-export enum OsClueKind { device-model, apple-sync-port, ssh-banner, server-header, windows-ports, ttl }
+export enum OsClueKind { device-model, apple-sync-port, ssh-banner, server-header, windows-ports, ttl, ai }
 export struct OsClueView {
     kind: OsClueKind,
     ttl: int,
@@ -220,6 +220,8 @@ export struct MapBounds {
 
 // A discovery run of the network typed on the Scan button's page.
 export enum DiscoveryPhase { idle, running, finished }
+// Import with AI: idle until begun; loading the model, then identifying one host at a time.
+export enum AiImportPhase { idle, loading, identifying, finished, stopped, no-model, failed }
 export enum ScanMode { quick, full, everything }
 // Why the network typed cannot be scanned; none when it can.
 export enum TargetError { none, empty, invalid, too-wide }
@@ -256,6 +258,11 @@ export struct DiscoveryView {
     count-duplicates: int,
     // New hosts still waiting for a decision, which import-found adds.
     importable: int,
+    // Import with AI: how far it has got, or how it ended; the hosts the model has answered
+    // for, of all it began with.
+    ai-import: AiImportPhase,
+    ai-done: int,
+    ai-total: int,
 }
 
 /// A host the run found, or in the results one of its network cards, which follow it as in the
@@ -563,6 +570,11 @@ export global Bridge {
     // Adds every new host still waiting for a decision to the map; ignored hosts and possible
     // duplicates wait for the user.
     callback import-found();
+    // Import with AI: the same hosts, each with the empty fields the AI is confident about
+    // filled in (type, OS family, notes) before it is added; and stopping it, which leaves the
+    // rest waiting.
+    callback import-found-with-ai();
+    callback stop-ai-import();
     // A card of a found host not on the map, by the host's index and the card's card-index: as
     // a drag payload, dropped on a found host's group (by its index) to become a child there,
     // or given the parent at an index in found-parent-choices.

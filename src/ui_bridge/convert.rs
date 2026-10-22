@@ -93,6 +93,7 @@ pub(super) fn os_clues(device: &Device) -> Vec<ui::OsClueView> {
             OsClue::ServerHeader => view(ui::OsClueKind::ServerHeader, 0),
             OsClue::WindowsPorts => view(ui::OsClueKind::WindowsPorts, 0),
             OsClue::Ttl(ttl) => view(ui::OsClueKind::Ttl, i32::from(ttl)),
+            OsClue::Ai => view(ui::OsClueKind::Ai, 0),
         })
         .collect()
 }
