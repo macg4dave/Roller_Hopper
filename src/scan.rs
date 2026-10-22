@@ -24,15 +24,15 @@ use std::sync::mpsc::{self, Receiver, Sender, TryIter};
 
 use ipnet::Ipv4Net;
 use netscli_core::{
-    DiscoverEngine, DiscoverPhase, DiscoverProgress, Host, MdnsService, PingScanner, PortScanner,
-    UdpScanner,
+    DiscoverEngine, DiscoverPhase, DiscoverProgress, Host, MdnsService, PingScanner,
+    PortScanProgress, PortScanner, UdpScanner,
 };
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::{JoinHandle, JoinSet};
 
-use crate::model::{Answer, ScanOptions};
+use crate::model::{Answer, ScanOptions, ScanProgress};
 use answer::Probed;
-use ports::PortNames;
+use ports::{PortNames, PortPlan};
 
 /// Probes in flight at once, in the sweep and across the port probes of all hosts.
 const CONCURRENCY: usize = 128;
@@ -40,7 +40,7 @@ const PING_TIMEOUT_MS: u64 = 1000;
 const PORT_TIMEOUT_MS: u64 = 1000;
 const DNS_TIMEOUT_MS: u64 = 1500;
 
-/// What a running scan reports, besides how many addresses it has checked.
+/// What a running scan reports, besides how far it has got.
 #[derive(Debug)]
 pub(crate) enum Event {
     Host(Box<Answer>),
@@ -55,8 +55,16 @@ pub(crate) struct Scan {
     /// Taken only when the scan is dropped.
     runtime: Option<Runtime>,
     task: JoinHandle<()>,
-    checked: Arc<AtomicUsize>,
+    counts: Arc<Counts>,
     events: Receiver<Event>,
+}
+
+/// How far a scan has got, counted on its threads and read on the UI's.
+#[derive(Default)]
+struct Counts {
+    swept: AtomicUsize,
+    probed: AtomicUsize,
+    probes: AtomicUsize,
 }
 
 impl Scan {
@@ -67,20 +75,24 @@ impl Scan {
             .thread_name("scan")
             .enable_all()
             .build()?;
-        let checked = Arc::new(AtomicUsize::new(0));
+        let counts = Arc::new(Counts::default());
         let (sender, events) = mpsc::channel();
-        let task = runtime.spawn(run(subnet, options, Arc::clone(&checked), sender));
+        let task = runtime.spawn(run(subnet, options, Arc::clone(&counts), sender));
         Ok(Self {
             runtime: Some(runtime),
             task,
-            checked,
+            counts,
             events,
         })
     }
 
-    /// Addresses the sweep has checked so far.
-    pub(crate) fn checked(&self) -> usize {
-        self.checked.load(Ordering::Relaxed)
+    pub(crate) fn progress(&self) -> ScanProgress {
+        let counts = &self.counts;
+        ScanProgress {
+            swept: counts.swept.load(Ordering::Relaxed),
+            probed: counts.probed.load(Ordering::Relaxed),
+            probes: counts.probes.load(Ordering::Relaxed),
+        }
     }
 
     /// What the scan has reported since last asked, without waiting.
@@ -100,15 +112,11 @@ impl Drop for Scan {
     }
 }
 
-async fn run(
-    subnet: Ipv4Net,
-    options: ScanOptions,
-    checked: Arc<AtomicUsize>,
-    events: Sender<Event>,
-) {
+async fn run(subnet: Ipv4Net, options: ScanOptions, counts: Arc<Counts>, events: Sender<Event>) {
+    let sweep_counts = Arc::clone(&counts);
     let progress: Arc<dyn Fn(DiscoverProgress) + Send + Sync> = Arc::new(move |p| {
         if matches!(p.phase, DiscoverPhase::Ping) {
-            checked.store(p.completed, Ordering::Relaxed);
+            sweep_counts.swept.store(p.completed, Ordering::Relaxed);
         }
     });
     let browse = options.mdns_services.then(|| tokio::spawn(mdns::browse()));
@@ -129,7 +137,7 @@ async fn run(
                 subnet,
                 options,
             };
-            probe_all(hosts, &run, &events).await
+            probe_all(hosts, &run, counts, &events).await
         }
         Err(error) => Event::Failed(error.to_string()),
     };
@@ -137,11 +145,15 @@ async fn run(
     events.send(end).ok();
 }
 
-/// The probes every host shares, so their limits on probes in flight hold across hosts.
+/// The probes every host shares, so their limits on probes in flight hold across hosts, and
+/// the ports they probe on each.
 struct Probes {
     ports: PortScanner,
     udp: UdpScanner,
     ping: PingScanner,
+    plan: PortPlan,
+    /// Counts each port probe as it ends, whatever it found.
+    counted: Arc<dyn Fn(PortScanProgress) + Send + Sync>,
 }
 
 /// What every host's answer is made with, once the sweep is done.
@@ -155,11 +167,24 @@ struct Run<'a> {
 
 /// Probes every host the sweep found, reporting each as soon as it is done, and says how the
 /// scan ended. A probe that fails ends it: the hosts still being probed would go unreported.
-async fn probe_all(hosts: Vec<Host>, run: &Run<'_>, events: &Sender<Event>) -> Event {
+async fn probe_all(
+    hosts: Vec<Host>,
+    run: &Run<'_>,
+    counts: Arc<Counts>,
+    events: &Sender<Event>,
+) -> Event {
+    let plan = PortPlan::for_mode(run.options.mode);
+    counts
+        .probes
+        .store(hosts.len() * plan.probes(), Ordering::Relaxed);
     let shared = Arc::new(Probes {
         ports: PortScanner::new(CONCURRENCY),
         udp: UdpScanner::new(CONCURRENCY),
         ping: PingScanner::new(CONCURRENCY),
+        plan,
+        counted: Arc::new(move |_| {
+            counts.probed.fetch_add(1, Ordering::Relaxed);
+        }),
     });
     let mut pending = JoinSet::new();
     for host in hosts {
@@ -190,10 +215,10 @@ async fn probe(
     probes: Arc<Probes>,
     options: ScanOptions,
 ) -> Probed {
-    let plan = ports::PortPlan::for_mode(options.mode);
-    let mut open_ports = scan_tcp(&probes.ports, host.ip, &plan.tcp).await;
-    open_ports.extend(scan_udp(&probes.udp, host.ip, &plan.udp).await);
-    let reverse_name = if options.service_detection && host.hostname.is_none() {
+    let mut open_ports = scan_tcp(&probes, host.ip).await;
+    open_ports.extend(scan_udp(&probes, host.ip).await);
+    let unnamed = host.hostname.is_none() && mdns::hostname(&mdns).is_none();
+    let reverse_name = if options.service_detection && unnamed {
         // A failed or timed-out lookup means the network has no name for it.
         let name = netscli_core::dns::reverse_lookup_timeout(host.ip, DNS_TIMEOUT_MS).await;
         name.ok().flatten()
@@ -215,11 +240,13 @@ async fn probe(
     }
 }
 
-async fn scan_tcp(scanner: &PortScanner, host: std::net::IpAddr, ports: &[u16]) -> Vec<netscli_core::PortResult> {
+async fn scan_tcp(probes: &Probes, host: std::net::IpAddr) -> Vec<netscli_core::PortResult> {
     let mut open = Vec::new();
-    for batch in ports.chunks(ports::BATCH_SIZE) {
-        let found = scanner
-            .scan_host(host, batch.to_vec(), PORT_TIMEOUT_MS)
+    for batch in probes.plan.tcp.chunks(ports::BATCH_SIZE) {
+        let counted = Some(Arc::clone(&probes.counted));
+        let found = probes
+            .ports
+            .scan_host_with_progress(host, batch.to_vec(), PORT_TIMEOUT_MS, counted)
             .await
             .unwrap_or_default();
         open.extend(found.into_iter().filter(|result| result.open));
@@ -227,11 +254,13 @@ async fn scan_tcp(scanner: &PortScanner, host: std::net::IpAddr, ports: &[u16]) 
     open
 }
 
-async fn scan_udp(scanner: &UdpScanner, host: std::net::IpAddr, ports: &[u16]) -> Vec<netscli_core::PortResult> {
+async fn scan_udp(probes: &Probes, host: std::net::IpAddr) -> Vec<netscli_core::PortResult> {
     let mut open = Vec::new();
-    for batch in ports.chunks(ports::BATCH_SIZE) {
-        let found = scanner
-            .scan_host_with_progress(host, batch.to_vec(), PORT_TIMEOUT_MS, None)
+    for batch in probes.plan.udp.chunks(ports::BATCH_SIZE) {
+        let counted = Some(Arc::clone(&probes.counted));
+        let found = probes
+            .udp
+            .scan_host_with_progress(host, batch.to_vec(), PORT_TIMEOUT_MS, counted)
             .await
             .unwrap_or_default();
         open.extend(found.into_iter().filter(|result| result.open));

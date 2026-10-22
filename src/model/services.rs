@@ -21,7 +21,12 @@ impl fmt::Display for Service {
         if self.description.is_empty() {
             f.write_str(&port_label(self.port, self.protocol))
         } else {
-            write!(f, "{} ({})", port_label(self.port, self.protocol), self.description)
+            write!(
+                f,
+                "{} ({})",
+                port_label(self.port, self.protocol),
+                self.description
+            )
         }
     }
 }
@@ -56,7 +61,14 @@ impl Services {
             return false;
         };
         let description = description.trim().to_owned();
-        self.0.insert(at, Service { port, protocol, description });
+        self.0.insert(
+            at,
+            Service {
+                port,
+                protocol,
+                description,
+            },
+        );
         true
     }
 

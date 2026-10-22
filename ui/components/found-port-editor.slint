@@ -1,73 +1,67 @@
 import { Button, LineEdit } from "std-widgets.slint";
 import { Bridge } from "../bridge.slint";
 import { Theme } from "../theme.slint";
+import { Chip } from "chip.slint";
 import { NameEdit } from "name-edit.slint";
 
-// Ports found on a discovery card, laid left to right. Detected service names remain guesses:
-// the user may correct them or add and remove ports before adding the host to the map.
+// Ports found on a discovery card, one row each: the port, its description, and a remove
+// button, in columns that line up down the list and with the row for adding one. Detected
+// service names remain guesses: the user may correct them or add and remove ports before
+// adding the host to the map.
 export component FoundPortEditor inherits VerticalLayout {
     in property <int> host-index;
     in property <int> card-index;
     property <bool> adding;
 
-    spacing: Theme.space-s;
+    spacing: Theme.space-xs;
     horizontal-stretch: 1;
 
-    FlexboxLayout {
-        spacing: Theme.space-xs;
-        flex-wrap: wrap;
-
-        for port[i] in Bridge.found-ports: Rectangle {
-            width: Theme.port-tile-width;
-            height: 64px;
-            border-width: 1px;
-            border-color: Theme.border;
-            border-radius: Theme.radius;
-
+    for port[i] in Bridge.found-ports: HorizontalLayout {
+        spacing: Theme.space-s;
+        HorizontalLayout {
+            width: Theme.port-number-width;
+            alignment: start;
             VerticalLayout {
-                padding: Theme.space-xs;
-                spacing: Theme.space-xs;
-                HorizontalLayout {
-                    Text {
-                        text: port.udp ? "\{port.port}/UDP" : "\{port.port}";
-                        color: Theme.text;
-                        font-size: Theme.font-body;
-                        font-weight: 600;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                    }
-                    Button {
-                        icon: @image-url("../icons/delete.svg");
-                        colorize-icon: true;
-                        accessible-label: @tr("edit.port-remove");
-                        clicked => { Bridge.remove-found-port(root.host-index, root.card-index, i); }
-                    }
-                }
-                NameEdit {
-                    name: port.description;
-                    placeholder-text: @tr("edit.port-description");
-                    accessible-label: @tr("edit.port-description");
-                    commit(text) => {
-                        Bridge.set-found-port-description(root.host-index, root.card-index, i, text);
-                    }
+                alignment: center;
+                Chip {
+                    text: port.udp ? "\{port.port}/UDP" : "\{port.port}";
+                    colour: port.udp ? Theme.text-muted : Theme.accent;
+                    tint: port.udp ? Theme.hover : Theme.accent-soft;
                 }
             }
+        }
+        NameEdit {
+            horizontal-stretch: 1;
+            name: port.description;
+            placeholder-text: @tr("edit.port-description");
+            accessible-label: @tr("edit.port-description");
+            commit(text) => {
+                Bridge.set-found-port-description(root.host-index, root.card-index, i, text);
+            }
+        }
+        Button {
+            icon: @image-url("../icons/delete.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.port-remove");
+            clicked => { Bridge.remove-found-port(root.host-index, root.card-index, i); }
         }
     }
 
     if !adding: HorizontalLayout {
         alignment: start;
         Button {
+            text: @tr("edit.port-add");
             icon: @image-url("../icons/plus.svg");
             colorize-icon: true;
-            accessible-label: @tr("edit.port-add");
             clicked => { root.adding = true; }
         }
     }
 
     if adding: HorizontalLayout {
-        spacing: Theme.space-xs;
+        spacing: Theme.space-s;
 
+        // The row stays open, emptied and ready for the next port, so several can be added in
+        // a row; a refused port number stays in the field to be corrected.
         function add() {
             if Bridge.add-found-port(root.host-index, root.card-index,
                     number-field.text, description-field.text) {
@@ -78,7 +72,7 @@ export component FoundPortEditor inherits VerticalLayout {
         }
 
         number-field := LineEdit {
-            width: 76px;
+            width: Theme.port-number-width;
             input-type: number;
             placeholder-text: @tr("edit.port-number");
             init => { self.focus(); }

@@ -106,8 +106,15 @@ export component FoundCardDetails inherits VerticalLayout {
     if card.gateway != "": DetailField { label: @tr("details.gateway"); value: card.gateway; }
     if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
     if card.vendor != "": DetailField { label: @tr("details.card-vendor"); value: card.vendor; }
-    if editable: DetailField {
-        label: @tr("details.open-ports");
+    // Under its label rather than beside it, so the port rows get the panel's whole width.
+    if editable: VerticalLayout {
+        padding-top: Theme.space-s;
+        spacing: Theme.space-s;
+        Text {
+            text: @tr("details.open-ports");
+            font-size: Theme.font-body;
+            color: Theme.text-muted;
+        }
         FoundPortEditor { host-index: host.index; card-index: card.card-index; }
     }
     if !editable && card.services != "": DetailField {

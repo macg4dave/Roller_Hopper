@@ -117,7 +117,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Status bar: outcome of the last (simulated) scan.
+        // Status bar: how far a running scan has got, or the outcome of the last one.
         Rectangle {
             height: Theme.status-height;
             background: Theme.surface;
@@ -138,7 +138,7 @@ export component AppWindow inherits Window {
                     width: 14px;
                 }
                 Text {
-                    text: Labels.scan-status(Bridge.scanning, Bridge.scans, Bridge.count-all, Bridge.count-offline);
+                    text: Labels.scan-status(Bridge.discovery, Bridge.scans, Bridge.count-all, Bridge.count-offline);
                     color: Theme.text;
                     font-size: Theme.font-small;
                     vertical-alignment: center;

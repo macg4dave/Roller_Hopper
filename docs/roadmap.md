@@ -30,8 +30,11 @@ until their qualification task is done.
 - Discovery scans for real, ahead of the milestone order at the user's request (`src/scan.rs`):
   netscli-core's `DiscoverEngine` sweep (ping, neighbour table, mDNS names; its own name lookup
   off, since on Windows it runs `ping -a`) with a 3 s `MdnsEngine` browse of the common
-  service types alongside, then per host `PortScanner` TCP connects across ports 1–65535
-  (IANA names from `src/data_lists` for ports the scanner does not name), hickory
+  service types alongside (whose host names fill in those the sweep's 1.5 s mDNS window
+  missed), then per host `PortScanner` TCP connects and `UdpScanner` probes of
+  the scan depth's ports (Quick: a common TCP list; Full: every IANA-registered TCP and UDP
+  port, ~3,500 + ~3,200; Everything: 1–65535 on both; IANA names from `src/data_lists` for
+  ports the scanner does not name), hickory
   reverse DNS and a `PingScanner` ping for the TTL. Service detection, mDNS services (TXT
   model/maker), device type, OS family (simple rules in `scan/identify.rs`, a first rule-based
   baseline for BE-0085) and the card's OUI vendor are all enabled. It runs on an owned Tokio runtime; hosts arrive as model
@@ -82,9 +85,10 @@ controls, changed only where the brief or an agreed decision says. It already de
 - Move network card: moving a card to another device merges them, confirmed when it is the
   source device's only card; its guests follow. On the discovery page a found card can move
   onto a mapped device, which is how a possible duplicate is resolved by hand.
-- Discovery: a Network choice; every available scan method and TCP port enabled; Start or Scan again
-  and Stop (Pause was removed until BE-0057 can pause for real); "n of m addresses checked"
-  with elapsed time and a progress bar. Results show name, found-by method chips and the flags New,
+- Discovery: a Network choice and a scan depth; every available scan method enabled; Start or
+  Scan again and Stop (Pause was removed until BE-0057 can pause for real); "n of m addresses
+  checked", then "n of m ports probed", with elapsed time and a progress bar, and the same
+  count in the status bar. Results show name, found-by method chips and the flags New,
   Duplicate?, Added and Ignored, with "Same MAC as"; a mapped card outside the scanned network
   shows Not seen. A mapped host gets its normal editor and Show on map; others get a pre-Add
   form, Add to map and Ignore. The log has Info and Warning lines, and the header shows

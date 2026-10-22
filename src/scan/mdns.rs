@@ -45,6 +45,14 @@ pub(super) fn service_names(announced: &[MdnsService]) -> Vec<String> {
     names
 }
 
+/// The host name the announcements give (`brother.local.`), if any; untrusted text, to be
+/// cleaned. The sweep listens for names only briefly and misses hosts that were silent then;
+/// this browse listens for longer.
+pub(super) fn hostname(announced: &[MdnsService]) -> Option<&str> {
+    let mut names = announced.iter().map(|s| s.hostname.trim());
+    names.find(|name| !name.is_empty())
+}
+
 /// The model the announcements name, if any; untrusted text, to be cleaned.
 pub(super) fn model(announced: &[MdnsService]) -> Option<&str> {
     first_value(announced, &MODEL_KEYS)

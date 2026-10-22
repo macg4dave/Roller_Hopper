@@ -46,6 +46,11 @@ impl PortPlan {
             }
         }
     }
+
+    /// How many probes each host gets, over both transports.
+    pub(super) fn probes(&self) -> usize {
+        self.tcp.len() + self.udp.len()
+    }
 }
 
 /// The service name IANA registers for each TCP port, such as `rtsp` for 554.
@@ -76,18 +81,18 @@ impl PortNames {
 }
 
 fn registry_names(source: &str) -> HashMap<u16, String> {
-        let registry: serde_json::Value = serde_json::from_str(source).unwrap_or_default();
-        let entries = registry.get("ports").and_then(serde_json::Value::as_array);
-        let mut names = HashMap::new();
-        for entry in entries.into_iter().flatten() {
-            let port = entry.get("port").and_then(serde_json::Value::as_u64);
-            let port = port.and_then(|p| u16::try_from(p).ok());
-            let name = entry.get("service").and_then(serde_json::Value::as_str);
-            if let (Some(port), Some(name)) = (port, name.filter(|n| !n.is_empty())) {
-                names.entry(port).or_insert_with(|| name.to_owned());
-            }
+    let registry: serde_json::Value = serde_json::from_str(source).unwrap_or_default();
+    let entries = registry.get("ports").and_then(serde_json::Value::as_array);
+    let mut names = HashMap::new();
+    for entry in entries.into_iter().flatten() {
+        let port = entry.get("port").and_then(serde_json::Value::as_u64);
+        let port = port.and_then(|p| u16::try_from(p).ok());
+        let name = entry.get("service").and_then(serde_json::Value::as_str);
+        if let (Some(port), Some(name)) = (port, name.filter(|n| !n.is_empty())) {
+            names.entry(port).or_insert_with(|| name.to_owned());
         }
-        names
+    }
+    names
 }
 
 fn registry_ports(source: &str) -> Vec<u16> {

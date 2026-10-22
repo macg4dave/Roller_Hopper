@@ -10,7 +10,7 @@ use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
 use super::{AppState, Selection, convert, handler, update};
-use crate::model::{Found, FoundFilter, FoundSort, ScanMode, ScanOptions};
+use crate::model::{Found, FoundFilter, FoundSort, ScanMode, ScanOptions, ScanProgress};
 use crate::scan::{self, Event, Scan};
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -39,8 +39,12 @@ impl AppState {
 
     /// Takes in a running scan's progress and what it reported, counting the scan once it
     /// finishes. True while it is still running.
-    fn take_scan(&mut self, checked: usize, events: impl IntoIterator<Item = Event>) -> bool {
-        self.discovery.checked(checked);
+    fn take_scan(
+        &mut self,
+        progress: ScanProgress,
+        events: impl IntoIterator<Item = Event>,
+    ) -> bool {
+        self.discovery.reach(progress);
         for event in events {
             match event {
                 Event::Host(answer) => self.discovery.answer(*answer, &self.network),
@@ -293,7 +297,7 @@ impl Running {
             let mut going = false;
             if let Some(scan) = running.scan.borrow().as_ref() {
                 update(&ui, &state, |st| {
-                    going = st.take_scan(scan.checked(), scan.events());
+                    going = st.take_scan(scan.progress(), scan.events());
                 });
             }
             if !going {
@@ -327,13 +331,21 @@ mod tests {
             .collect()
     }
 
+    /// A scan that has swept `swept` addresses and probed no ports yet.
+    fn swept(swept: usize) -> ScanProgress {
+        ScanProgress {
+            swept,
+            ..ScanProgress::default()
+        }
+    }
+
     /// A run of the home network that every sample answer has reached.
     fn finished(state: &mut AppState) {
         state.discovery.target_text = home().to_string();
         state.begin_discovery();
         let mut events = hosts(state);
         events.push(Event::Finished);
-        state.take_scan(254, events);
+        state.take_scan(swept(254), events);
     }
 
     #[test]
@@ -347,13 +359,16 @@ mod tests {
         assert_eq!(state.begin_discovery(), run);
         assert_eq!(state.begin_discovery(), None, "a busy run is not restarted");
         let hosts = hosts(&state);
-        assert!(state.take_scan(100, hosts));
+        assert!(state.take_scan(swept(100), hosts));
         assert_eq!(state.discovery.progress(), (100, 254));
         assert_ne!(state.discovery.found(), []);
         assert_eq!(state.scans, 0);
-        assert!(!state.take_scan(254, [Event::Finished]));
+        assert!(!state.take_scan(swept(254), [Event::Finished]));
         assert_eq!((state.discovery.phase(), state.scans), (Phase::Finished, 1));
-        assert!(!state.take_scan(254, [Event::Finished]), "counted once");
+        assert!(
+            !state.take_scan(swept(254), [Event::Finished]),
+            "counted once"
+        );
         assert_eq!(state.scans, 1);
     }
 
@@ -391,7 +406,7 @@ mod tests {
         state.stop_discovery();
         assert_eq!(state.scans, 0);
         state.begin_discovery();
-        assert!(!state.take_scan(0, [Event::Failed("no route".into())]));
+        assert!(!state.take_scan(swept(0), [Event::Failed("no route".into())]));
         assert_eq!((state.discovery.phase(), state.scans), (Phase::Finished, 0));
         state.begin_discovery();
         state.stop_discovery();

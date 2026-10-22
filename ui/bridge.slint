@@ -241,9 +241,12 @@ export struct DiscoveryView {
     target: string,
     target-error: TargetError,
     mode: ScanMode,
-    // Addresses checked so far, of all of them.
+    // Addresses checked so far, of all of them; then port probes done, of all planned for the
+    // hosts found, which are none until every address is checked.
     swept: int,
     addresses: int,
+    probed: int,
+    probes: int,
     seconds: int,
     filter: FoundFilter,
     sort: FoundSort,

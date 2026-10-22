@@ -60,6 +60,15 @@ impl Default for ScanOptions {
     }
 }
 
+/// How far a running scan has got: first the sweep of the subnet's addresses, then the port
+/// probes of the hosts it found, of which there are none planned until the sweep ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct ScanProgress {
+    pub(crate) swept: usize,
+    pub(crate) probed: usize,
+    pub(crate) probes: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Phase {
     #[default]
@@ -118,8 +127,8 @@ pub(crate) struct Discovery {
     /// The hosts found, in the order they were reported; [`Self::shown`] puts them in address
     /// order. Their places here never change while they are listed.
     hosts: Vec<Found>,
-    /// Addresses checked so far, of `addresses`.
-    swept: usize,
+    /// How far the scan has got; its `swept` is of `addresses`.
+    reached: ScanProgress,
     addresses: usize,
     /// When the run started, and how long it took once it ended.
     started: Option<Instant>,
@@ -153,7 +162,12 @@ impl Discovery {
 
     /// Addresses checked so far, and in all.
     pub(crate) fn progress(&self) -> (usize, usize) {
-        (self.swept, self.addresses)
+        (self.reached.swept, self.addresses)
+    }
+
+    /// Port probes done so far, and in all; none are planned until the sweep ends.
+    pub(crate) fn ports(&self) -> (usize, usize) {
+        (self.reached.probed, self.reached.probes)
     }
 
     /// How long the run has been going, or took.
@@ -262,10 +276,13 @@ impl Discovery {
         true
     }
 
-    /// Notes how many addresses the running scan has checked.
-    pub(crate) fn checked(&mut self, swept: usize) {
+    /// Notes how far the running scan has got.
+    pub(crate) fn reach(&mut self, progress: ScanProgress) {
         if self.busy() {
-            self.swept = swept.min(self.addresses);
+            self.reached = ScanProgress {
+                swept: progress.swept.min(self.addresses),
+                ..progress
+            };
         }
     }
 
@@ -282,9 +299,11 @@ impl Discovery {
         }
     }
 
-    /// Ends the scan once every address is checked. True if it was running.
+    /// Ends the scan once every address is checked and every host probed. True if it was
+    /// running.
     pub(crate) fn finish(&mut self) -> bool {
-        self.swept = self.addresses;
+        self.reached.swept = self.addresses;
+        self.reached.probed = self.reached.probes;
         self.end(|found| LogEvent::Finished { found })
     }
 
@@ -426,6 +445,36 @@ mod tests {
     }
 
     #[test]
+    fn a_run_counts_its_sweep_then_its_port_probes_up_to_the_end() {
+        let mut discovery = Discovery::default();
+        discovery.start(home());
+        discovery.reach(ScanProgress {
+            swept: 100,
+            ..ScanProgress::default()
+        });
+        assert_eq!(discovery.ports(), (0, 0), "no probes before the sweep ends");
+        discovery.reach(ScanProgress {
+            swept: 300,
+            probed: 12,
+            probes: 30,
+        });
+        assert_eq!(discovery.progress(), (254, 254), "never past the end");
+        assert_eq!(discovery.ports(), (12, 30));
+        assert!(discovery.finish());
+        assert_eq!(
+            discovery.ports(),
+            (30, 30),
+            "every probe done once finished"
+        );
+        discovery.reach(ScanProgress::default());
+        assert_eq!(
+            discovery.ports(),
+            (30, 30),
+            "a finished run keeps its count"
+        );
+    }
+
+    #[test]
     fn a_run_takes_the_hosts_on_its_subnet_and_shows_them_in_address_order() {
         let network = mock_data::network();
         let mut discovery = Discovery::default();
@@ -434,7 +483,10 @@ mod tests {
             (discovery.found(), discovery.progress()),
             (&[][..], (0, 254))
         );
-        discovery.checked(100);
+        discovery.reach(ScanProgress {
+            swept: 100,
+            ..ScanProgress::default()
+        });
         assert_eq!(discovery.progress(), (100, 254));
         let mut answers = mock_data::answers(&network);
         answers.reverse();

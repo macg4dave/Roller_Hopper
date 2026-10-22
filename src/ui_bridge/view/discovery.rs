@@ -23,6 +23,7 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         next.ok()
     };
     let (swept, addresses) = discovery.progress();
+    let (probed, planned) = discovery.ports();
     let count = |filter| int(discovery.count(filter));
     bridge.set_discovery(ui::DiscoveryView {
         phase: phase(discovery.phase()),
@@ -31,6 +32,8 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         mode: scan_mode(discovery.options.mode),
         swept: int(swept),
         addresses: int(addresses),
+        probed: int(probed),
+        probes: int(planned),
         seconds: seconds(discovery.elapsed()),
         filter: filter(discovery.filter),
         sort: sort(discovery.sort),

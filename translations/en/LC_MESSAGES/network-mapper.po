@@ -984,9 +984,13 @@ msgstr "{} (known link)"
 msgid "uplink.inferred"
 msgstr "{} (inferred link)"
 
-# Status bar. scan.loaded / scan.complete: {0} is scan.devices, {1} the number offline.
-msgid "scan.running"
-msgstr "Scanning…"
+# Status bar. While a scan runs: addresses checked {0} of {1}, then port probes done {0} of
+# {1}. scan.loaded / scan.complete: {0} is scan.devices, {1} the number offline.
+msgid "scan.addresses"
+msgstr "Scanning addresses {0}/{1}"
+
+msgid "scan.ports"
+msgstr "Scanning ports {0}/{1}"
 
 msgid "scan.devices"
 msgid_plural "scan.devices.plural"
@@ -1044,9 +1048,12 @@ msgstr "Scanning {}…"
 msgid "discovery.heading.finished"
 msgstr "Finished scanning {}"
 
-# {0} addresses checked of {1}; {2} is the time taken, as time.clock.
-msgid "discovery.progress"
+# {0} addresses checked, or port probes done, of {1}; {2} is the time taken, as time.clock.
+msgid "discovery.progress.addresses"
 msgstr "{0} of {1} addresses checked · {2}"
+
+msgid "discovery.progress.ports"
+msgstr "{0} of {1} ports probed · {2}"
 
 # Minutes and seconds, each two digits.
 msgid "time.clock"

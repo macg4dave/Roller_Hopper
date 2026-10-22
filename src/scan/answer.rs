@@ -24,7 +24,7 @@ const MAX_DESCRIPTION: usize = 60;
 /// One host as the sweep found it, and what probing it found out.
 pub(super) struct Probed {
     pub(super) host: Host,
-    /// Its name in reverse DNS, looked up when the sweep had none from mDNS.
+    /// Its name in reverse DNS, looked up when mDNS gave none.
     pub(super) reverse_name: Option<String>,
     /// Its TCP ports probed, open or not.
     pub(super) ports: Vec<PortResult>,
@@ -51,18 +51,20 @@ pub(super) fn answer(
     }
     let host = &probed.host;
     let detect = options.service_detection;
-    let mdns_name = host
-        .hostname
-        .as_deref()
-        .filter(|_| detect && host.hostname_source == Some(NameSource::Mdns))
-        .and_then(|name| clean(name, MAX_NAME));
-    let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
-    let reverse_name = reverse_name.and_then(|name| clean(name, MAX_NAME));
     let announced = if options.mdns_services {
         &probed.mdns[..]
     } else {
         &[]
     };
+    let mdns_name = host
+        .hostname
+        .as_deref()
+        .filter(|_| host.hostname_source == Some(NameSource::Mdns))
+        .or_else(|| mdns::hostname(announced))
+        .filter(|_| detect)
+        .and_then(|name| clean(name, MAX_NAME));
+    let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
+    let reverse_name = reverse_name.and_then(|name| clean(name, MAX_NAME));
     let mdns_services = mdns::service_names(announced);
     let mac = host
         .mac
@@ -253,6 +255,7 @@ mod tests {
             device_type: false,
             os_family: false,
             card_vendor: false,
+            ..ScanOptions::default()
         }
     }
 
@@ -327,6 +330,15 @@ mod tests {
             "22 (ssh), 80 (http)",
             "the usual service only"
         );
+    }
+
+    #[test]
+    fn a_host_the_sweep_did_not_name_takes_the_name_it_announced_over_reverse_dns() {
+        let mut brother = probed(host(FoundBy::Probe, None), Some("b.home"));
+        brother.mdns = vec![printer_announcement()];
+        let answer = answer(&brother, home(), all(), &none()).unwrap();
+        assert_eq!(answer.device.name, "brother");
+        assert_eq!(answer.device.hostname.as_deref(), Some("brother.local"));
     }
 
     #[test]

@@ -76,14 +76,15 @@ export component DiscoverySetup inherits VerticalLayout {
                 horizontal-stretch: 1;
             }
             if phase != DiscoveryPhase.idle: Text {
-                text: @tr("discovery.progress", Bridge.discovery.swept, Bridge.discovery.addresses, Labels.clock(Bridge.discovery.seconds));
+                text: Labels.discovery-progress(Bridge.discovery);
                 font-size: Theme.font-body;
                 color: Theme.text-muted;
                 vertical-alignment: center;
             }
         }
         ProgressIndicator {
-            progress: Bridge.discovery.addresses > 0 ? Bridge.discovery.swept / Bridge.discovery.addresses : 0;
+            progress: Bridge.discovery.probes > 0 ? Bridge.discovery.probed / Bridge.discovery.probes
+                : Bridge.discovery.addresses > 0 ? Bridge.discovery.swept / Bridge.discovery.addresses : 0;
         }
     }
 }
