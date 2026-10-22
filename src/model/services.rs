@@ -2,19 +2,26 @@
 
 use std::fmt;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ServiceProtocol {
+    Tcp,
+    Udp,
+}
+
 /// An open port and what runs on it, such as a protocol name; the description may be empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Service {
     pub(crate) port: u16,
+    pub(crate) protocol: ServiceProtocol,
     pub(crate) description: String,
 }
 
 impl fmt::Display for Service {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.description.is_empty() {
-            write!(f, "{}", self.port)
+            f.write_str(&port_label(self.port, self.protocol))
         } else {
-            write!(f, "{} ({})", self.port, self.description)
+            write!(f, "{} ({})", port_label(self.port, self.protocol), self.description)
         }
     }
 }
@@ -28,28 +35,42 @@ impl Services {
         self.0.iter()
     }
 
-    fn position(&self, port: u16) -> Result<usize, usize> {
-        self.0.binary_search_by_key(&port, |s| s.port)
+    fn position(&self, port: u16, protocol: ServiceProtocol) -> Result<usize, usize> {
+        self.0.binary_search_by_key(&(port, protocol), |service| {
+            (service.port, service.protocol)
+        })
     }
 
     /// Lists a port in its place by number. Refused, returning false, if it is already listed.
     pub(crate) fn add(&mut self, port: u16, description: &str) -> bool {
-        let Err(at) = self.position(port) else {
+        self.add_protocol(port, ServiceProtocol::Tcp, description)
+    }
+
+    pub(crate) fn add_protocol(
+        &mut self,
+        port: u16,
+        protocol: ServiceProtocol,
+        description: &str,
+    ) -> bool {
+        let Err(at) = self.position(port, protocol) else {
             return false;
         };
         let description = description.trim().to_owned();
-        self.0.insert(at, Service { port, description });
+        self.0.insert(at, Service { port, protocol, description });
         true
     }
 
     /// Changes the number of the port at `index`, unless another entry already has it.
     pub(crate) fn set_port(&mut self, index: usize, port: u16) {
-        if self.position(port).is_ok() {
+        let Some(protocol) = self.0.get(index).map(|service| service.protocol) else {
+            return;
+        };
+        if self.position(port, protocol).is_ok() {
             return;
         }
         if let Some(service) = self.0.get_mut(index) {
             service.port = port;
-            self.0.sort_by_key(|s| s.port);
+            self.0.sort_by_key(|s| (s.port, s.protocol));
         }
     }
 
@@ -63,6 +84,13 @@ impl Services {
         if index < self.0.len() {
             self.0.remove(index);
         }
+    }
+}
+
+fn port_label(port: u16, protocol: ServiceProtocol) -> String {
+    match protocol {
+        ServiceProtocol::Tcp => port.to_string(),
+        ServiceProtocol::Udp => format!("{port}/udp"),
     }
 }
 

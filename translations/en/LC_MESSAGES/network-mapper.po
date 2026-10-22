@@ -1025,36 +1025,6 @@ msgstr "Type an IPv4 subnet, such as 192.168.1.0/24, or one address"
 msgid "discovery.network.too-wide"
 msgstr "Too large to scan: use a /16 or smaller (at most 65,536 addresses)"
 
-msgid "discovery.option.port-scan"
-msgstr "Port scan"
-
-msgid "discovery.option.service-detection"
-msgstr "Service detection"
-
-msgid "discovery.option.mdns-services"
-msgstr "mDNS services"
-
-msgid "discovery.option.device-type"
-msgstr "Device type"
-
-msgid "discovery.option.os-family"
-msgstr "OS family"
-
-msgid "discovery.option.card-vendor"
-msgstr "Card vendor"
-
-# The dropdown beside Port scan: which ports it probes.
-msgid "discovery.ports"
-msgstr "Ports to scan"
-
-# About 30 common ports.
-msgid "discovery.ports.simple"
-msgstr "Simple"
-
-# About 100 ports.
-msgid "discovery.ports.deep"
-msgstr "Deep"
-
 msgid "discovery.start"
 msgstr "Start scan"
 
@@ -1199,3 +1169,15 @@ msgid "log.finished"
 msgid_plural "log.finished.plural"
 msgstr[0] "Finished · {n} host found"
 msgstr[1] "Finished · {n} hosts found"
+msgid "discovery.mode"
+msgstr "Scan mode"
+
+msgid "discovery.mode.quick"
+msgstr "Quick"
+
+msgid "discovery.mode.full"
+msgstr "Full"
+
+msgid "discovery.mode.everything"
+msgstr "Everything"
+

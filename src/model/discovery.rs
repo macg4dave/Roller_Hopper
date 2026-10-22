@@ -19,26 +19,22 @@ use super::card::{CardId, MacAddr, NetworkCard};
 use super::device::{Device, DeviceId, DeviceKind, LastSeen, Role, Status};
 use super::network::{ConnectionKind, Network};
 
-/// Which TCP ports a port scan probes on each host.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum PortList {
-    /// About thirty: remote access, file sharing, web pages, printing and cameras.
+pub(crate) enum ScanMode {
     #[default]
-    Simple,
-    /// About a hundred: also mail, databases, media and casting, smart-home and admin consoles.
-    Deep,
+    Quick,
+    Full,
+    Everything,
 }
 
-/// What a run finds out beyond which addresses answer, each a tick box on the page.
+/// What a run finds out beyond which addresses answer. The UI runs every available method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "independent on/off choices, one per tick box"
 )]
 pub(crate) struct ScanOptions {
-    /// Which common TCP ports are open, of the list `ports` picks.
-    pub(crate) port_scan: bool,
-    pub(crate) ports: PortList,
+    pub(crate) mode: ScanMode,
     /// Names from reverse DNS, and the software that names itself on open ports.
     pub(crate) service_detection: bool,
     /// The services hosts announce over mDNS, with the model and maker they give.
@@ -54,8 +50,7 @@ pub(crate) struct ScanOptions {
 impl Default for ScanOptions {
     fn default() -> Self {
         Self {
-            port_scan: true,
-            ports: PortList::Simple,
+            mode: ScanMode::Quick,
             service_detection: true,
             mdns_services: true,
             device_type: true,

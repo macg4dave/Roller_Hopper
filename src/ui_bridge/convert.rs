@@ -322,6 +322,7 @@ pub(super) fn details(
 pub(super) fn port_views(card: &NetworkCard) -> Vec<ui::PortView> {
     let views = card.services.iter().map(|s| ui::PortView {
         port: i32::from(s.port),
+        udp: s.protocol == crate::model::ServiceProtocol::Udp,
         description: s.description.as_str().into(),
     });
     views.collect()

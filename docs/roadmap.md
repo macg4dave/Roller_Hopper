@@ -30,11 +30,11 @@ until their qualification task is done.
 - Discovery scans for real, ahead of the milestone order at the user's request (`src/scan.rs`):
   netscli-core's `DiscoverEngine` sweep (ping, neighbour table, mDNS names; its own name lookup
   off, since on Windows it runs `ping -a`) with a 3 s `MdnsEngine` browse of the common
-  service types alongside, then per host `PortScanner` TCP connects (Simple 31 or Deep 94
-  ports; IANA names from `src/data_lists` for ports the scanner does not name), hickory
-  reverse DNS and a `PingScanner` ping for the TTL. Tick boxes choose service detection, mDNS
-  services (TXT model/maker), device type and OS family (simple rules in `scan/identify.rs`,
-  a first rule-based baseline for BE-0085) and the card's OUI vendor. It runs on an owned Tokio runtime; hosts arrive as model
+  service types alongside, then per host `PortScanner` TCP connects across ports 1–65535
+  (IANA names from `src/data_lists` for ports the scanner does not name), hickory
+  reverse DNS and a `PingScanner` ping for the TTL. Service detection, mDNS services (TXT
+  model/maker), device type, OS family (simple rules in `scan/identify.rs`, a first rule-based
+  baseline for BE-0085) and the card's OUI vendor are all enabled. It runs on an owned Tokio runtime; hosts arrive as model
   `Answer`s over a channel the UI drains every 200 ms; Stop drops the task and shuts the runtime
   down without waiting. Names, banners and TXT values are bounded and control characters
   rejected. A card's OUI vendor is kept on the card, never as the device's maker. Only
@@ -82,7 +82,7 @@ controls, changed only where the brief or an agreed decision says. It already de
 - Move network card: moving a card to another device merges them, confirmed when it is the
   source device's only card; its guests follow. On the discovery page a found card can move
   onto a mapped device, which is how a possible duplicate is resolved by hand.
-- Discovery: a Network choice; Port scan and Service detection options; Start or Scan again
+- Discovery: a Network choice; every available scan method and TCP port enabled; Start or Scan again
   and Stop (Pause was removed until BE-0057 can pause for real); "n of m addresses checked"
   with elapsed time and a progress bar. Results show name, found-by method chips and the flags New,
   Duplicate?, Added and Ignored, with "Same MAC as"; a mapped card outside the scanned network
@@ -358,14 +358,13 @@ supports, and anything unsupported is shown as unavailable, never faked.
   /32 (including /31 and /32) and ranges (`10.0.5.10-10.0.5.40`, short form
   `192.168.2.1-50`). At most 65,536 target addresses per run; invalid or oversized input is
   rejected before Start.
-- TCP ports: lists and ranges (`22,80,443,8000-8100`) with Common and All (1–65535) presets.
+- TCP ports: always All (1–65535), with no Simple/Deep selector.
 - Source interface: chosen per target from the OS routing table and shown before Start; the
   user can pin one. VPN and virtual adapters are listed and labelled, and their subnets are
   never suggested as targets automatically.
 - Named UDP methods: mDNS/DNS-SD (5353) and SSDP/UPnP (1900) only. NetBIOS, DNS and NTP are
   not offered, and there is no blanket UDP sweep.
-- Identification depth: Basic (open ports), Standard (adds banners and service probes; the
-  default) and Deep (every netscli-core probe).
+- Identification depth: every available netscli-core probe, with no depth selector.
 - Pace presets: Gentle (32 probes in flight, 25 new a second, 3 s timeout, 2 retries), Normal
   (the default: 128, 100/s, 1.5 s, 1 retry) and Fast (512, 400/s, 1 s, 1 retry). No numeric
   advanced controls.
@@ -609,7 +608,7 @@ Goal: truthful run settings before any network traffic.
 | --- | --- | --- |
 | BE-0050 | Enumerate interfaces and routes through qualified APIs (find why `NetworkManager::get_interfaces` gave no subnet on the user's PC) to suggest targets and the source interface per target; distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
 | BE-0051 | Extend the Network box (`model/discovery/target.rs`, one subnet or address today) to the agreed lists, ranges and exclusions; show the source interface; mapped prefixes never grant permission. | BE-0050 |
-| BE-0052 | Replace the scan's tick boxes and Simple/Deep port lists with the agreed TCP port field and presets, named UDP methods, depth and pace; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
+| BE-0052 | Qualify the always-on full TCP range, named UDP methods and every available identification probe under the agreed pace limits; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
 | BE-0053 | Show available/unavailable methods with reasons, estimated work and limits before Start; reject invalid or oversized work without probing. | BE-0052, BE-0009 |
 | BE-0054 | Freeze context, targets, exclusions, ports, methods and limits into an immutable run configuration. | BE-0053 |
 

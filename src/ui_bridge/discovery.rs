@@ -10,7 +10,7 @@ use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
 use super::{AppState, Selection, convert, handler, update};
-use crate::model::{Found, FoundFilter, FoundSort, PortList, ScanOptions};
+use crate::model::{Found, FoundFilter, FoundSort, ScanMode, ScanOptions};
 use crate::scan::{self, Event, Scan};
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -24,6 +24,17 @@ impl AppState {
         let target = self.discovery.next_target().ok()?;
         let options = self.discovery.options;
         self.discovery.start(target).then_some((target, options))
+    }
+
+    fn add_found_port(&mut self, host: usize, card: usize, port: &str, description: &str) -> bool {
+        let Some(port) = convert::port(port) else {
+            return false;
+        };
+        let mut added = false;
+        self.discovery.edit_card(host, card, |network_card| {
+            added = network_card.services.add(port, description);
+        });
+        added
     }
 
     /// Takes in a running scan's progress and what it reported, counting the scan once it
@@ -79,28 +90,6 @@ impl AppState {
             self.discovery.edit(index, |d| d.role = role);
         }
     }
-
-    fn set_discovery_option(&mut self, option: ui::DiscoveryOption, on: bool) {
-        let options = &mut self.discovery.options;
-        match option {
-            ui::DiscoveryOption::PortScan => options.port_scan = on,
-            ui::DiscoveryOption::ServiceDetection => options.service_detection = on,
-            ui::DiscoveryOption::MdnsServices => options.mdns_services = on,
-            ui::DiscoveryOption::DeviceType => options.device_type = on,
-            ui::DiscoveryOption::OsFamily => options.os_family = on,
-            ui::DiscoveryOption::CardVendor => options.card_vendor = on,
-        }
-    }
-
-    /// Picks the port list by its place in the dropdown: Simple, then Deep.
-    fn set_discovery_ports(&mut self, index: usize) {
-        let list = match index {
-            0 => PortList::Simple,
-            1 => PortList::Deep,
-            _ => return,
-        };
-        self.discovery.options.ports = list;
-    }
 }
 
 fn filter_from_ui(filter: ui::FoundFilter) -> FoundFilter {
@@ -118,6 +107,14 @@ fn sort_from_ui(sort: ui::FoundSort) -> FoundSort {
         ui::FoundSort::Ip => FoundSort::Ip,
         ui::FoundSort::Mac => FoundSort::Mac,
         ui::FoundSort::Role => FoundSort::Role,
+    }
+}
+
+fn scan_mode_from_ui(mode: ui::ScanMode) -> ScanMode {
+    match mode {
+        ui::ScanMode::Quick => ScanMode::Quick,
+        ui::ScanMode::Full => ScanMode::Full,
+        ui::ScanMode::Everything => ScanMode::Everything,
     }
 }
 
@@ -161,12 +158,8 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_set_discovery_target(handler(ui, state, |st, text: SharedString| {
         st.discovery.target_text = text.into();
     }));
-    let set_option = handler(ui, state, |st, (option, on)| {
-        st.set_discovery_option(option, on);
-    });
-    bridge.on_set_discovery_option(move |option, on| set_option((option, on)));
-    bridge.on_set_discovery_ports(handler(ui, state, |st, index| {
-        st.set_discovery_ports(convert::index(index));
+    bridge.on_set_scan_mode(handler(ui, state, |st, mode| {
+        st.discovery.options.mode = scan_mode_from_ui(mode);
     }));
     bridge.on_set_found_filter(handler(ui, state, |st, filter| {
         st.discovery.filter = filter_from_ui(filter);
@@ -243,6 +236,42 @@ fn connect_found_cards(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         },
     );
     bridge.on_set_found_card_icon(move |index, card, icon| set_icon((index, card, icon)));
+
+    let (add_ui, add_state) = (ui.as_weak(), Rc::clone(state));
+    bridge.on_add_found_port(move |host, card, port, description| {
+        let mut added = false;
+        update(&add_ui, &add_state, |st| {
+            added = st.add_found_port(
+                convert::index(host),
+                convert::index(card),
+                &port,
+                &description,
+            );
+        });
+        added
+    });
+    let describe = handler(
+        ui,
+        state,
+        |st, (host, card, port, text): (i32, i32, i32, SharedString)| {
+            st.discovery
+                .edit_card(convert::index(host), convert::index(card), |network_card| {
+                    network_card
+                        .services
+                        .set_description(convert::index(port), &text);
+                });
+        },
+    );
+    bridge.on_set_found_port_description(move |host, card, port, text| {
+        describe((host, card, port, text));
+    });
+    let remove = handler(ui, state, |st, (host, card, port): (i32, i32, i32)| {
+        st.discovery
+            .edit_card(convert::index(host), convert::index(card), |network_card| {
+                network_card.services.remove(convert::index(port));
+            });
+    });
+    bridge.on_remove_found_port(move |host, card, port| remove((host, card, port)));
 }
 
 /// The scan running, if any, and the timer that takes in what it reports.
@@ -329,26 +358,30 @@ mod tests {
     }
 
     #[test]
-    fn the_tick_boxes_and_port_list_set_what_the_next_run_finds_out() {
+    fn a_found_cards_guessed_service_can_be_edited_and_a_port_added() {
         let mut state = AppState::new(mock_data::network());
-        state.set_discovery_ports(1);
-        state.set_discovery_option(ui::DiscoveryOption::OsFamily, false);
-        state.set_discovery_option(ui::DiscoveryOption::CardVendor, false);
-        let options = state.discovery.options;
-        assert_eq!(options.ports, PortList::Deep);
-        assert!(!options.os_family && !options.card_vendor);
-        assert!(
-            options.mdns_services && options.device_type,
-            "the rest stay on"
-        );
-        state.set_discovery_ports(7);
-        assert_eq!(
-            state.discovery.options.ports,
-            PortList::Deep,
-            "no such choice"
-        );
-        state.set_discovery_ports(0);
-        assert_eq!(state.discovery.options.ports, PortList::Simple);
+        finished(&mut state);
+        let host = state
+            .discovery
+            .found()
+            .iter()
+            .position(|found| found.device.name == "Guest Laptop")
+            .unwrap();
+
+        assert!(state.add_found_port(host, 0, "8443", "Guessed service"));
+        assert!(!state.add_found_port(host, 0, "8443", "Duplicate"));
+        state.discovery.edit_card(host, 0, |card| {
+            let at = card
+                .services
+                .iter()
+                .position(|service| service.port == 8443)
+                .unwrap();
+            card.services.set_description(at, "Admin");
+        });
+
+        let services = &state.discovery.found()[host].device.cards[0].services;
+        let shown = services.to_string();
+        assert!(shown.contains("8443 (Admin)"));
     }
 
     #[test]

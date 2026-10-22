@@ -6,14 +6,14 @@
 use std::net::IpAddr;
 
 use ipnet::Ipv4Net;
-use netscli_core::{FoundBy, Host, MdnsService, NameSource, PortResult};
+use netscli_core::{FoundBy, Host, MdnsService, NameSource, PortResult, Protocol};
 
 use super::identify::{self, Evidence};
 use super::mdns;
 use super::ports::PortNames;
 use crate::model::{
     Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
-    ScanOptions, Services, Status,
+    ScanOptions, ServiceProtocol, Services, Status,
 };
 
 /// The longest name kept, a DNS name's limit.
@@ -145,11 +145,22 @@ fn device(hostname: Option<String>, card: NetworkCard) -> Device {
 fn services(ports: &[PortResult], identify: bool, names: &PortNames) -> Services {
     let mut services = Services::default();
     for port in ports.iter().filter(|p| p.open) {
+        let protocol = match port.protocol {
+            Protocol::Tcp => ServiceProtocol::Tcp,
+            Protocol::Udp => ServiceProtocol::Udp,
+        };
         let software = identify.then(|| port.product_and_version()).flatten();
-        let usual = port.service.as_deref().or_else(|| names.get(port.port));
+        let usual = port
+            .service
+            .as_deref()
+            .or_else(|| names.get(protocol, port.port));
         let description = software.or_else(|| usual.map(str::to_owned));
         let description = description.and_then(|d| clean(&d, MAX_DESCRIPTION));
-        services.add(port.port, description.as_deref().unwrap_or_default());
+        services.add_protocol(
+            port.port,
+            protocol,
+            description.as_deref().unwrap_or_default(),
+        );
     }
     services
 }
@@ -242,7 +253,6 @@ mod tests {
             device_type: false,
             os_family: false,
             card_vendor: false,
-            ..all()
         }
     }
 

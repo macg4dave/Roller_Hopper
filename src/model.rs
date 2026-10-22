@@ -19,11 +19,11 @@ pub(crate) use device::{
 };
 pub(crate) use discovery::{
     Answer, Decision, Discovery, Finding, Found, FoundFilter, FoundSort, LogEntry, LogEvent,
-    Method, Parent, Phase, PortList, ScanOptions, TargetError,
+    Method, Parent, Phase, ScanMode, ScanOptions, TargetError,
 };
 pub(crate) use groups::{GroupColour, GroupId, LineStyle};
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};
 pub(crate) use network::{CardLink, Connection, ConnectionKind, Network, StatusFilter};
 pub(crate) use os::{OsClue, OsFamily, OsHint};
-pub(crate) use services::Services;
+pub(crate) use services::{ServiceProtocol, Services};
 pub(crate) use snap::{Snap, snap_target};

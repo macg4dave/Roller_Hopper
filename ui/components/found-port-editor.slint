@@ -1,0 +1,107 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { Bridge } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { NameEdit } from "name-edit.slint";
+
+// Ports found on a discovery card, laid left to right. Detected service names remain guesses:
+// the user may correct them or add and remove ports before adding the host to the map.
+export component FoundPortEditor inherits VerticalLayout {
+    in property <int> host-index;
+    in property <int> card-index;
+    property <bool> adding;
+
+    spacing: Theme.space-s;
+    horizontal-stretch: 1;
+
+    FlexboxLayout {
+        spacing: Theme.space-xs;
+        flex-wrap: wrap;
+
+        for port[i] in Bridge.found-ports: Rectangle {
+            width: Theme.port-tile-width;
+            height: 64px;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: Theme.radius;
+
+            VerticalLayout {
+                padding: Theme.space-xs;
+                spacing: Theme.space-xs;
+                HorizontalLayout {
+                    Text {
+                        text: port.udp ? "\{port.port}/UDP" : "\{port.port}";
+                        color: Theme.text;
+                        font-size: Theme.font-body;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        icon: @image-url("../icons/delete.svg");
+                        colorize-icon: true;
+                        accessible-label: @tr("edit.port-remove");
+                        clicked => { Bridge.remove-found-port(root.host-index, root.card-index, i); }
+                    }
+                }
+                NameEdit {
+                    name: port.description;
+                    placeholder-text: @tr("edit.port-description");
+                    accessible-label: @tr("edit.port-description");
+                    commit(text) => {
+                        Bridge.set-found-port-description(root.host-index, root.card-index, i, text);
+                    }
+                }
+            }
+        }
+    }
+
+    if !adding: HorizontalLayout {
+        alignment: start;
+        Button {
+            icon: @image-url("../icons/plus.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.port-add");
+            clicked => { root.adding = true; }
+        }
+    }
+
+    if adding: HorizontalLayout {
+        spacing: Theme.space-xs;
+
+        function add() {
+            if Bridge.add-found-port(root.host-index, root.card-index,
+                    number-field.text, description-field.text) {
+                number-field.text = "";
+                description-field.text = "";
+                number-field.focus();
+            }
+        }
+
+        number-field := LineEdit {
+            width: 76px;
+            input-type: number;
+            placeholder-text: @tr("edit.port-number");
+            init => { self.focus(); }
+            accepted => { add(); }
+        }
+        description-field := LineEdit {
+            horizontal-stretch: 1;
+            placeholder-text: @tr("edit.port-description");
+            accepted => { add(); }
+        }
+        Button {
+            icon: @image-url("../icons/plus.svg");
+            colorize-icon: true;
+            primary: true;
+            enabled: number-field.text != "";
+            accessible-label: @tr("edit.port-confirm-add");
+            clicked => { add(); }
+        }
+        Button {
+            icon: @image-url("../icons/close.svg");
+            colorize-icon: true;
+            accessible-label: @tr("edit.cancel");
+            clicked => { root.adding = false; }
+        }
+    }
+}

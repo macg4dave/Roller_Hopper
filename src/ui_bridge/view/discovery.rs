@@ -8,7 +8,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use super::sync;
 use crate::model::{
     Decision, Finding, Found, FoundFilter, FoundSort, LogEntry, LogEvent, Method, Parent, Phase,
-    PortList, TargetError,
+    ScanMode, TargetError,
 };
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::{AppState, convert};
@@ -24,18 +24,11 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     };
     let (swept, addresses) = discovery.progress();
     let count = |filter| int(discovery.count(filter));
-    let options = discovery.options;
     bridge.set_discovery(ui::DiscoveryView {
         phase: phase(discovery.phase()),
         target: target.map(|t| t.to_string()).unwrap_or_default().into(),
         target_error: target_error(next.err()),
-        port_scan: options.port_scan,
-        deep_ports: options.ports == PortList::Deep,
-        service_detection: options.service_detection,
-        mdns_services: options.mdns_services,
-        device_type: options.device_type,
-        os_family: options.os_family,
-        card_vendor: options.card_vendor,
+        mode: scan_mode(discovery.options.mode),
         swept: int(swept),
         addresses: int(addresses),
         seconds: seconds(discovery.elapsed()),
@@ -88,6 +81,20 @@ fn push_found(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     }
     let card = selected.and_then(|(_, f)| selected_card(state, f));
     bridge.set_selected_found_card(card.map_or(-1, int));
+    let ports = selected
+        .zip(card)
+        .and_then(|((_, found), at)| {
+            let device = found
+                .on_map()
+                .and_then(|id| state.network.device(id))
+                .unwrap_or(&found.device);
+            device.cards.get(at)
+        })
+        .map(convert::port_views)
+        .unwrap_or_default();
+    if let Some(model) = sync(&bridge.get_found_ports(), ports) {
+        bridge.set_found_ports(model);
+    }
     let parents = state.found_parent_choices();
     let own = selected.map(|(index, _)| Parent::Found(index));
     let at = parents.iter().position(|&p| Some(p) == own);
@@ -161,6 +168,7 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         kind: convert::kind(device.kind),
         role: convert::role_label(labels, network, &device.role),
         role_index: role_index.map_or(-1, int),
+        colour: convert::colour(network.colour(device)),
         icon: state.icons.choice(&network.icon(device)),
         custom_icon: device.icon.is_some(),
         notes: device.notes.as_str().into(),
@@ -299,6 +307,14 @@ fn filter(filter: FoundFilter) -> ui::FoundFilter {
         FoundFilter::New => ui::FoundFilter::New,
         FoundFilter::Unidentified => ui::FoundFilter::Unidentified,
         FoundFilter::Duplicates => ui::FoundFilter::Duplicates,
+    }
+}
+
+fn scan_mode(mode: ScanMode) -> ui::ScanMode {
+    match mode {
+        ScanMode::Quick => ui::ScanMode::Quick,
+        ScanMode::Full => ui::ScanMode::Full,
+        ScanMode::Everything => ui::ScanMode::Everything,
     }
 }
 

@@ -25,6 +25,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryIter};
 use ipnet::Ipv4Net;
 use netscli_core::{
     DiscoverEngine, DiscoverPhase, DiscoverProgress, Host, MdnsService, PingScanner, PortScanner,
+    UdpScanner,
 };
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::{JoinHandle, JoinSet};
@@ -139,6 +140,7 @@ async fn run(
 /// The probes every host shares, so their limits on probes in flight hold across hosts.
 struct Probes {
     ports: PortScanner,
+    udp: UdpScanner,
     ping: PingScanner,
 }
 
@@ -156,6 +158,7 @@ struct Run<'a> {
 async fn probe_all(hosts: Vec<Host>, run: &Run<'_>, events: &Sender<Event>) -> Event {
     let shared = Arc::new(Probes {
         ports: PortScanner::new(CONCURRENCY),
+        udp: UdpScanner::new(CONCURRENCY),
         ping: PingScanner::new(CONCURRENCY),
     });
     let mut pending = JoinSet::new();
@@ -187,15 +190,9 @@ async fn probe(
     probes: Arc<Probes>,
     options: ScanOptions,
 ) -> Probed {
-    let ports = if options.port_scan {
-        // Refused only for an invalid port list, and both lists are fixed and valid (see
-        // their tests), so an error here means no open ports were found.
-        let list = ports::ports(options.ports).to_vec();
-        let results = probes.ports.scan_host(host.ip, list, PORT_TIMEOUT_MS).await;
-        results.unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let plan = ports::PortPlan::for_mode(options.mode);
+    let mut open_ports = scan_tcp(&probes.ports, host.ip, &plan.tcp).await;
+    open_ports.extend(scan_udp(&probes.udp, host.ip, &plan.udp).await);
     let reverse_name = if options.service_detection && host.hostname.is_none() {
         // A failed or timed-out lookup means the network has no name for it.
         let name = netscli_core::dns::reverse_lookup_timeout(host.ip, DNS_TIMEOUT_MS).await;
@@ -212,8 +209,32 @@ async fn probe(
     Probed {
         host,
         reverse_name,
-        ports,
+        ports: open_ports,
         ttl,
         mdns,
     }
+}
+
+async fn scan_tcp(scanner: &PortScanner, host: std::net::IpAddr, ports: &[u16]) -> Vec<netscli_core::PortResult> {
+    let mut open = Vec::new();
+    for batch in ports.chunks(ports::BATCH_SIZE) {
+        let found = scanner
+            .scan_host(host, batch.to_vec(), PORT_TIMEOUT_MS)
+            .await
+            .unwrap_or_default();
+        open.extend(found.into_iter().filter(|result| result.open));
+    }
+    open
+}
+
+async fn scan_udp(scanner: &UdpScanner, host: std::net::IpAddr, ports: &[u16]) -> Vec<netscli_core::PortResult> {
+    let mut open = Vec::new();
+    for batch in ports.chunks(ports::BATCH_SIZE) {
+        let found = scanner
+            .scan_host_with_progress(host, batch.to_vec(), PORT_TIMEOUT_MS, None)
+            .await
+            .unwrap_or_default();
+        open.extend(found.into_iter().filter(|result| result.open));
+    }
+    open
 }

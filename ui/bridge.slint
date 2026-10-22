@@ -163,6 +163,7 @@ export struct DeviceDetails {
 /// An open port of the selected network card, in port order, for the edit page.
 export struct PortView {
     port: int,
+    udp: bool,
     description: string,
 }
 
@@ -220,10 +221,10 @@ export struct MapBounds {
 
 // A discovery run of the network typed on the Scan button's page.
 export enum DiscoveryPhase { idle, running, finished }
+export enum ScanMode { quick, full, everything }
 // Why the network typed cannot be scanned; none when it can.
 export enum TargetError { none, empty, invalid, too-wide }
 // The scan's tick boxes. Which ports a port scan probes is a dropdown beside its box.
-export enum DiscoveryOption { port-scan, service-detection, mdns-services, device-type, os-family, card-vendor }
 // How a found host compares with the map: matched by MAC address.
 export enum FoundFinding { known, new, duplicate }
 export enum FoundDecision { pending, added, ignored }
@@ -239,14 +240,7 @@ export struct DiscoveryView {
     // is not one), and why what was typed cannot be scanned.
     target: string,
     target-error: TargetError,
-    // The tick boxes, and whether a port scan probes the Deep port list rather than Simple.
-    port-scan: bool,
-    deep-ports: bool,
-    service-detection: bool,
-    mdns-services: bool,
-    device-type: bool,
-    os-family: bool,
-    card-vendor: bool,
+    mode: ScanMode,
     // Addresses checked so far, of all of them.
     swept: int,
     addresses: int,
@@ -296,6 +290,8 @@ export struct FoundView {
     // Already translated, like DeviceView.role, and its place in Bridge.roles.
     role: string,
     role-index: int,
+    // The colour of the role's group, as in the device list and on the map.
+    colour: GroupColour,
     icon: IconChoice,
     // The icon was picked for this host rather than coming from its role.
     custom-icon: bool,
@@ -405,6 +401,8 @@ export global Bridge {
     in property <int> selected-found: -1;
     in property <FoundView> found-details;
     in property <[FoundView]> found-cards;
+    // Editable ports of the selected found card before its host is added to the map.
+    in property <[PortView]> found-ports;
     in property <int> selected-found-card: -1;
     // Newest first.
     in property <[LogView]> discovery-log;
@@ -508,9 +506,7 @@ export global Bridge {
     callback start-discovery();
     callback stop-discovery();
     callback set-discovery-target(string);
-    // The port list a port scan probes: 0 Simple, 1 Deep.
-    callback set-discovery-ports(int);
-    callback set-discovery-option(DiscoveryOption, bool);
+    callback set-scan-mode(ScanMode);
     callback set-found-filter(FoundFilter);
     callback sort-found(FoundSort);
     // Found hosts by their FoundView.index, -1 for none. Selecting one on the map selects its
@@ -523,6 +519,9 @@ export global Bridge {
     callback select-found-card(int, int);
     callback rename-found-card(int, int, string);
     callback set-found-card-icon(int, int, string);
+    callback add-found-port(int, int, string, string) -> bool;
+    callback set-found-port-description(int, int, int, string);
+    callback remove-found-port(int, int, int);
     callback set-found-role(int, int);
     callback rename-found(int, string);
     callback set-found-icon(int, string);

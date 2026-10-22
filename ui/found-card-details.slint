@@ -6,6 +6,7 @@ import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
+import { FoundPortEditor } from "components/found-port-editor.slint";
 
 // The discovery details for a network card of a host not on the map: its name and icon, which
 // it is added with, and the parent it is a child of, over what the run found of it. Its settings are the scan's until the host
@@ -105,5 +106,12 @@ export component FoundCardDetails inherits VerticalLayout {
     if card.gateway != "": DetailField { label: @tr("details.gateway"); value: card.gateway; }
     if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
     if card.vendor != "": DetailField { label: @tr("details.card-vendor"); value: card.vendor; }
-    if card.services != "": DetailField { label: @tr("details.open-ports"); value: card.services; }
+    if editable: DetailField {
+        label: @tr("details.open-ports");
+        FoundPortEditor { host-index: host.index; card-index: card.card-index; }
+    }
+    if !editable && card.services != "": DetailField {
+        label: @tr("details.open-ports");
+        value: card.services;
+    }
 }

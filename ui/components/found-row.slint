@@ -34,7 +34,7 @@ export component FoundRow inherits Rectangle {
     border-radius: Theme.radius;
     property <bool> drop-here: drop.has-drag && drop.current-action != DragAction.none;
 
-    background: selected || drop-here ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+    background: selected || drop-here ? Theme.accent-soft : touch.has-hover ? Theme.hover : card ? Theme.background : Theme.group-tint(found.colour);
     border-width: drop-here ? 1px : 0;
     border-color: Theme.accent;
     opacity: drag.dragging ? 0.4 : found.decision == FoundDecision.ignored ? 0.55 : 1;

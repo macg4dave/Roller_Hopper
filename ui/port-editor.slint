@@ -25,6 +25,11 @@ export component PortEditor inherits VerticalLayout {
             accessible-label: @tr("edit.port-number");
             commit(text) => { Bridge.set-port-number(i, text); }
         }
+        if port.udp: Text {
+            text: "/UDP";
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
         NameEdit {
             horizontal-stretch: 1;
             name: port.description;

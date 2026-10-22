@@ -1,5 +1,5 @@
-import { Button, CheckBox, ComboBox, LineEdit, ProgressIndicator } from "std-widgets.slint";
-import { Bridge, DiscoveryOption, DiscoveryPhase, TargetError } from "bridge.slint";
+import { Button, ComboBox, LineEdit, ProgressIndicator } from "std-widgets.slint";
+import { Bridge, DiscoveryPhase, ScanMode, TargetError } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 
@@ -36,6 +36,17 @@ export component DiscoverySetup inherits VerticalLayout {
                 }
             }
         }
+        ComboBox {
+            width: 112px;
+            model: [@tr("discovery.mode.quick"), @tr("discovery.mode.full"), @tr("discovery.mode.everything")];
+            current-index: Bridge.discovery.mode == ScanMode.quick ? 0 : Bridge.discovery.mode == ScanMode.full ? 1 : 2;
+            enabled: !busy;
+            accessible-label: @tr("discovery.mode");
+            selected => {
+                Bridge.set-scan-mode(self.current-index == 0 ? ScanMode.quick
+                    : self.current-index == 1 ? ScanMode.full : ScanMode.everything);
+            }
+        }
         Rectangle { horizontal-stretch: 1; }
 
         Button {
@@ -50,39 +61,6 @@ export component DiscoverySetup inherits VerticalLayout {
             text: @tr("discovery.stop");
             enabled: busy;
             clicked => { Bridge.stop-discovery(); }
-        }
-    }
-
-    // What the scan finds out: a tick box each, the port scan with its port list beside it.
-    HorizontalLayout {
-        spacing: Theme.space-m;
-        alignment: start;
-
-        CheckBox {
-            text: @tr("discovery.option.port-scan");
-            checked: Bridge.discovery.port-scan;
-            enabled: !busy;
-            toggled => { Bridge.set-discovery-option(DiscoveryOption.port-scan, self.checked); }
-        }
-        ComboBox {
-            width: 100px;
-            model: [@tr("discovery.ports.simple"), @tr("discovery.ports.deep")];
-            current-index: Bridge.discovery.deep-ports ? 1 : 0;
-            enabled: !busy && Bridge.discovery.port-scan;
-            accessible-label: @tr("discovery.ports");
-            selected => { Bridge.set-discovery-ports(self.current-index); }
-        }
-        for option in [
-            { option: DiscoveryOption.service-detection, label: @tr("discovery.option.service-detection"), on: Bridge.discovery.service-detection },
-            { option: DiscoveryOption.mdns-services, label: @tr("discovery.option.mdns-services"), on: Bridge.discovery.mdns-services },
-            { option: DiscoveryOption.device-type, label: @tr("discovery.option.device-type"), on: Bridge.discovery.device-type },
-            { option: DiscoveryOption.os-family, label: @tr("discovery.option.os-family"), on: Bridge.discovery.os-family },
-            { option: DiscoveryOption.card-vendor, label: @tr("discovery.option.card-vendor"), on: Bridge.discovery.card-vendor },
-        ]: CheckBox {
-            text: option.label;
-            checked: option.on;
-            enabled: !busy;
-            toggled => { Bridge.set-discovery-option(option.option, self.checked); }
         }
     }
 
