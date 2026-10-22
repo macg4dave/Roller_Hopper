@@ -99,8 +99,9 @@ Gaps the UI shows against the plan:
   restored to the default (`src/ai/default-prompt.txt`); the answer settings and device text
   are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
-- The Network choice lists this computer's interface subnets, the default route's first, with
-  no VPN/virtual labelling or routes; the two option checkboxes predate the agreed depth and
+- The Network is a text box taking one IPv4 subnet (/16 to /32) or one address, checked as
+  typed; it starts with this computer's subnet when one is detected (on the user's PC the
+  earlier dropdown came up empty, cause not yet found); the two option checkboxes predate the agreed depth and
   pace presets; there is no confidence until the agreed Strong/Some/Weak lands (BE-0072).
 - The card IP hint promises an address "no other card has" (global uniqueness); manual ports
   have no transport; last seen is relative ("At last scan", "n minutes ago").
@@ -602,8 +603,8 @@ Goal: truthful run settings before any network traffic.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0050 | The Network choice already offers this computer's interface subnets (`scan/subnets.rs`); add routes and the source interface per target through qualified APIs, and distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
-| BE-0051 | Validate IPv4 addresses/CIDRs/exclusions lazily, including /31 and /32; show the source interface; mapped prefixes never grant permission. | BE-0050 |
+| BE-0050 | Enumerate interfaces and routes through qualified APIs (find why `NetworkManager::get_interfaces` gave no subnet on the user's PC) to suggest targets and the source interface per target; distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
+| BE-0051 | Extend the Network box (`model/discovery/target.rs`, one subnet or address today) to the agreed lists, ranges and exclusions; show the source interface; mapped prefixes never grant permission. | BE-0050 |
 | BE-0052 | Replace the Port scan / Service detection checkboxes and the fixed common-port list with the agreed TCP port field and presets, named UDP methods, depth and pace; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
 | BE-0053 | Show available/unavailable methods with reasons, estimated work and limits before Start; reject invalid or oversized work without probing. | BE-0052, BE-0009 |
 | BE-0054 | Freeze context, targets, exclusions, ports, methods and limits into an immutable run configuration. | BE-0053 |

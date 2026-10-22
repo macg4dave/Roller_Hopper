@@ -957,6 +957,19 @@ msgstr "Scans the network for real: it pings every address and probes common por
 msgid "discovery.network"
 msgstr "Network"
 
+msgid "discovery.network-placeholder"
+msgstr "192.168.1.0/24"
+
+# In place of the heading while the network box cannot be scanned.
+msgid "discovery.network.empty"
+msgstr "Type the network to scan, such as 192.168.1.0/24"
+
+msgid "discovery.network.invalid"
+msgstr "Type an IPv4 subnet, such as 192.168.1.0/24, or one address"
+
+msgid "discovery.network.too-wide"
+msgstr "Too large to scan: use a /16 or smaller (at most 65,536 addresses)"
+
 msgid "discovery.option.port-scan"
 msgstr "Port scan"
 

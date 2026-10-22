@@ -4,9 +4,11 @@
 
 mod found;
 mod moves;
+mod target;
 
 pub(crate) use found::{Answer, Decision, Finding, Found, FoundFilter, Method};
 pub(crate) use moves::Parent;
+pub(crate) use target::TargetError;
 
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
@@ -76,12 +78,11 @@ pub(crate) struct LogEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Discovery {
     pub(crate) options: ScanOptions,
-    /// The subnets this computer is on, which the user picks the next run's from. A subnet on
-    /// the map is not one of them unless the computer is on it: mapping a network is no
-    /// permission to scan it.
-    pub(crate) targets: Vec<Ipv4Net>,
-    /// The subnet picked to scan next, or being scanned.
-    pub(crate) target: Option<Ipv4Net>,
+    /// The network to scan next, as the user typed it. Nothing fills it from the map: mapping
+    /// a network is no permission to scan it.
+    pub(crate) target_text: String,
+    /// The subnet being scanned, or last scanned.
+    target: Option<Ipv4Net>,
     pub(crate) filter: FoundFilter,
     /// The found host shown in the details, by its place in [`Self::found`].
     pub(crate) selected: Option<usize>,
@@ -109,10 +110,14 @@ impl Discovery {
         self.phase == Phase::Running
     }
 
-    /// The subnet the page shows and the next run scans: the one picked, or else the first.
-    pub(crate) fn next_target(&self) -> Option<Ipv4Net> {
-        let picked = self.target.filter(|t| self.targets.contains(t));
-        picked.or_else(|| self.targets.first().copied())
+    /// The subnet the next run scans, or why the typed text is not one.
+    pub(crate) fn next_target(&self) -> Result<Ipv4Net, TargetError> {
+        target::parse_target(&self.target_text)
+    }
+
+    /// The subnet being scanned, or last scanned.
+    pub(crate) fn target(&self) -> Option<Ipv4Net> {
+        self.target
     }
 
     /// The hosts found so far, in the order they were reported.
@@ -186,7 +191,7 @@ impl Discovery {
         let addresses = target.hosts().count();
         *self = Self {
             options: self.options,
-            targets: std::mem::take(&mut self.targets),
+            target_text: std::mem::take(&mut self.target_text),
             target: Some(target),
             filter: self.filter,
             phase: Phase::Running,
@@ -426,19 +431,18 @@ mod tests {
     }
 
     #[test]
-    fn the_next_target_is_the_one_picked_or_the_first_of_this_computers_subnets() {
-        let lab: Ipv4Net = "10.0.0.0/24".parse().unwrap();
-        let mut discovery = Discovery {
-            targets: vec![home(), lab],
-            ..Discovery::default()
-        };
-        assert_eq!(discovery.next_target(), Some(home()));
-        discovery.target = Some(lab);
-        assert_eq!(discovery.next_target(), Some(lab));
-        discovery.target = "172.16.0.0/24".parse().ok();
-        assert_eq!(discovery.next_target(), Some(home()), "not one of ours");
-        discovery.start(lab);
-        assert_eq!(discovery.targets, [home(), lab], "kept for the next run");
+    fn the_next_target_is_what_was_typed_and_is_kept_across_runs() {
+        let mut discovery = Discovery::default();
+        assert_eq!(discovery.next_target(), Err(TargetError::Empty));
+        discovery.target_text = "192.168.1.7/24".into();
+        assert_eq!(discovery.next_target(), Ok(home()));
+        assert_eq!(discovery.target(), None, "nothing scanned yet");
+        discovery.start(home());
+        assert_eq!(discovery.target(), Some(home()));
+        assert_eq!(
+            discovery.target_text, "192.168.1.7/24",
+            "kept for the next run"
+        );
     }
 
     #[test]

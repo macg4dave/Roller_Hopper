@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, FoundDecision, FoundFinding, GroupColour, GuestKind, LogEvent, LogView, RoleKind } from "bridge.slint";
+import { DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, FoundDecision, FoundFinding, GroupColour, GuestKind, LogEvent, LogView, RoleKind, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -178,6 +178,13 @@ export global Labels {
         if phase == DiscoveryPhase.running { return @tr("discovery.heading.running", target); }
         if phase == DiscoveryPhase.finished { return @tr("discovery.heading.finished", target); }
         return @tr("discovery.heading.idle", target);
+    }
+
+    // In place of the heading, while the network typed cannot be scanned.
+    public pure function target-problem(error: TargetError) -> string {
+        if error == TargetError.invalid { return @tr("discovery.network.invalid"); }
+        if error == TargetError.too-wide { return @tr("discovery.network.too-wide"); }
+        return @tr("discovery.network.empty");
     }
 
     public pure function log-message(entry: LogView) -> string {

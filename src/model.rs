@@ -18,7 +18,7 @@ pub(crate) use device::{
 };
 pub(crate) use discovery::{
     Answer, Decision, Discovery, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent,
-    Phase, ScanOptions,
+    Phase, ScanOptions, TargetError,
 };
 pub(crate) use groups::{GroupColour, GroupId, LineStyle};
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};

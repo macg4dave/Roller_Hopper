@@ -1,13 +1,16 @@
-import { Button, CheckBox, ComboBox, ProgressIndicator } from "std-widgets.slint";
-import { Bridge, DiscoveryOption, DiscoveryPhase } from "bridge.slint";
+import { Button, CheckBox, LineEdit, ProgressIndicator } from "std-widgets.slint";
+import { Bridge, DiscoveryOption, DiscoveryPhase, TargetError } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 
 // What to scan and how, the controls of the run, and how far it has got. The network and the
-// options are fixed while a run is busy.
+// options are fixed while a run is busy. The network is typed; until it is one that can be
+// scanned, the heading says what is wrong and Start stays off.
 export component DiscoverySetup inherits VerticalLayout {
     property <DiscoveryPhase> phase: Bridge.discovery.phase;
     property <bool> busy: phase == DiscoveryPhase.running;
+    property <bool> can-start: !busy && Bridge.discovery.target-error == TargetError.none;
+    property <bool> show-problem: !busy && Bridge.discovery.target-error != TargetError.none;
 
     spacing: Theme.space-m;
 
@@ -20,13 +23,18 @@ export component DiscoverySetup inherits VerticalLayout {
             font-size: Theme.font-body;
             vertical-alignment: center;
         }
-        ComboBox {
+        LineEdit {
             width: 170px;
-            model: Bridge.discovery-targets;
-            current-index: Bridge.discovery.target-index;
+            text <=> Bridge.discovery-target-draft;
+            placeholder-text: @tr("discovery.network-placeholder");
             enabled: !busy;
             accessible-label: @tr("discovery.network");
-            selected => { Bridge.set-discovery-target(self.current-index); }
+            edited(text) => { Bridge.set-discovery-target(text); }
+            accepted => {
+                if can-start {
+                    Bridge.start-discovery();
+                }
+            }
         }
         for option in [
             { option: DiscoveryOption.port-scan, label: @tr("discovery.option.port-scan"), on: Bridge.discovery.port-scan },
@@ -45,7 +53,7 @@ export component DiscoverySetup inherits VerticalLayout {
             icon: @image-url("icons/scan.svg");
             colorize-icon: true;
             primary: true;
-            enabled: !busy && Bridge.discovery-targets.length > 0;
+            enabled: can-start;
             clicked => { Bridge.start-discovery(); }
         }
         Button {
@@ -60,10 +68,10 @@ export component DiscoverySetup inherits VerticalLayout {
         HorizontalLayout {
             spacing: Theme.space-m;
             Text {
-                text: Labels.discovery-heading(phase, Bridge.discovery.target);
+                text: show-problem ? Labels.target-problem(Bridge.discovery.target-error) : Labels.discovery-heading(phase, Bridge.discovery.target);
                 font-size: Theme.font-heading;
                 font-weight: 600;
-                color: Theme.text;
+                color: show-problem ? Theme.text-muted : Theme.text;
                 horizontal-stretch: 1;
             }
             if phase != DiscoveryPhase.idle: Text {

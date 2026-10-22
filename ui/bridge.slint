@@ -203,8 +203,10 @@ export struct MapBounds {
     height: float,
 }
 
-// A discovery run of one of this computer's subnets, from the Scan button's page.
+// A discovery run of the network typed on the Scan button's page.
 export enum DiscoveryPhase { idle, running, finished }
+// Why the network typed cannot be scanned; none when it can.
+export enum TargetError { none, empty, invalid, too-wide }
 export enum DiscoveryOption { port-scan, service-detection }
 // How a found host compares with the map: matched by MAC address.
 export enum FoundFinding { known, new, duplicate }
@@ -216,9 +218,10 @@ export enum LogEvent { started, sweep, discovered, unidentified, duplicate, fail
 /// The discovery run as a whole. `seconds` is how long it has been running.
 export struct DiscoveryView {
     phase: DiscoveryPhase,
-    // The subnet scanned, or to be scanned, and its place in Bridge.discovery-targets.
+    // The subnet being scanned, or else the one typed, as a subnet (empty when what was typed
+    // is not one), and why what was typed cannot be scanned.
     target: string,
-    target-index: int,
+    target-error: TargetError,
     port-scan: bool,
     service-detection: bool,
     // Addresses checked so far, of all of them.
@@ -360,8 +363,8 @@ export global Bridge {
     // Discovery runs finished or stopped.
     in property <int> scans;
     in property <DiscoveryView> discovery;
-    // The subnets this computer is on, for the discovery page's network dropdown.
-    in property <[string]> discovery-targets;
+    // The discovery page's network box, as typed; set by Rust once, at start.
+    in-out property <string> discovery-target-draft;
     // The found hosts the result filter lets through, each followed by its cards' rows.
     in property <[FoundView]> found;
     // The found host shown in the discovery details (index in FoundView), -1 for none; the rows
@@ -467,11 +470,11 @@ export global Bridge {
     callback cancel-drag();
     // Brings back the connections as found, and the tidy layout.
     callback reset-layout();
-    // The discovery run: start (again), and stop where it got to. Its subnet (index in
-    // discovery-targets) and options can be changed while it is not running.
+    // The discovery run: start (again), and stop where it got to. Its network (as typed) and
+    // options can be changed while it is not running.
     callback start-discovery();
     callback stop-discovery();
-    callback set-discovery-target(int);
+    callback set-discovery-target(string);
     callback set-discovery-option(DiscoveryOption, bool);
     callback set-found-filter(FoundFilter);
     // Found hosts by their FoundView.index, -1 for none. Selecting one on the map selects its

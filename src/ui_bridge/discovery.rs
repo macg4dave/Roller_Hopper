@@ -1,4 +1,4 @@
-//! The discovery page: scanning one of this computer's subnets for real, and editing the hosts
+//! The discovery page: scanning the network the user types for real, and editing the hosts
 //! found and adding them to the map. The run's record is [`crate::model::Discovery`], the
 //! scanning [`crate::scan`]; [`super::view`] sends the run to the UI.
 
@@ -18,9 +18,10 @@ use crate::ui::{self, AppWindow, Bridge};
 const POLL: Duration = Duration::from_millis(200);
 
 impl AppState {
-    /// Starts recording a run of the subnet picked, unless one is busy: what to scan, and how.
+    /// Starts recording a run of the subnet typed, unless it is not one or a run is busy: what
+    /// to scan, and how.
     fn begin_discovery(&mut self) -> Option<(Ipv4Net, ScanOptions)> {
-        let target = self.discovery.next_target()?;
+        let target = self.discovery.next_target().ok()?;
         let options = self.discovery.options;
         self.discovery.start(target).then_some((target, options))
     }
@@ -97,11 +98,16 @@ fn filter_from_ui(filter: ui::FoundFilter) -> FoundFilter {
     }
 }
 
-/// The run's controls and options, the result filter, and the found hosts. The subnets to
-/// choose from are this computer's, read once here.
+/// The run's controls and options, the result filter, and the found hosts. The network box
+/// starts with this computer's own subnet, when one is found; after that it holds what the
+/// user types, and Rust never rewrites it.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
-    state.borrow_mut().discovery.targets = scan::local_subnets();
+    let own = scan::local_subnet()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    bridge.set_discovery_target_draft(own.as_str().into());
+    state.borrow_mut().discovery.target_text = own;
     let running = Rc::new(Running::default());
 
     let (start_ui, start_state, start_running) =
@@ -129,8 +135,8 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         stop(());
     });
 
-    bridge.on_set_discovery_target(handler(ui, state, |st, index| {
-        st.discovery.target = st.discovery.targets.get(convert::index(index)).copied();
+    bridge.on_set_discovery_target(handler(ui, state, |st, text: SharedString| {
+        st.discovery.target_text = text.into();
     }));
     let set_option = handler(ui, state, |st, (option, on)| {
         st.set_discovery_option(option, on);
@@ -265,7 +271,7 @@ mod tests {
 
     /// A run of the home network that every sample answer has reached.
     fn finished(state: &mut AppState) {
-        state.discovery.targets = vec![home()];
+        state.discovery.target_text = home().to_string();
         state.begin_discovery();
         let mut events = hosts(state);
         events.push(Event::Finished);
@@ -275,8 +281,10 @@ mod tests {
     #[test]
     fn a_run_takes_in_the_scan_and_counts_once_finished() {
         let mut state = AppState::new(mock_data::network());
-        assert_eq!(state.begin_discovery(), None, "nothing this computer is on");
-        state.discovery.targets = vec![home()];
+        assert_eq!(state.begin_discovery(), None, "nothing typed");
+        state.discovery.target_text = "192.168.1.0/8".into();
+        assert_eq!(state.begin_discovery(), None, "too wide to scan");
+        state.discovery.target_text = "192.168.1.0/24".into();
         let run = Some((home(), ScanOptions::default()));
         assert_eq!(state.begin_discovery(), run);
         assert_eq!(state.begin_discovery(), None, "a busy run is not restarted");
@@ -294,7 +302,7 @@ mod tests {
     #[test]
     fn stopping_counts_the_scan_failing_does_not_and_an_idle_stop_does_nothing() {
         let mut state = AppState::new(mock_data::network());
-        state.discovery.targets = vec![home()];
+        state.discovery.target_text = home().to_string();
         state.stop_discovery();
         assert_eq!(state.scans, 0);
         state.begin_discovery();

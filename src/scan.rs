@@ -10,7 +10,7 @@
 mod answer;
 mod subnets;
 
-pub(crate) use subnets::local_subnets;
+pub(crate) use subnets::local_subnet;
 
 use std::io;
 use std::sync::Arc;

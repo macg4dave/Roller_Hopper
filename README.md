@@ -1,7 +1,7 @@
 # Network Mapper
 
 A Rust + Slint desktop **UI prototype** of a local network mapper. The map shows in-memory
-sample data. The discovery page scans one of this computer's subnets for real with
+sample data. The discovery page scans the IPv4 subnet you type for real with
 [netscli-core](https://crates.io/crates/netscli-core): a ping sweep with the neighbour table and
 mDNS names, then TCP connects to common ports and reverse DNS. Found hosts can be added to the
 map, but nothing is saved yet. Settings → AI settings installs an AI
@@ -49,7 +49,7 @@ src/model/         pure data and logic (devices with their network cards, virtua
                    containers; the map's tree of network cards, roles, groups,
                    layout; the discovery run's record) — no Slint imports
 src/scan.rs        the real scan on its own Tokio threads, and in scan/ this computer's
-                   subnets and turning what a host answers into model data — no Slint imports
+                   subnet and turning what a host answers into model data — no Slint imports
 src/ai.rs          the AI models offered, pinned by revision and hash, where they are
                    installed, the user's own GGUF files, the prompt and sample; ai/ downloads
                    and checks them and runs the loaded one with mistral.rs (CPU or CUDA) — no

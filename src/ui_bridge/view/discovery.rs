@@ -7,31 +7,26 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use super::sync;
 use crate::model::{
-    Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase,
+    Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase, TargetError,
 };
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::{AppState, convert};
 
 pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let discovery = &state.discovery;
-    let subnets = &discovery.targets;
-    let names = subnets.iter().map(|s| SharedString::from(s.to_string()));
-    if let Some(model) = sync(&bridge.get_discovery_targets(), names.collect()) {
-        bridge.set_discovery_targets(model);
-    }
-    // While a run is busy, the subnet it scans, which the picker cannot change meanwhile.
+    let next = discovery.next_target();
+    // While a run is busy, the subnet it scans, whatever the box says meanwhile.
     let target = if discovery.busy() {
-        discovery.target
+        discovery.target()
     } else {
-        discovery.next_target()
+        next.ok()
     };
-    let target_index = target.and_then(|t| subnets.iter().position(|&s| s == t));
     let (swept, addresses) = discovery.progress();
     let count = |filter| int(discovery.count(filter));
     bridge.set_discovery(ui::DiscoveryView {
         phase: phase(discovery.phase()),
         target: target.map(|t| t.to_string()).unwrap_or_default().into(),
-        target_index: target_index.map_or(-1, int),
+        target_error: target_error(next.err()),
         port_scan: discovery.options.port_scan,
         service_detection: discovery.options.service_detection,
         swept: int(swept),
@@ -271,6 +266,15 @@ fn phase(phase: Phase) -> ui::DiscoveryPhase {
         Phase::Idle => ui::DiscoveryPhase::Idle,
         Phase::Running => ui::DiscoveryPhase::Running,
         Phase::Finished => ui::DiscoveryPhase::Finished,
+    }
+}
+
+fn target_error(error: Option<TargetError>) -> ui::TargetError {
+    match error {
+        None => ui::TargetError::None,
+        Some(TargetError::Empty) => ui::TargetError::Empty,
+        Some(TargetError::Invalid) => ui::TargetError::Invalid,
+        Some(TargetError::TooWide) => ui::TargetError::TooWide,
     }
 }
 
