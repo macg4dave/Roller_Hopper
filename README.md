@@ -21,6 +21,10 @@ The default build includes CUDA for running the AI on an NVIDIA graphics card. W
 first, and the CPU-only build, are in [docs/building.md](docs/building.md); what a computer
 needs to run a built copy is in [docs/installing.md](docs/installing.md).
 
+The models under `tools/a.i.testmodels/` are development assets, not interchangeable product
+choices: `Qwen2.5-0.5B-Instruct-GGUF` is the small CUDA smoke-test fixture, while the Qwen3 model
+under `Qwen3/` is the main application AI being qualified.
+
 ## Icons
 
 Device and role icons come from the `icons/` folder. Every SVG file in it can be picked in the

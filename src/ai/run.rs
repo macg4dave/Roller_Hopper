@@ -102,6 +102,7 @@ pub(crate) enum RunError {
     NoTokenizer,
     Broken,
     NoGpu,
+    InsufficientGpuMemory,
     TooLong { prompt_tokens: usize, limit: usize },
     Failed,
 }
@@ -223,6 +224,7 @@ impl From<engine::Error> for RunError {
             engine::Error::NoTokenizer => Self::NoTokenizer,
             engine::Error::Broken => Self::Broken,
             engine::Error::NoGpu => Self::NoGpu,
+            engine::Error::InsufficientGpuMemory => Self::InsufficientGpuMemory,
             engine::Error::TooLong {
                 prompt_tokens,
                 limit,

@@ -94,8 +94,10 @@ export component AiSettingsWindow inherits Window {
 
     property <bool> busy: state == ModelState.loading || state == ModelState.running;
     // Loaded and usable; a model that failed only on the GPU is not.
-    property <bool> loaded: loaded-name != "" && state != ModelState.no-gpu;
-    property <bool> cuda-on: gpu-built && use-gpu && state != ModelState.no-gpu;
+    property <bool> loaded: loaded-name != "" && state != ModelState.no-gpu
+        && state != ModelState.insufficient-gpu-memory;
+    property <bool> cuda-on: gpu-built && use-gpu && state != ModelState.no-gpu
+        && state != ModelState.insufficient-gpu-memory;
 
     pure function model-light-text() -> string {
         if state == ModelState.loading { return @tr("ai-settings.light-loading", loaded-name); }

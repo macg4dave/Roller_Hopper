@@ -22,6 +22,7 @@ pub(crate) enum Error {
     NoTokenizer,
     Broken,
     NoGpu,
+    InsufficientGpuMemory,
     TooLong {
         prompt_tokens: usize,
         limit: usize,
@@ -81,6 +82,7 @@ impl Model {
 
     fn load_gguf(path: &Path, gpu: bool) -> Result<Self, Error> {
         let mut file = File::open(path).map_err(|_| Error::Missing)?;
+        let file_bytes = file.metadata().map_err(|_| Error::Missing)?.len();
         let content = gguf_file::Content::read(&mut file).map_err(|_| Error::Broken)?;
         let architecture = metadata_string(&content, "general.architecture")?;
         let kind = Kind::of_gguf(&architecture).ok_or(Error::Unsupported)?;
@@ -93,6 +95,7 @@ impl Model {
         let declared =
             metadata_usize(&content, &format!("{architecture}.context_length")).unwrap_or(32_768);
         let parts = Parts::new(tokenizer, gpu, declared.min(kind.gguf_position_limit()))?;
+        parts.require_gpu_memory(file_bytes)?;
         let weights = Weights::gguf(kind, content, &mut file, &parts.device)?;
         Ok(parts.with(weights))
     }
@@ -227,6 +230,35 @@ impl Parts {
             context_limit: self.context_limit,
         }
     }
+
+    /// Leaves room beyond the on-disk quantised weights for CUDA kernels, temporary tensors
+    /// and the attention cache. Loading without that room can terminate the process inside the
+    /// NVIDIA driver before Candle can return an allocation error.
+    fn require_gpu_memory(&self, weight_bytes: u64) -> Result<(), Error> {
+        let Device::Cuda(device) = &self.device else {
+            return Ok(());
+        };
+        let (free, _) = device
+            .cuda_stream()
+            .context()
+            .mem_get_info()
+            .map_err(|_| Error::NoGpu)?;
+        enough_gpu_memory(weight_bytes, free)
+            .then_some(())
+            .ok_or(Error::InsufficientGpuMemory)
+    }
+}
+
+/// A quantised model needs temporary allocations and an attention cache in addition to its
+/// weights, while the Slint renderer shares the GPU. Keep at least 4.5 GiB or half the file
+/// free, whichever is larger; otherwise CUDA inference can starve the renderer and terminate
+/// the app.
+fn enough_gpu_memory(weight_bytes: u64, free_bytes: usize) -> bool {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let headroom = (8 * GIB / 2).max(weight_bytes / 2);
+    weight_bytes
+        .checked_add(headroom)
+        .is_some_and(|required| required <= free_bytes as u64)
 }
 
 fn pick_token(
@@ -309,4 +341,17 @@ fn metadata_usize(content: &gguf_file::Content, key: &str) -> Option<usize> {
         .get(key)
         .and_then(|value| value.to_u64().ok())
         .and_then(|n| usize::try_from(n).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::enough_gpu_memory;
+
+    #[test]
+    fn gpu_admission_keeps_runtime_headroom_beyond_quantised_weights() {
+        const GIB_U64: u64 = 1024 * 1024 * 1024;
+        const GIB_USIZE: usize = 1024 * 1024 * 1024;
+        assert!(!enough_gpu_memory(3 * GIB_U64, 7 * GIB_USIZE));
+        assert!(enough_gpu_memory(2 * GIB_U64, 7 * GIB_USIZE));
+    }
 }

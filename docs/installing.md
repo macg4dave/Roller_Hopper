@@ -25,11 +25,12 @@ model goes into `%APPDATA%\Network Mapper\models\`.
 
 | Model | Download and disk space |
 | --- | --- |
-| Qwen3-4B (the main choice) | 2.5 GB |
+| Qwen3-4B (the main application AI) | 2.5 GB |
 | Qwen3-0.6B | 0.6 GB |
 
 Memory needs are still being measured. Earlier tests needed about 2.3 GB of RAM for Qwen3-0.6B
-on the processor, and the larger model needs more.
+on the processor, and the larger model needs more. The repository's Qwen2.5 GGUF is only a CUDA
+smoke-test fixture; it is not the application AI offered to users.
 
 ## Running the AI on an NVIDIA graphics card
 

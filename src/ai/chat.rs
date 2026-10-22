@@ -7,8 +7,10 @@ use tokenizers::Tokenizer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Format {
-    /// Qwen2 and Qwen3.
-    ChatMl,
+    /// Qwen2 and Qwen3; only Qwen3 has the thinking markers.
+    ChatMl {
+        thinking: bool,
+    },
     Llama3,
     /// Gemma 3, which has no system turn, so the system text opens the user's turn.
     Gemma,
@@ -22,7 +24,9 @@ impl Format {
     pub(crate) fn of(tokenizer: &Tokenizer) -> Option<Self> {
         let has = |token: &str| tokenizer.token_to_id(token).is_some();
         if has("<|im_start|>") {
-            Some(Self::ChatMl)
+            Some(Self::ChatMl {
+                thinking: has("<think>") && has("</think>"),
+            })
         } else if has("<|start_header_id|>") {
             Some(Self::Llama3)
         } else if has("<start_of_turn>") {
@@ -48,10 +52,14 @@ impl Format {
             }
         };
         match self {
-            Self::ChatMl => format!(
+            Self::ChatMl { thinking } => format!(
                 "{}<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{}",
                 system_turn("<|im_start|>system\n", "<|im_end|>\n"),
-                if think { "<think>\n" } else { "" }
+                match (thinking, think) {
+                    (true, true) => "<think>\n",
+                    (true, false) => "<think>\n\n</think>\n\n",
+                    (false, _) => "",
+                }
             ),
             Self::Llama3 => format!(
                 "{}<|start_header_id|>user<|end_header_id|>\n\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
@@ -78,7 +86,7 @@ impl Format {
     /// The tokens that end the model's turn; those the tokenizer lacks are skipped.
     pub(crate) fn stop_tokens(self, tokenizer: &Tokenizer) -> Vec<u32> {
         let tokens: &[&str] = match self {
-            Self::ChatMl => &["<|im_end|>", "<|endoftext|>"],
+            Self::ChatMl { .. } => &["<|im_end|>", "<|endoftext|>"],
             Self::Llama3 => &["<|eot_id|>", "<|eom_id|>", "<|end_of_text|>"],
             Self::Gemma => &["<end_of_turn>", "<eos>"],
             Self::Phi3 => &["<|end|>", "<|endoftext|>"],
@@ -146,7 +154,14 @@ mod tests {
     #[test]
     fn each_family_is_known_by_its_turn_markers() {
         let cases = [
-            (vec!["<|im_start|>", "<|im_end|>"], Some(Format::ChatMl)),
+            (
+                vec!["<|im_start|>", "<|im_end|>"],
+                Some(Format::ChatMl { thinking: false }),
+            ),
+            (
+                vec!["<|im_start|>", "<|im_end|>", "<think>", "</think>"],
+                Some(Format::ChatMl { thinking: true }),
+            ),
             (
                 vec!["<|start_header_id|>", "<|eot_id|>"],
                 Some(Format::Llama3),
@@ -174,8 +189,16 @@ mod tests {
     #[test]
     fn each_prompt_ends_where_the_model_starts_its_answer() {
         assert_eq!(
-            Format::ChatMl.prompt("Be brief.", "Hi", true),
+            Format::ChatMl { thinking: true }.prompt("Be brief.", "Hi", true),
             "<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n<think>\n"
+        );
+        assert_eq!(
+            Format::ChatMl { thinking: true }.prompt("Be brief.", "Hi", false),
+            "<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        );
+        assert_eq!(
+            Format::ChatMl { thinking: false }.prompt("Be brief.", "Hi", true),
+            "<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n"
         );
         assert_eq!(
             Format::Llama3.prompt("", "Hi", true),
@@ -200,7 +223,12 @@ mod tests {
         let gemma = tokenizer(&["<start_of_turn>", "<end_of_turn>", "<eos>"]);
         assert_eq!(Format::Gemma.stop_tokens(&gemma).len(), 2);
         let partial = tokenizer(&["<|im_start|>", "<|im_end|>"]);
-        assert_eq!(Format::ChatMl.stop_tokens(&partial).len(), 1);
+        assert_eq!(
+            Format::ChatMl { thinking: false }
+                .stop_tokens(&partial)
+                .len(),
+            1
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 import { Card, Note } from "ai-text.slint";
 
 // The loaded model: none, on its way, ready, answering, or why it is not.
-export enum ModelState { none, loading, ready, running, no-model, missing, unsupported, no-tokenizer, broken, no-gpu, too-long, failed }
+export enum ModelState { none, loading, ready, running, no-model, missing, unsupported, no-tokenizer, broken, no-gpu, insufficient-gpu-memory, too-long, failed }
 
 // Choosing a model, starting and stopping it (Load and Unload), and whether it runs on the
 // graphics card.
@@ -30,7 +30,7 @@ export component AiModelPanel inherits VerticalLayout {
 
     property <bool> busy: state == ModelState.loading || state == ModelState.running;
     property <bool> picked-is-loaded: model-index >= 0 && models[model-index] == loaded-name
-        && state != ModelState.no-gpu;
+        && state != ModelState.no-gpu && state != ModelState.insufficient-gpu-memory;
 
     pure function state-text(state: ModelState) -> string {
         if state == ModelState.none { return @tr("ai-settings.state-none"); }
@@ -43,6 +43,7 @@ export component AiModelPanel inherits VerticalLayout {
         if state == ModelState.no-tokenizer { return @tr("ai-settings.state-no-tokenizer"); }
         if state == ModelState.broken { return @tr("ai-settings.state-broken"); }
         if state == ModelState.no-gpu { return @tr("ai-settings.state-no-gpu"); }
+        if state == ModelState.insufficient-gpu-memory { return @tr("ai-settings.state-insufficient-gpu-memory"); }
         if state == ModelState.too-long { return @tr("ai-settings.state-too-long"); }
         if state == ModelState.failed { return @tr("ai-settings.state-failed"); }
         return "";

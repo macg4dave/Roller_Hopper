@@ -274,8 +274,9 @@ Gaps the UI shows against the plan:
     Windows RDP PC, a Linux xrdp host and an unmistakable Brother printer; three of four
     replies were not valid JSON. With a worked example it copied the example's camera and
     invented evidence. Only "Unknown"/"Linux" OS values were right.
-- **The user's choice, to qualify next: Qwen3-4B Q4_K_M GGUF**, installed by Install AI
-  rather than bundled. Artifact: `Qwen/Qwen3-4B-GGUF` revision `bc64014`, 2,497,280,256
+- **The main application AI, to qualify next: Qwen3-4B Q4_K_M GGUF**, represented locally by
+  `tools/a.i.testmodels/Qwen3` and installed by Install AI rather than bundled. Artifact:
+  `Qwen/Qwen3-4B-GGUF` revision `bc64014`, 2,497,280,256
   bytes, SHA-256 `7485fe6f…fdf5`, Apache-2.0; tokenizer from `Qwen/Qwen3-4B` `1cfa9a7`
   (pinned in `src/ai.rs`). Install AI downloads and checks it on the user's PC.
 - **In the app (Candle 0.11 `quantized_qwen3`, greedy, thinking off, schema in the prompt,
@@ -285,8 +286,10 @@ Gaps the UI shows against the plan:
   the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
 - **Runtime now Candle 0.11**, shared by the app and evaluation tool: direct GGUF and
   Hugging Face safetensors loading with local tokenizers. Both formats now use one small,
-  synchronous inference path. The Windows CUDA build and Qwen2.5 GGUF/Safetensors load-and-generate
-  smoke tests pass; the identification timings above need re-measuring in the integrated path.
+  synchronous inference path. The Windows CUDA build and the
+  `tools/a.i.testmodels/Qwen2.5-0.5B-Instruct-GGUF` CUDA smoke test pass; this Qwen2.5 fixture
+  proves the CUDA inference path, not the choice or usefulness of the main Qwen3 AI. The
+  identification timings above need re-measuring in the integrated path.
 - Earlier alternatives (a replacement, never a second model):
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
     (MSRV 1.92; official ONNX Runtime builds can send telemetry by default) or tract 0.23.9
@@ -468,7 +471,7 @@ Live checks need user-approved targets.
 | BE-0008 | Turn the static trace (Findings) into a per-OS method matrix confirmed on each OS. Qualify only necessary supplementary crates: unprivileged ICMP on Linux/macOS, the macOS neighbour table and per-destination routes/source interface. Bring the macOS MAC gap to the user as a decision if no safe in-process route exists. | BE-0007 |
 | BE-0009 | Exercise incremental results, pause (the app withholds new host and ≤4,096-port calls; upstream has none), stop/close by dropping futures with task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
 | BE-0010 | Confirm the chosen rfd (`gtk3` on Linux) and atomic-write-file on each OS: a dialog parented to the Slint window opens and cancels without blocking the UI (approved GUI check), GTK3 runs in process alongside Slint's Linux backend, and the Unix mode/owner and macOS metadata survive a replace. Failed and locked replacements are tested in BE-0041. | — |
-| BE-0011 | Qualify one pretrained model with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify the user's choice, Qwen3-4B Q4_K_M (Findings), on the same cases on the CPU and with CUDA, recording its RAM and speed on the user's PC. | — |
+| BE-0011 | Qualify the main application AI with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify Qwen3-4B Q4_K_M (Findings) on the same cases on the CPU and with CUDA, recording its RAM and speed on the user's PC. The Qwen2.5 GGUF fixture is only for CUDA smoke testing. | — |
 | BE-0012 | Consolidate the qualified versions, features, assets and approvals; confirm each M-002 blocker in the backlog is resolved or still honestly open. | BE-0007, BE-0008, BE-0009, BE-0010, BE-0011 |
 
 Exit: every selected dependency has a compliant route. A successful build alone does not

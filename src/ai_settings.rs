@@ -268,11 +268,11 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
             show_answered(window, answered);
             window.set_state(ModelState::Ready);
         }
-        // Without a GPU the model stays chosen, so switching CUDA off loads it on the
-        // processor.
-        WorkerEvent::LoadFailed(RunError::NoGpu) => {
+        // When CUDA is unavailable or lacks room, the model stays chosen so switching it off
+        // loads the model on the processor.
+        WorkerEvent::LoadFailed(error @ (RunError::NoGpu | RunError::InsufficientGpuMemory)) => {
             window.set_loaded_format_index(-1);
-            window.set_state(ModelState::NoGpu);
+            window.set_state(state(error));
         }
         WorkerEvent::LoadFailed(e) => {
             window.set_loaded_name(SharedString::new());
@@ -297,6 +297,7 @@ fn state(error: RunError) -> ModelState {
         RunError::NoTokenizer => ModelState::NoTokenizer,
         RunError::Broken => ModelState::Broken,
         RunError::NoGpu => ModelState::NoGpu,
+        RunError::InsufficientGpuMemory => ModelState::InsufficientGpuMemory,
         RunError::TooLong { .. } => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,
     }

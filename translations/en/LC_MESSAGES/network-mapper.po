@@ -110,6 +110,9 @@ msgstr "Loaded on the processor and ready."
 msgid "ai-settings.state-no-gpu"
 msgstr "No usable NVIDIA graphics card was found. Switch off CUDA to load the model on the processor."
 
+msgid "ai-settings.state-insufficient-gpu-memory"
+msgstr "This model is too large for the graphics card's available memory. Switch off CUDA to load it on the processor, or choose a smaller model."
+
 msgid "ai-settings.state-running"
 msgstr "Answering… this can take a minute or more on the processor."
 

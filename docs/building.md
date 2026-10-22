@@ -26,7 +26,10 @@ cargo tool cuda build
 ```
 
 Candle's CUDA dependencies are cached in Cargo's normal target directory. The Windows CUDA build
-and local Qwen2.5 GGUF and Safetensors inference tests are qualified.
+and local inference smoke tests are qualified. The small
+`tools/a.i.testmodels/Qwen2.5-0.5B-Instruct-GGUF` model is specifically the CUDA smoke-test
+fixture; `tools/a.i.testmodels/Qwen3` holds the main application AI being qualified and must not
+be treated as the routine smoke fixture.
 
 | Need | Version | Notes |
 | --- | --- | --- |
@@ -37,8 +40,9 @@ and local Qwen2.5 GGUF and Safetensors inference tests are qualified.
 Restart the terminal or editor after installing so it sees the new environment variables.
 
 - **CUDA is covered by local smoke tests.** The ignored release tests load the repository's local
-  fixtures of every supported kind on device 0 and require each to generate output. AI tests
-  run only on the GPU.
+  fixtures on device 0 and require them to generate output. The Qwen2.5 GGUF fixture is the
+  small CUDA smoke model; Qwen3 is the main application AI and has separate qualification work.
+  AI tests run only on the GPU.
 
 ## The CPU-only build
 
