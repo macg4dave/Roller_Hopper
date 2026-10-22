@@ -11,7 +11,8 @@ use std::rc::Rc;
 use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
 use crate::ai::{
-    self, Answered, End, Generation, Job, MODELS, ModelFormat, RunError, Worker, WorkerEvent,
+    self, Answered, End, Generation, Job, MODELS, ModelFormat, Precision, RunError, Worker,
+    WorkerEvent,
 };
 use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
@@ -96,10 +97,10 @@ fn connect_worker(window: &AiSettingsWindow) {
     let (unloading, unloader) = (window.as_weak(), Rc::clone(&worker));
     window.on_unload(move || {
         if let Some(open) = unloading.upgrade() {
-            let gpu = open.get_use_gpu();
-            send(&open, &unloader, Job::Load { model: None, gpu });
+            send(&open, &unloader, Job::Unload);
         }
     });
+    connect_precision(window, Rc::clone(&worker));
     // The loaded model, if any, reloads on the other device.
     let (moving, mover) = (window.as_weak(), Rc::clone(&worker));
     window.on_set_gpu(move |gpu| {
@@ -127,6 +128,30 @@ fn connect_worker(window: &AiSettingsWindow) {
     });
 }
 
+/// A loaded safetensors model reloads when another precision is picked; a GGUF file keeps its
+/// own, and picking the same one again does nothing.
+fn connect_precision(window: &AiSettingsWindow, worker: Rc<Worker>) {
+    let choosing = window.as_weak();
+    let mut chosen = Precision::default();
+    window.on_select_precision(move || {
+        let Some(open) = choosing.upgrade() else {
+            return;
+        };
+        let precision = precision(&open);
+        if precision == chosen {
+            return;
+        }
+        chosen = precision;
+        let name = open.get_loaded_name();
+        let safetensors = !name.is_empty()
+            && file_named(&name)
+                .is_some_and(|model| ModelFormat::from_path(&model) == ModelFormat::Safetensors);
+        if safetensors {
+            load(&open, &worker, &name, open.get_use_gpu());
+        }
+    });
+}
+
 /// Asks the worker to load the model listed as `name`, on the GPU or the CPU.
 fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
     let Some(model) = file_named(name) else {
@@ -141,10 +166,19 @@ fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
         window,
         worker,
         Job::Load {
-            model: Some(model),
+            model,
             gpu,
+            precision: precision(window),
         },
     );
+}
+
+fn precision(window: &AiSettingsWindow) -> Precision {
+    match window.get_safetensors_precision() {
+        1 => Precision::F16,
+        2 => Precision::Bf16,
+        _ => Precision::F32,
+    }
 }
 
 fn restore_texts(window: &AiSettingsWindow) {
@@ -161,9 +195,8 @@ fn show_evidence(window: &AiSettingsWindow, index: i32) {
 }
 
 fn restore_generation(window: &AiSettingsWindow) {
-    let defaults = generation::to_ui(&Generation::default());
-    window.set_gguf_generation(defaults);
-    window.set_safetensors_generation(defaults);
+    restore_generation_profile(window, 0);
+    restore_generation_profile(window, 1);
 }
 
 fn restore_generation_profile(window: &AiSettingsWindow, index: i32) {
@@ -260,6 +293,8 @@ fn state(error: RunError) -> ModelState {
     match error {
         RunError::NoModel => ModelState::NoModel,
         RunError::Missing => ModelState::Missing,
+        RunError::Unsupported => ModelState::Unsupported,
+        RunError::NoTokenizer => ModelState::NoTokenizer,
         RunError::Broken => ModelState::Broken,
         RunError::NoGpu => ModelState::NoGpu,
         RunError::TooLong { .. } => ModelState::TooLong,

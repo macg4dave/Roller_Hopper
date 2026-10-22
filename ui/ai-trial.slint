@@ -1,4 +1,4 @@
-import { Button, ComboBox, ProgressIndicator, TextEdit } from "std-widgets.slint";
+import { Button, ComboBox, ProgressIndicator, ScrollView, TextEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Note, SectionTitle } from "ai-text.slint";
 
@@ -106,11 +106,45 @@ export component AiTrial inherits VerticalLayout {
 
     SectionTitle { text: @tr("ai-settings.output"); }
     if running: ProgressIndicator { indeterminate: true; }
-    TextEdit {
-        text: root.output;
-        read-only: true;
-        wrap: word-wrap;
+    // Not a TextEdit, whose view jumps back to its cursor each time the answer grows. This
+    // stays where the user scrolled it, following the answer's end while scrolled to the
+    // bottom; the text can still be selected and copied.
+    Rectangle {
         vertical-stretch: 3;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+        border-radius: Theme.radius;
+
+        output-view := ScrollView {
+            property <bool> follow: true;
+
+            x: Theme.space-s;
+            width: parent.width - 2 * Theme.space-s;
+            scrolled => {
+                self.follow = self.content-y <= self.visible-height - self.content-height + 1px;
+            }
+
+            VerticalLayout {
+                width: output-view.visible-width;
+                padding-top: Theme.space-xs;
+                padding-bottom: Theme.space-xs;
+                TextInput {
+                    text: root.output;
+                    read-only: true;
+                    single-line: false;
+                    wrap: word-wrap;
+                    color: Theme.text;
+                    changed text => {
+                        if self.text == "" {
+                            output-view.follow = true;
+                        } else if output-view.follow {
+                            output-view.content-y = min(0px, output-view.visible-height - output-view.content-height);
+                        }
+                    }
+                }
+            }
+        }
     }
     if answer-end != AnswerEnd.none && !running: Note {
         text: @tr("ai-settings.answer-stats" | "ai-settings.answer-stats.plural" % answer-tokens, tenths(answer-seconds), tenths(answer-seconds > 0 ? answer-tokens / answer-seconds : 0));

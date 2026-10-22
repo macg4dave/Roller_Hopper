@@ -1,4 +1,4 @@
-import { Button, Slider, SpinBox, Switch, TabWidget } from "std-widgets.slint";
+import { Button, ComboBox, Slider, SpinBox, Switch } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Note, SectionTitle } from "ai-text.slint";
 
@@ -79,6 +79,7 @@ component NumberSetting inherits VerticalLayout {
     Note { text: root.explanation; }
 }
 
+// The settings every model format supports, after any the format adds of its own.
 component GenerationSettingsPanel inherits VerticalLayout {
     in-out property <GenerationSettings> settings;
     // The most tokens a prompt and its answer may hold together.
@@ -90,6 +91,7 @@ component GenerationSettingsPanel inherits VerticalLayout {
 
     spacing: Theme.space-m;
 
+    @children
     SliderSetting {
         text: @tr("ai-settings.temperature");
         explanation: @tr("ai-settings.temperature-explained");
@@ -171,33 +173,76 @@ export component GenerationPanel inherits VerticalLayout {
     in-out property <GenerationSettings> gguf-settings;
     in-out property <GenerationSettings> safetensors-settings;
     in-out property <int> tab-index;
+    // The loaded model's format (0 GGUF, 1 safetensors), or -1 with none loaded.
+    in property <int> loaded-format-index;
+    // How a safetensors model's weights load: 0 F32, 1 F16, 2 BF16.
+    in-out property <int> precision;
     in property <int> max-context-tokens;
     in property <bool> enabled;
 
     callback restore-defaults(int);
+    callback select-precision();
 
     spacing: Theme.space-m;
 
     SectionTitle { text: @tr("ai-settings.generation"); }
-    tabs := TabWidget {
-        current-index <=> root.tab-index;
-        Tab {
-            title: @tr("ai-settings.generation-gguf");
-            GenerationSettingsPanel {
-                settings <=> root.gguf-settings;
-                max-context-tokens: root.max-context-tokens;
-                enabled: root.enabled;
-                restore-defaults => { root.restore-defaults(0); }
-            }
+    // A button per format rather than a TabWidget, whose tabs cannot be disabled: while a
+    // model is loaded, only its own format's settings can be opened.
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space-xs;
+        Button {
+            text: @tr("ai-settings.generation-gguf");
+            checked: root.tab-index == 0;
+            enabled: root.loaded-format-index != 1;
+            clicked => { root.tab-index = 0; }
         }
-        Tab {
-            title: @tr("ai-settings.generation-safetensors");
-            GenerationSettingsPanel {
-                settings <=> root.safetensors-settings;
-                max-context-tokens: root.max-context-tokens;
-                enabled: root.enabled;
-                restore-defaults => { root.restore-defaults(1); }
+        Button {
+            text: @tr("ai-settings.generation-safetensors");
+            checked: root.tab-index == 1;
+            enabled: root.loaded-format-index != 0;
+            clicked => { root.tab-index = 1; }
+        }
+    }
+    if root.tab-index == 0: GenerationSettingsPanel {
+        settings <=> root.gguf-settings;
+        max-context-tokens: root.max-context-tokens;
+        enabled: root.enabled;
+        restore-defaults => { root.restore-defaults(0); }
+    }
+    if root.tab-index == 1: GenerationSettingsPanel {
+        settings <=> root.safetensors-settings;
+        max-context-tokens: root.max-context-tokens;
+        enabled: root.enabled;
+        restore-defaults => {
+            root.restore-defaults(1);
+            root.precision = 0;
+            root.select-precision();
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            HorizontalLayout {
+                spacing: Theme.space-s;
+                Text {
+                    text: @tr("ai-settings.precision");
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                ComboBox {
+                    width: 130px;
+                    model: [
+                        @tr("ai-settings.precision-full"),
+                        @tr("ai-settings.precision-half"),
+                        @tr("ai-settings.precision-brain"),
+                    ];
+                    current-index <=> root.precision;
+                    enabled: root.enabled;
+                    selected => { root.select-precision(); }
+                }
             }
+            Note { text: @tr("ai-settings.precision-explained"); }
         }
     }
 }

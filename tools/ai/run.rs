@@ -5,6 +5,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use candle_core::DType;
 use candle_transformers::generation::Sampling;
 use serde_json::{Value, json};
 
@@ -47,7 +48,7 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
             .unwrap_or_else(|| folder.join("cases.json")),
     )?;
     let started = Instant::now();
-    let mut model = Model::load(&args.model, false).map_err(engine_error)?;
+    let mut model = Model::load(&args.model, false, DType::F32).map_err(engine_error)?;
     writeln!(
         io::stderr().lock(),
         "model loaded in {:.1}s",

@@ -18,7 +18,6 @@ Each guide is short. Read the ones your task touches **before** editing; when un
 | --- | --- |
 | [docs/agents/workflow.md](docs/agents/workflow.md) | Always — delete → combine → add, planning from the roadmap and backlog, agent conduct |
 | [docs/agents/collaboration.md](docs/agents/collaboration.md) | Always — working alongside other agents (Claude, Codex) |
-| [docs/agents/product.md](docs/agents/product.md) | Any feature or UI work — product brief, scope limits, definition of done |
 | [docs/agents/rust.md](docs/agents/rust.md) | Writing or reviewing Rust code, build scripts or dependencies |
 | [docs/agents/slint.md](docs/agents/slint.md) | UI, UI text or translation work, or code that connects the model to the UI |
 

@@ -37,7 +37,8 @@ and local Qwen2.5 GGUF and Safetensors inference tests are qualified.
 Restart the terminal or editor after installing so it sees the new environment variables.
 
 - **CUDA is covered by local smoke tests.** The ignored release tests load the repository's local
-  Qwen2.5 GGUF and Safetensors fixtures on device 0 and require each to generate output.
+  fixtures of every supported kind on device 0 and require each to generate output. AI tests
+  run only on the GPU.
 
 ## The CPU-only build
 

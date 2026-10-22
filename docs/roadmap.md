@@ -89,10 +89,11 @@ Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
   data only". Settings holds a pointer to the View menu and opens the AI settings window:
-  install Qwen3-4B, LFM2-700M, Qwen3-0.6B or SmolLM2-135M, or list the user's own GGUF files and
-  safetensors folders from the models folder; Load or Unload one with Candle (CPU, or GPU in a `cuda` build, with a
+  install Qwen3-4B or Qwen3-0.6B, or list the user's own GGUF files and safetensors folders
+  (Qwen2, Qwen3, Llama 3, Gemma 3, Phi-3 or GLM-4) from the models folder; Load or Unload one with Candle (CPU, or GPU in a `cuda` build, with a
   CUDA light), and Run it on
-  an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings. The
+  an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings, a tab
+  each for GGUF and safetensors (which adds the load precision). The
   settings and edited texts are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
 - The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
@@ -287,7 +288,6 @@ Gaps the UI shows against the plan:
   synchronous inference path. The Windows CUDA build and Qwen2.5 GGUF/Safetensors load-and-generate
   smoke tests pass; the identification timings above need re-measuring in the integrated path.
 - Earlier alternatives (a replacement, never a second model):
-  - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
     (MSRV 1.92; official ONNX Runtime builds can send telemetry by default) or tract 0.23.9
     (operator support depends on the model).

@@ -4,15 +4,17 @@
 //! models folder themselves can be loaded too; every model supplies its own tokenizer in its GGUF
 //! metadata or beside its safetensors.
 
+mod chat;
 mod engine;
 mod generation;
 mod install;
 mod run;
 mod samples;
+mod weights;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
 pub(crate) use install::{InstallError, install};
-pub(crate) use run::{Answered, End, Job, ModelFormat, RunError, Worker, WorkerEvent};
+pub(crate) use run::{Answered, End, Job, ModelFormat, Precision, RunError, Worker, WorkerEvent};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -93,55 +95,6 @@ pub(crate) const MODELS: &[Model] = &[
             sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
         }],
     },
-    // Safetensors at full bf16 precision. Liquid AI built it for on-device data extraction;
-    // its kind runs only from safetensors here. LFM Open License v1.0, in its LICENSE file.
-    Model {
-        name: "LFM2-700M",
-        folder: "lfm2-700m",
-        source: "https://huggingface.co/LiquidAI/LFM2-700M/resolve/86f49fc9a3800c3a325b7320bde179c318062583/",
-        files: &[
-            ModelFile {
-                name: "model.safetensors",
-                size: 1_484_995_328,
-                sha256: "a7b52669217ecb538740187f41ce2a5802afa1c8d81d8d153b847bbd21d1bdda",
-            },
-            ModelFile {
-                name: "config.json",
-                size: 1000,
-                sha256: "2e12f44e97f35b0362ea4f3583db141e8e8cd4adaf4be6614d22682d58693d29",
-            },
-            ModelFile {
-                name: "generation_config.json",
-                size: 137,
-                sha256: "0f678f07a00ae4bdeb2b2bd5f37988a4b33a87686d9103fefe08de7a46522373",
-            },
-            ModelFile {
-                name: "tokenizer.json",
-                size: 4_732_426,
-                sha256: "98cff83b4f6d7e9d8929bebc62b07e92cf1b3f99c80d16bafe8b84a75448f40b",
-            },
-            ModelFile {
-                name: "tokenizer_config.json",
-                size: 91_565,
-                sha256: "63ced8ee8627fa4b0638c4c057351f00fb4e332ca2327a9a00eecc5978e84835",
-            },
-            ModelFile {
-                name: "special_tokens_map.json",
-                size: 434,
-                sha256: "742aefe2b7dec496e8caffdba03a75d0c1a9925d53bd3f3e0d388c96b591b6f4",
-            },
-            ModelFile {
-                name: "chat_template.jinja",
-                size: 3099,
-                sha256: "5504d163d879bfb6fd4135b7fa3d56768b2e69dd718338f7b146750289f46ab0",
-            },
-            ModelFile {
-                name: "LICENSE",
-                size: 10_596,
-                sha256: "5188f2b355da20647257a3156db5834c794e5fb5e6d8dc4d4cdbb3180e75b85b",
-            },
-        ],
-    },
     // Smaller and faster, but weaker at identification (roadmap Findings).
     Model {
         name: "Qwen3-0.6B",
@@ -151,17 +104,6 @@ pub(crate) const MODELS: &[Model] = &[
             name: "Qwen3-0.6B-Q8_0.gguf",
             size: 639_446_688,
             sha256: "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
-        }],
-    },
-    // A tiny download for slow lines or small PCs; weaker again than Qwen3-0.6B.
-    Model {
-        name: "SmolLM2-135M",
-        folder: "smollm2-135m-instruct-q8_0",
-        source: "https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/",
-        files: &[ModelFile {
-            name: "SmolLM2-135M-Instruct-Q8_0.gguf",
-            size: 144_811_360,
-            sha256: "5a1395716f7913741cc51d98581b9b1228d80987a9f7d3664106742eb06bba83",
         }],
     },
 ];
@@ -342,20 +284,16 @@ mod tests {
             Choice::Offered(model).file(dir),
             dir.join("qwen3-4b-q4_k_m").join("Qwen3-4B-Q4_K_M.gguf")
         );
-        // A safetensors model loads from its folder.
-        let lfm2 = MODELS.iter().find(|m| m.name == "LFM2-700M").unwrap();
-        assert_eq!(Choice::Offered(lfm2).file(dir), dir.join("lfm2-700m"));
     }
 
     #[test]
-    fn an_offered_safetensors_folder_is_not_listed_again_as_the_users_own() {
+    fn an_offered_models_folder_is_not_listed_as_the_users_own_safetensors() {
         let dir =
             std::env::temp_dir().join(format!("network-mapper-offered-{}", std::process::id()));
         fs::remove_dir_all(&dir).ok();
-        let lfm2 = MODELS.iter().find(|m| m.name == "LFM2-700M").unwrap();
-        let folder = lfm2.path(&dir);
+        let folder = MODELS.first().unwrap().path(&dir);
         fs::create_dir_all(&folder).unwrap();
-        // A partial download: laid out like a model, but not every file at full size.
+        // Laid out like a safetensors model, but it is the offered model's own folder.
         fs::write(folder.join("config.json"), "{}").unwrap();
         fs::write(folder.join("model.safetensors"), "").unwrap();
         assert!(installed(&dir).is_empty());

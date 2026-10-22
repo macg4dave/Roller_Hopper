@@ -54,6 +54,7 @@ export component AiSettingsWindow inherits Window {
     in-out property <GenerationSettings> gguf-generation;
     in-out property <GenerationSettings> safetensors-generation;
     in-out property <int> generation-tab-index: 0;
+    in-out property <int> safetensors-precision: 0;
     in property <int> loaded-format-index: -1;
     in property <int> max-context-tokens;
     // The last answer: its length in tokens, how long it took and how it ended, with its
@@ -74,6 +75,8 @@ export component AiSettingsWindow inherits Window {
     // Ends the answer being written, keeping what it has so far.
     callback stop();
     callback restore-generation(int);
+    // Reloads a loaded safetensors model in the precision picked.
+    callback select-precision();
     // Puts back the default prompt and sample evidence.
     callback restore-texts();
     callback select-evidence(int);
@@ -201,9 +204,12 @@ export component AiSettingsWindow inherits Window {
                             gguf-settings <=> root.gguf-generation;
                             safetensors-settings <=> root.safetensors-generation;
                             tab-index <=> root.generation-tab-index;
+                            loaded-format-index: root.loaded-format-index;
+                            precision <=> root.safetensors-precision;
                             max-context-tokens: root.max-context-tokens;
                             enabled: state != ModelState.running;
                             restore-defaults(index) => { root.restore-generation(index); }
+                            select-precision => { root.select-precision(); }
                         }
                     }
 

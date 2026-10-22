@@ -78,12 +78,13 @@ built around them.
   change testable logic.
 - Test behaviour, not implementation details. No tests that only restate a constant.
 - A bug fix comes with a test that fails without the fix, where the logic is testable.
-- **AI checks use the local smoke model.** The ignored inference tests load the
-  Qwen2.5-0.5B-Instruct GGUF and safetensors fixtures under `tools/a.i.testmodels/` and only
-  prove that each format loads and produces output; they do not measure accuracy, usefulness
-  or speed. Run them in release mode with
-  `cargo test --release -- --ignored local_`. CUDA is a default feature; for a CPU-only smoke
-  check, add `--no-default-features`.
+- **AI checks use the local smoke models.** The ignored inference tests load the fixtures
+  under `tools/a.i.testmodels/` (Qwen2.5 in both formats, Llama 3.2, Gemma 3 in both formats,
+  and tiny random-weight Phi-3 and GLM-4 models) and only prove that each kind loads, answers,
+  and answers the same twice; they do not measure accuracy, usefulness or speed. Run them in
+  release mode with `cargo test --release -- --ignored local_`.
+- **AI tests run only on the GPU.** Every inference test loads its model with CUDA; MUST NOT
+  write or run an AI test on the CPU, including through `--no-default-features`.
 - **CUDA is the normal build.** Keep the default CUDA feature enabled for ordinary builds, runs,
   tests and gates. Candle's CUDA dependencies use Cargo's normal target directory. A CPU-only check
   is useful for diagnosis but does not qualify the normal app.

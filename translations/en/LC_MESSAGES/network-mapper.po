@@ -53,7 +53,7 @@ msgstr "No model installed yet. Install one below, or add your own GGUF file or 
 
 # {0} is the models folder.
 msgid "ai-settings.own-models"
-msgstr "To use a model of your own, put its GGUF file in {0}, or in a folder of its own there, and refresh the list. A Hugging Face model folder (config.json, tokenizer files and safetensors weights) can go there too. GGUF runs Llama, Mistral, Phi, Starcoder2 and Qwen text models; safetensors also runs others, such as Gemma and LFM2, but is usually larger and needs more memory."
+msgstr "To use a model of your own, put its GGUF file in {0}, or in a folder of its own there, and refresh the list. A Hugging Face model folder (config.json, tokenizer files and safetensors weights) can go there too. The app runs Qwen2, Qwen3, Llama 3, Gemma 3, Phi-3 and GLM-4 text models in either form; safetensors is usually larger and needs more memory. A Gemma 3 or Phi-3 GGUF file also needs the model's tokenizer.json beside it."
 
 # Starts the chosen model: reads it into memory.
 msgid "ai-settings.load"
@@ -119,8 +119,14 @@ msgstr "Load a model before running it."
 msgid "ai-settings.state-missing"
 msgstr "This model's files are missing. Install it again, or put its file back in the models folder."
 
+msgid "ai-settings.state-unsupported"
+msgstr "This model is of a kind the app cannot run. It runs Qwen2, Qwen3, Llama 3, Gemma 3, Phi-3 and GLM-4 text models."
+
+msgid "ai-settings.state-no-tokenizer"
+msgstr "The app cannot read this GGUF file's tokenizer. Put the model's tokenizer.json, from its Hugging Face page, in the same folder and load it again."
+
 msgid "ai-settings.state-broken"
-msgstr "This model could not be loaded: its file is damaged or of a kind the app cannot run. Install it again, or use another file."
+msgstr "This model could not be loaded: its files are damaged or incomplete. Install it again, or use another file."
 
 msgid "ai-settings.state-too-long"
 msgstr "The prompt and evidence are too long for the context limit or the model. Shorten them, or raise the context limit, and run again."
@@ -209,6 +215,21 @@ msgstr "GGUF"
 
 msgid "ai-settings.generation-safetensors"
 msgstr "Safetensors"
+
+msgid "ai-settings.precision"
+msgstr "Precision"
+
+msgid "ai-settings.precision-explained"
+msgstr "How the model's weights are held once loaded. F32 is the most exact; F16 and BF16 use about half the memory and are faster on a GPU. Changing it reloads the model."
+
+msgid "ai-settings.precision-full"
+msgstr "F32"
+
+msgid "ai-settings.precision-half"
+msgstr "F16"
+
+msgid "ai-settings.precision-brain"
+msgstr "BF16"
 
 msgid "ai-settings.temperature"
 msgstr "Temperature"

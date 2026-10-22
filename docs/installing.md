@@ -27,7 +27,6 @@ model goes into `%APPDATA%\Network Mapper\models\`.
 | --- | --- |
 | Qwen3-4B (the main choice) | 2.5 GB |
 | Qwen3-0.6B | 0.6 GB |
-| SmolLM2-135M | 0.15 GB |
 
 Memory needs are still being measured. Earlier tests needed about 2.3 GB of RAM for Qwen3-0.6B
 on the processor, and the larger model needs more.
