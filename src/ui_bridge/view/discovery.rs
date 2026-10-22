@@ -7,7 +7,8 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use super::sync;
 use crate::model::{
-    Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase, TargetError,
+    Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase, PortList,
+    TargetError,
 };
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::{AppState, convert};
@@ -23,12 +24,18 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     };
     let (swept, addresses) = discovery.progress();
     let count = |filter| int(discovery.count(filter));
+    let options = discovery.options;
     bridge.set_discovery(ui::DiscoveryView {
         phase: phase(discovery.phase()),
         target: target.map(|t| t.to_string()).unwrap_or_default().into(),
         target_error: target_error(next.err()),
-        port_scan: discovery.options.port_scan,
-        service_detection: discovery.options.service_detection,
+        port_scan: options.port_scan,
+        deep_ports: options.ports == PortList::Deep,
+        service_detection: options.service_detection,
+        mdns_services: options.mdns_services,
+        device_type: options.device_type,
+        os_family: options.os_family,
+        card_vendor: options.card_vendor,
         swept: int(swept),
         addresses: int(addresses),
         seconds: seconds(discovery.elapsed()),
@@ -135,6 +142,7 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         .find(|c| c.address.is_some_and(|a| a.addr() == found.ip));
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let methods: Vec<_> = found.methods.iter().map(|&m| method(m)).collect();
+    let (os_family, os_detail) = convert::os(device);
     ui::FoundView {
         index: int(index),
         card_index: -1,
@@ -159,6 +167,10 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
             .unwrap_or_default()
             .into(),
         methods: ModelRc::new(VecModel::from(methods)),
+        os_family,
+        os_detail,
+        os_clues: ModelRc::new(VecModel::from(convert::os_clues(device))),
+        mdns_services: convert::mdns_services(device),
         unidentified: found.unidentified(),
         finding: finding(found.finding),
         duplicate_of: text(duplicate_of),
@@ -197,6 +209,7 @@ fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::Fo
         mask: convert::mask(card),
         gateway: convert::gateway(card),
         mac: convert::mac(card),
+        vendor: convert::vendor(card),
         services: card.services.to_string().into(),
         ..row.clone()
     });

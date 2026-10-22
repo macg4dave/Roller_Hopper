@@ -1,5 +1,5 @@
 import { Button, ScrollView } from "std-widgets.slint";
-import { Bridge, GuestKind } from "bridge.slint";
+import { Bridge, GuestKind, OsFamily } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
@@ -132,6 +132,7 @@ export component DetailsPanel inherits Rectangle {
                 if Bridge.card.mask != "": DetailField { label: @tr("details.mask"); value: Bridge.card.mask; }
                 if Bridge.card.gateway != "": DetailField { label: @tr("details.gateway"); value: Bridge.card.gateway; }
                 if Bridge.card.mac != "": DetailField { label: @tr("details.mac"); value: Bridge.card.mac; }
+                if Bridge.card.vendor != "": DetailField { label: @tr("details.card-vendor"); value: Bridge.card.vendor; }
                 DetailField {
                     label: @tr("details.plugged-into");
                     value: Labels.plugged-into(Bridge.card.via-name, Bridge.card.via-card, Bridge.card.via-index, Bridge.card.inferred);
@@ -164,6 +165,11 @@ export component DetailsPanel inherits Rectangle {
                 if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
                 if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }
                 if Bridge.details.hostname != "": DetailField { label: @tr("details.hostname"); value: Bridge.details.hostname; }
+                if Bridge.details.os-family != OsFamily.unknown: DetailField {
+                    label: @tr("details.os");
+                    value: Labels.os(Bridge.details.os-family, Bridge.details.os-detail);
+                }
+                if Bridge.details.mdns-services != "": DetailField { label: @tr("details.mdns-services"); value: Bridge.details.mdns-services; }
                 DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
                 if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
             }

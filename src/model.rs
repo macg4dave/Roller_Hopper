@@ -7,6 +7,7 @@ mod discovery;
 mod groups;
 mod layout;
 mod network;
+mod os;
 mod roles;
 mod services;
 mod snap;
@@ -18,10 +19,11 @@ pub(crate) use device::{
 };
 pub(crate) use discovery::{
     Answer, Decision, Discovery, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent,
-    Phase, ScanOptions, TargetError,
+    Phase, PortList, ScanOptions, TargetError,
 };
 pub(crate) use groups::{GroupColour, GroupId, LineStyle};
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};
 pub(crate) use network::{CardLink, Connection, ConnectionKind, Network, StatusFilter};
+pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use services::Services;
 pub(crate) use snap::{Snap, snap_target};

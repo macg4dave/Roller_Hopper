@@ -9,7 +9,7 @@ use slint::SharedString;
 use super::icons::Icons;
 use crate::model::{
     CardId, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle, Network,
-    NetworkCard, Point, Role, Snap, Status, StatusFilter,
+    NetworkCard, OsClue, OsFamily, Point, Role, Snap, Status, StatusFilter,
 };
 use crate::ui::{self, Labels};
 
@@ -59,6 +59,47 @@ pub(super) fn mask(card: &NetworkCard) -> SharedString {
 pub(super) fn gateway(card: &NetworkCard) -> SharedString {
     let gateway = card.gateway.map(|g| g.to_string());
     gateway.unwrap_or_default().into()
+}
+
+/// Who made the card; empty when unknown.
+pub(super) fn vendor(card: &NetworkCard) -> SharedString {
+    card.vendor.as_deref().unwrap_or_default().into()
+}
+
+/// The device's operating system family as guessed, and its detail (empty when none).
+pub(super) fn os(device: &Device) -> (ui::OsFamily, SharedString) {
+    let Some(os) = &device.os else {
+        return (ui::OsFamily::Unknown, SharedString::new());
+    };
+    let family = match os.family {
+        OsFamily::Windows => ui::OsFamily::Windows,
+        OsFamily::MacOs => ui::OsFamily::Macos,
+        OsFamily::Linux => ui::OsFamily::Linux,
+        OsFamily::Ios => ui::OsFamily::Ios,
+        OsFamily::Network => ui::OsFamily::Network,
+    };
+    (family, os.detail.as_deref().unwrap_or_default().into())
+}
+
+/// The clues behind the device's OS guess, strongest first.
+pub(super) fn os_clues(device: &Device) -> Vec<ui::OsClueView> {
+    let clues = device.os.iter().flat_map(|os| &os.clues);
+    let view = |kind, ttl| ui::OsClueView { kind, ttl };
+    clues
+        .map(|clue| match *clue {
+            OsClue::DeviceModel => view(ui::OsClueKind::DeviceModel, 0),
+            OsClue::AppleSyncPort => view(ui::OsClueKind::AppleSyncPort, 0),
+            OsClue::SshBanner => view(ui::OsClueKind::SshBanner, 0),
+            OsClue::ServerHeader => view(ui::OsClueKind::ServerHeader, 0),
+            OsClue::WindowsPorts => view(ui::OsClueKind::WindowsPorts, 0),
+            OsClue::Ttl(ttl) => view(ui::OsClueKind::Ttl, i32::from(ttl)),
+        })
+        .collect()
+}
+
+/// The mDNS service types the device announced, as one line such as `http, ipp`.
+pub(super) fn mdns_services(device: &Device) -> SharedString {
+    device.mdns_services.join(", ").into()
 }
 
 /// The MAC address as shown; empty when there is none.
@@ -254,6 +295,7 @@ pub(super) fn details(
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let host = device.guest.and_then(|guest| network.device(guest.host));
+    let (os_family, os_detail) = os(device);
     ui::DeviceDetails {
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
@@ -269,6 +311,9 @@ pub(super) fn details(
         manufacturer: text(device.manufacturer.as_deref()),
         model: text(device.model.as_deref()),
         hostname: text(device.hostname.as_deref()),
+        os_family,
+        os_detail,
+        mdns_services: mdns_services(device),
         last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
     }
 }

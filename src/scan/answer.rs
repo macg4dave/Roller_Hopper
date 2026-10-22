@@ -1,20 +1,24 @@
 //! Turns what the scan found out about a host into an [`Answer`]: the device it looks like and
-//! how it was found. Names and port descriptions come from the host or the network, so they are
-//! untrusted text: one with control characters is dropped and the rest are bounded.
+//! how it was found, with only what the scan's options asked for. Names, models and port
+//! descriptions come from the host or the network, so they are untrusted text: one with control
+//! characters is dropped and the rest are bounded.
 
 use std::net::IpAddr;
 
 use ipnet::Ipv4Net;
-use netscli_core::{FoundBy, Host, NameSource, PortResult};
+use netscli_core::{FoundBy, Host, MdnsService, NameSource, PortResult};
 
+use super::identify::{self, Evidence};
+use super::mdns;
+use super::ports::PortNames;
 use crate::model::{
-    Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard, Services,
-    Status,
+    Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
+    ScanOptions, Services, Status,
 };
 
 /// The longest name kept, a DNS name's limit.
 const MAX_NAME: usize = 253;
-/// The longest port description kept, such as a product and its version.
+/// The longest description kept: a product and its version, a model, a maker.
 const MAX_DESCRIPTION: usize = 60;
 
 /// One host as the sweep found it, and what probing it found out.
@@ -24,54 +28,97 @@ pub(super) struct Probed {
     pub(super) reverse_name: Option<String>,
     /// Its TCP ports probed, open or not.
     pub(super) ports: Vec<PortResult>,
+    /// The time-to-live of its ping reply, when the OS family was asked for.
+    pub(super) ttl: Option<u8>,
+    /// What it announced over mDNS.
+    pub(super) mdns: Vec<MdnsService>,
 }
 
-/// The answer `probed` gives a scan of `subnet`: a device of unknown kind with one card, at its
-/// address on the subnet. Without `identify` (service detection) its name and the software on
-/// its ports are left out. `None` for a host that is not an IPv4 address on the subnet.
-pub(super) fn answer(probed: Probed, subnet: Ipv4Net, identify: bool) -> Option<Answer> {
-    let Probed {
-        host,
-        reverse_name,
-        ports,
-    } = probed;
-    let IpAddr::V4(ip) = host.ip else {
+/// The answer `probed` gives a scan of `subnet` with `options`: a device with one card, at its
+/// address on the subnet. Open ports nothing else names take IANA's `names`. `None` for a host
+/// that is not an IPv4 address on the subnet.
+pub(super) fn answer(
+    probed: &Probed,
+    subnet: Ipv4Net,
+    options: ScanOptions,
+    names: &PortNames,
+) -> Option<Answer> {
+    let IpAddr::V4(ip) = probed.host.ip else {
         return None;
     };
     if !subnet.contains(&ip) {
         return None;
     }
+    let host = &probed.host;
+    let detect = options.service_detection;
     let mdns_name = host
         .hostname
-        .filter(|_| identify && host.hostname_source == Some(NameSource::Mdns))
-        .and_then(|name| clean(&name, MAX_NAME));
-    let reverse_name = reverse_name.filter(|_| identify);
-    let mut methods = Vec::new();
-    let mac = host.mac.and_then(|mac| mac.parse::<MacAddr>().ok());
-    if mac.is_some() {
-        methods.push(Method::Arp);
-    }
-    if host.found_by == FoundBy::Probe {
-        methods.push(Method::Ping);
-    }
-    if mdns_name.is_some() {
-        methods.push(Method::Mdns);
-    }
-    let hostname = mdns_name.or_else(|| clean(&reverse_name?, MAX_NAME));
+        .as_deref()
+        .filter(|_| detect && host.hostname_source == Some(NameSource::Mdns))
+        .and_then(|name| clean(name, MAX_NAME));
+    let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
+    let reverse_name = reverse_name.and_then(|name| clean(name, MAX_NAME));
+    let announced = if options.mdns_services {
+        &probed.mdns[..]
+    } else {
+        &[]
+    };
+    let mdns_services = mdns::service_names(announced);
+    let mac = host
+        .mac
+        .as_deref()
+        .and_then(|mac| mac.parse::<MacAddr>().ok());
+    let heard = mdns_name.is_some() || !mdns_services.is_empty();
+    let methods = methods(mac.is_some(), host.found_by, heard);
+    let vendor = host.vendor.as_deref().filter(|_| options.card_vendor);
     let card = NetworkCard {
         address: Ipv4Net::new(ip, subnet.prefix_len()).ok(),
         mac,
-        services: services(&ports, identify),
+        vendor: vendor.and_then(|v| clean(v, MAX_DESCRIPTION)),
+        services: services(&probed.ports, detect, names),
         ..NetworkCard::blank(CardId(0))
     };
-    Some(Answer {
-        device: device(hostname, card),
-        methods,
-    })
+    let model = mdns::model(announced).and_then(|m| clean(m, MAX_DESCRIPTION));
+    let evidence = Evidence {
+        ports: &probed.ports,
+        mdns_services: &mdns_services,
+        model: model.as_deref(),
+        ttl: probed.ttl,
+    };
+    let kind = if options.device_type {
+        identify::kind(&evidence)
+    } else {
+        DeviceKind::Unknown
+    };
+    let os = options.os_family.then(|| identify::os(&evidence)).flatten();
+    let device = Device {
+        kind,
+        role: kind.default_role(),
+        manufacturer: mdns::maker(announced).and_then(|m| clean(m, MAX_DESCRIPTION)),
+        model,
+        os,
+        mdns_services,
+        ..device(mdns_name.or(reverse_name), card)
+    };
+    Some(Answer { device, methods })
 }
 
-/// A newly found device with `card`, named after the first part of its `hostname`. Its ids are
-/// placeholders: it gets real ones when it is added to the map.
+/// How a host was found: its MAC known from the neighbour table, a ping reply, mDNS.
+fn methods(mac: bool, found_by: FoundBy, mdns: bool) -> Vec<Method> {
+    let found = [
+        (mac, Method::Arp),
+        (found_by == FoundBy::Probe, Method::Ping),
+        (mdns, Method::Mdns),
+    ];
+    found
+        .into_iter()
+        .filter(|&(by, _)| by)
+        .map(|(_, m)| m)
+        .collect()
+}
+
+/// A newly found device of unknown kind with `card`, named after the first part of its
+/// `hostname`. Its ids are placeholders: it gets real ones when it is added to the map.
 fn device(hostname: Option<String>, card: NetworkCard) -> Device {
     let name = hostname.as_deref().and_then(|h| h.split('.').next());
     Device {
@@ -86,18 +133,21 @@ fn device(hostname: Option<String>, card: NetworkCard) -> Device {
         manufacturer: None,
         model: None,
         hostname,
+        os: None,
+        mdns_services: Vec::new(),
         last_seen: LastSeen::default(),
         notes: String::new(),
     }
 }
 
 /// The open ports, each described by the software that named itself on it when `identify`
-/// allows, or else by the service usual on that port.
-fn services(ports: &[PortResult], identify: bool) -> Services {
+/// allows, or else by the service usual on that port: the scanner's name for it, or IANA's.
+fn services(ports: &[PortResult], identify: bool, names: &PortNames) -> Services {
     let mut services = Services::default();
     for port in ports.iter().filter(|p| p.open) {
-        let named = identify.then(|| port.product_and_version()).flatten();
-        let description = named.or_else(|| port.service.clone());
+        let software = identify.then(|| port.product_and_version()).flatten();
+        let usual = port.service.as_deref().or_else(|| names.get(port.port));
+        let description = software.or_else(|| usual.map(str::to_owned));
         let description = description.and_then(|d| clean(&d, MAX_DESCRIPTION));
         services.add(port.port, description.as_deref().unwrap_or_default());
     }
@@ -169,13 +219,52 @@ mod tests {
                 port(80, true, "http", None),
                 port(443, false, "https", None),
             ],
+            ttl: None,
+            mdns: Vec::new(),
+        }
+    }
+
+    /// No IANA names, so ports keep only the scanner's.
+    fn none() -> PortNames {
+        PortNames::default()
+    }
+
+    /// Every option on.
+    fn all() -> ScanOptions {
+        ScanOptions::default()
+    }
+
+    /// Only which ports are open.
+    fn bare() -> ScanOptions {
+        ScanOptions {
+            service_detection: false,
+            mdns_services: false,
+            device_type: false,
+            os_family: false,
+            card_vendor: false,
+            ..all()
+        }
+    }
+
+    fn printer_announcement() -> MdnsService {
+        MdnsService {
+            full_name: "Brother._ipp._tcp.local.".into(),
+            hostname: "brother.local.".into(),
+            service_type: "_ipp._tcp.local.".into(),
+            addresses: vec!["192.168.1.20".parse().unwrap()],
+            port: 631,
+            properties: [
+                ("ty".to_owned(), "Brother HL-L2350DW series".to_owned()),
+                ("usb_MFG".to_owned(), "Brother".to_owned()),
+            ]
+            .into(),
         }
     }
 
     #[test]
     fn a_host_answers_with_its_address_mac_name_and_open_ports() {
         let lamp = probed(host(FoundBy::Probe, Some("lamp.local.")), None);
-        let answer = answer(lamp, home(), true).unwrap();
+        let answer = answer(&lamp, home(), all(), &none()).unwrap();
         assert_eq!(answer.methods, [Method::Arp, Method::Ping, Method::Mdns]);
         let device = &answer.device;
         assert_eq!(device.name, "lamp");
@@ -188,26 +277,52 @@ mod tests {
         let card = &device.cards[0];
         assert_eq!(card.address, "192.168.1.20/24".parse().ok());
         assert_eq!(card.mac, "00:17:88:6E:6C:5C".parse().ok());
+        assert_eq!(card.vendor.as_deref(), Some("Philips Lighting BV"));
         assert_eq!(card.services.to_string(), "22 (OpenSSH 9.6), 80 (http)");
     }
 
     #[test]
-    fn without_service_detection_names_and_software_stay_unknown() {
-        let lamp = probed(host(FoundBy::Probe, Some("lamp.local")), Some("lamp.home"));
-        let answer = answer(lamp, home(), false).unwrap();
+    fn announcements_give_the_model_maker_services_and_kind() {
+        let mut brother = probed(host(FoundBy::Probe, None), None);
+        brother.mdns = vec![printer_announcement()];
+        brother.ttl = Some(255);
+        let answer = answer(&brother, home(), all(), &none()).unwrap();
+        assert!(answer.methods.contains(&Method::Mdns));
+        let device = &answer.device;
+        assert_eq!(device.mdns_services, ["ipp"]);
+        assert_eq!(device.model.as_deref(), Some("Brother HL-L2350DW series"));
+        assert_eq!(device.manufacturer.as_deref(), Some("Brother"));
+        assert_eq!(device.kind, DeviceKind::Printer);
+        assert_eq!(device.role, DeviceKind::Printer.default_role());
+        let os = device.os.as_ref().map(|os| os.family);
+        assert_eq!(os, Some(crate::model::OsFamily::Network), "TTL 255");
+    }
+
+    #[test]
+    fn each_detail_is_found_out_only_when_its_option_is_on() {
+        let mut brother = probed(host(FoundBy::Probe, Some("brother.local")), Some("b.home"));
+        brother.mdns = vec![printer_announcement()];
+        brother.ttl = Some(255);
+        let answer = answer(&brother, home(), bare(), &none()).unwrap();
         assert_eq!(answer.methods, [Method::Arp, Method::Ping]);
+        let device = &answer.device;
+        assert_eq!((device.name.as_str(), &device.hostname), ("", &None));
+        assert_eq!((&device.model, &device.manufacturer), (&None, &None));
+        assert_eq!((device.kind, &device.os), (DeviceKind::Unknown, &None));
+        assert_eq!(device.mdns_services, Vec::<String>::new());
+        let card = &device.cards[0];
+        assert_eq!(card.vendor, None);
         assert_eq!(
-            (answer.device.name.as_str(), answer.device.hostname),
-            ("", None)
+            card.services.to_string(),
+            "22 (ssh), 80 (http)",
+            "the usual service only"
         );
-        let services = answer.device.cards[0].services.to_string();
-        assert_eq!(services, "22 (ssh), 80 (http)", "the usual service only");
     }
 
     #[test]
     fn a_neighbour_that_did_not_answer_is_named_by_reverse_dns() {
         let nas = probed(host(FoundBy::Neighbor, None), Some("nas.home.arpa"));
-        let answer = answer(nas, home(), true).unwrap();
+        let answer = answer(&nas, home(), all(), &none()).unwrap();
         assert_eq!(answer.methods, [Method::Arp]);
         assert_eq!(answer.device.name, "nas");
     }
@@ -217,7 +332,7 @@ mod tests {
         let mut sneaky = probed(host(FoundBy::Probe, Some("evil\u{1b}[2Khost")), None);
         let long = "x".repeat(500);
         sneaky.ports = vec![port(8080, true, "http-alt", Some(&long))];
-        let answer = answer(sneaky, home(), true).unwrap();
+        let answer = answer(&sneaky, home(), all(), &none()).unwrap();
         assert_eq!(answer.device.hostname, None);
         assert!(
             !answer.methods.contains(&Method::Mdns),
@@ -230,9 +345,21 @@ mod tests {
     #[test]
     fn a_host_off_the_subnet_or_not_on_ipv4_is_no_answer() {
         let elsewhere = probed(host(FoundBy::Probe, None), None);
-        assert!(answer(elsewhere, "10.0.0.0/24".parse().unwrap(), true).is_none());
+        let lab = "10.0.0.0/24".parse().unwrap();
+        assert!(answer(&elsewhere, lab, all(), &none()).is_none());
         let mut v6 = host(FoundBy::Probe, None);
         v6.ip = "fd00::5".parse().unwrap();
-        assert!(answer(probed(v6, None), home(), true).is_none());
+        assert!(answer(&probed(v6, None), home(), all(), &none()).is_none());
+    }
+
+    #[test]
+    fn an_open_port_the_scanner_does_not_name_takes_its_iana_name() {
+        let mut host = probed(host(FoundBy::Probe, None), None);
+        let mut database = port(5432, true, "", None);
+        database.service = None;
+        host.ports = vec![database];
+        let answer = answer(&host, home(), all(), &PortNames::load()).unwrap();
+        let services = answer.device.cards[0].services.to_string();
+        assert_eq!(services, "5432 (postgres)");
     }
 }

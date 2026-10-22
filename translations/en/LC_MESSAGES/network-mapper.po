@@ -521,6 +521,61 @@ msgstr "Model"
 msgid "details.hostname"
 msgstr "Hostname"
 
+# A scan's guess at the operating system, and what it was guessed from.
+msgid "details.os"
+msgstr "Operating system"
+
+msgid "details.os-clues"
+msgstr "Guessed from"
+
+msgid "details.mdns-services"
+msgstr "mDNS services"
+
+# Who made a network card, from its MAC address; not necessarily the device's maker.
+msgid "details.card-vendor"
+msgstr "Card vendor"
+
+msgid "os.windows"
+msgstr "Windows"
+
+msgid "os.macos"
+msgstr "macOS"
+
+msgid "os.linux"
+msgstr "Linux"
+
+msgid "os.ios"
+msgstr "iOS or iPadOS"
+
+msgid "os.network"
+msgstr "Network device"
+
+msgid "os.unknown"
+msgstr "Unknown"
+
+# {0} is os.windows and the like; {1} what a clue said more precisely, such as Ubuntu.
+msgid "os.with-detail"
+msgstr "{0} ({1})"
+
+msgid "os-clue.device-model"
+msgstr "Model announced"
+
+msgid "os-clue.apple-sync-port"
+msgstr "Apple sync port"
+
+msgid "os-clue.ssh-banner"
+msgstr "SSH greeting"
+
+msgid "os-clue.server-header"
+msgstr "Web server header"
+
+msgid "os-clue.windows-ports"
+msgstr "Windows ports 135 and 445"
+
+# {} is the ping reply's time-to-live, such as 128.
+msgid "os-clue.ttl"
+msgstr "Ping TTL {}"
+
 msgid "details.last-seen"
 msgstr "Last seen"
 
@@ -975,6 +1030,30 @@ msgstr "Port scan"
 
 msgid "discovery.option.service-detection"
 msgstr "Service detection"
+
+msgid "discovery.option.mdns-services"
+msgstr "mDNS services"
+
+msgid "discovery.option.device-type"
+msgstr "Device type"
+
+msgid "discovery.option.os-family"
+msgstr "OS family"
+
+msgid "discovery.option.card-vendor"
+msgstr "Card vendor"
+
+# The dropdown beside Port scan: which ports it probes.
+msgid "discovery.ports"
+msgstr "Ports to scan"
+
+# About 30 common ports.
+msgid "discovery.ports.simple"
+msgstr "Simple"
+
+# About 100 ports.
+msgid "discovery.ports.deep"
+msgstr "Deep"
 
 msgid "discovery.start"
 msgstr "Start scan"

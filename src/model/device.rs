@@ -4,6 +4,7 @@
 //! translated; only language-neutral formats (such as the MAC address) are produced here.
 
 use super::card::NetworkCard;
+use super::os::OsHint;
 
 /// Stable identifier of a device; not an index into any list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -189,6 +190,10 @@ pub(crate) struct Device {
     pub(crate) manufacturer: Option<String>,
     pub(crate) model: Option<String>,
     pub(crate) hostname: Option<String>,
+    /// What a scan made of its operating system.
+    pub(crate) os: Option<OsHint>,
+    /// The mDNS service types it announced, such as `ipp` or `airplay`, in order, each once.
+    pub(crate) mdns_services: Vec<String>,
     pub(crate) last_seen: LastSeen,
     pub(crate) notes: String,
 }
@@ -236,6 +241,8 @@ mod tests {
             manufacturer: None,
             model: None,
             hostname: None,
+            os: None,
+            mdns_services: Vec::new(),
             last_seen: LastSeen::default(),
             notes: String::new(),
         }

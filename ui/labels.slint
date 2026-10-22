@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, FoundDecision, FoundFinding, GroupColour, GuestKind, LogEvent, LogView, RoleKind, TargetError } from "bridge.slint";
+import { DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, FoundDecision, FoundFinding, GroupColour, GuestKind, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -178,6 +178,27 @@ export global Labels {
         if phase == DiscoveryPhase.running { return @tr("discovery.heading.running", target); }
         if phase == DiscoveryPhase.finished { return @tr("discovery.heading.finished", target); }
         return @tr("discovery.heading.idle", target);
+    }
+
+    // An operating system as guessed, with its detail (such as Ubuntu) when a clue gave one.
+    public pure function os(family: OsFamily, detail: string) -> string {
+        let name = family == OsFamily.windows ? @tr("os.windows")
+            : family == OsFamily.macos ? @tr("os.macos")
+            : family == OsFamily.linux ? @tr("os.linux")
+            : family == OsFamily.ios ? @tr("os.ios")
+            : family == OsFamily.network ? @tr("os.network")
+            : @tr("os.unknown");
+        return detail == "" ? name : @tr("os.with-detail", name, detail);
+    }
+
+    // What pointed the scan at an operating system.
+    public pure function os-clue(clue: OsClueView) -> string {
+        if clue.kind == OsClueKind.device-model { return @tr("os-clue.device-model"); }
+        if clue.kind == OsClueKind.apple-sync-port { return @tr("os-clue.apple-sync-port"); }
+        if clue.kind == OsClueKind.ssh-banner { return @tr("os-clue.ssh-banner"); }
+        if clue.kind == OsClueKind.server-header { return @tr("os-clue.server-header"); }
+        if clue.kind == OsClueKind.windows-ports { return @tr("os-clue.windows-ports"); }
+        return @tr("os-clue.ttl", clue.ttl);
     }
 
     // In place of the heading, while the network typed cannot be scanned.

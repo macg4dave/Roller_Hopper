@@ -69,6 +69,7 @@ pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> V
             mask: convert::mask(card),
             gateway: convert::gateway(card),
             mac: convert::mac(card),
+            vendor: convert::vendor(card),
             via_name: via.map(|(_, d)| d.name.trim()).unwrap_or_default().into(),
             via_card: via_card.map(|c| c.name.trim()).unwrap_or_default().into(),
             via_index: match via {

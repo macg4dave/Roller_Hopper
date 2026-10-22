@@ -69,6 +69,8 @@ impl Network {
             manufacturer: None,
             model: None,
             hostname: None,
+            os: None,
+            mdns_services: Vec::new(),
             last_seen: LastSeen::default(),
             notes: String::new(),
         };

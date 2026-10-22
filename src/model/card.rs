@@ -59,6 +59,9 @@ pub(crate) struct NetworkCard {
     pub(crate) gateway: Option<Ipv4Addr>,
     /// Detected with the card, or typed by the user.
     pub(crate) mac: Option<MacAddr>,
+    /// Who made the card, from the IEEE registry entry for its MAC address. Not the device's
+    /// maker: a laptop's Wi-Fi card is often someone else's.
+    pub(crate) vendor: Option<String>,
     /// The ports open at the card's address.
     pub(crate) services: Services,
     /// What kind of connection it is, shown in the lists and as a badge on its device's icon on
@@ -78,6 +81,7 @@ impl NetworkCard {
             address: None,
             gateway: None,
             mac: None,
+            vendor: None,
             services: Services::default(),
             icon: Icon::new(Self::DEFAULT_ICON),
         }

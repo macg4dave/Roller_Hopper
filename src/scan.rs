@@ -1,13 +1,18 @@
 //! Scans a subnet for real, off the UI thread: netscli-core's ping sweep, which adds the hosts
-//! in the operating system's neighbour table and names from mDNS, then TCP connect probes of
-//! the common ports and a reverse DNS lookup for each host found. Each host comes back as a
-//! model [`Answer`] through a channel the UI drains; dropping the [`Scan`] stops it.
+//! in the operating system's neighbour table and names from mDNS, with a browse of the services
+//! hosts announce over mDNS alongside; then, for each host found, TCP connect probes of the
+//! chosen ports, a reverse DNS lookup and a ping for its time-to-live, as the options ask.
+//! Each host comes back as a model [`Answer`] through a channel the UI drains; dropping the
+//! [`Scan`] stops it.
 //!
 //! Only probes that need no capture driver, no elevation and no other program are used: the
 //! sweep runs with its own name lookup off (on Windows that runs `ping -a`), and names come from
 //! the in-process resolver instead.
 
 mod answer;
+mod identify;
+mod mdns;
+mod ports;
 mod subnets;
 
 pub(crate) use subnets::local_subnet;
@@ -18,26 +23,21 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryIter};
 
 use ipnet::Ipv4Net;
-use netscli_core::{DiscoverEngine, DiscoverPhase, DiscoverProgress, Host, PortScanner};
+use netscli_core::{
+    DiscoverEngine, DiscoverPhase, DiscoverProgress, Host, MdnsService, PingScanner, PortScanner,
+};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::{JoinHandle, JoinSet};
 
 use crate::model::{Answer, ScanOptions};
 use answer::Probed;
+use ports::PortNames;
 
 /// Probes in flight at once, in the sweep and across the port probes of all hosts.
 const CONCURRENCY: usize = 128;
 const PING_TIMEOUT_MS: u64 = 1000;
 const PORT_TIMEOUT_MS: u64 = 1000;
 const DNS_TIMEOUT_MS: u64 = 1500;
-
-/// The TCP ports probed on each host found: file transfer and sharing, remote access, mail,
-/// DNS, web pages, printing, cameras, databases, home automation and the consoles of common
-/// NAS, hypervisor and media servers.
-const COMMON_TCP_PORTS: &[u16] = &[
-    21, 22, 23, 25, 53, 80, 81, 139, 443, 445, 515, 548, 554, 631, 1883, 3306, 3389, 5000, 5001,
-    5900, 8000, 8006, 8080, 8123, 8443, 8883, 9000, 9100, 9443, 32400, 62078,
-];
 
 /// What a running scan reports, besides how many addresses it has checked.
 #[derive(Debug)]
@@ -110,37 +110,65 @@ async fn run(
             checked.store(p.completed, Ordering::Relaxed);
         }
     });
+    let browse = options.mdns_services.then(|| tokio::spawn(mdns::browse()));
     let sweep = DiscoverEngine::new_with_timeouts(CONCURRENCY, PING_TIMEOUT_MS, DNS_TIMEOUT_MS);
-    let end = match sweep
+    let swept = sweep
         .scan_subnet_with_progress(subnet, false, Some(progress))
-        .await
-    {
-        Ok(hosts) => probe_all(hosts, subnet, options, &events).await,
+        .await;
+    let end = match swept {
+        Ok(hosts) => {
+            let announced = match browse {
+                // A browse that failed heard nothing.
+                Some(task) => task.await.unwrap_or_default(),
+                None => Vec::new(),
+            };
+            let run = Run {
+                announced: &announced,
+                names: &PortNames::load(),
+                subnet,
+                options,
+            };
+            probe_all(hosts, &run, &events).await
+        }
         Err(error) => Event::Failed(error.to_string()),
     };
     // Fails only once the UI has dropped the receiver, when no one is left to tell.
     events.send(end).ok();
 }
 
-/// Probes every host the sweep found, reporting each as soon as it is done, and says how the
-/// scan ended. A probe that fails ends it: the hosts still being probed would go unreported.
-async fn probe_all(
-    hosts: Vec<Host>,
+/// The probes every host shares, so their limits on probes in flight hold across hosts.
+struct Probes {
+    ports: PortScanner,
+    ping: PingScanner,
+}
+
+/// What every host's answer is made with, once the sweep is done.
+struct Run<'a> {
+    /// Every service announced over mDNS during the sweep.
+    announced: &'a [MdnsService],
+    names: &'a PortNames,
     subnet: Ipv4Net,
     options: ScanOptions,
-    events: &Sender<Event>,
-) -> Event {
-    let scanner = Arc::new(PortScanner::new(CONCURRENCY));
+}
+
+/// Probes every host the sweep found, reporting each as soon as it is done, and says how the
+/// scan ended. A probe that fails ends it: the hosts still being probed would go unreported.
+async fn probe_all(hosts: Vec<Host>, run: &Run<'_>, events: &Sender<Event>) -> Event {
+    let shared = Arc::new(Probes {
+        ports: PortScanner::new(CONCURRENCY),
+        ping: PingScanner::new(CONCURRENCY),
+    });
     let mut pending = JoinSet::new();
     for host in hosts {
-        pending.spawn(probe(host, Arc::clone(&scanner), options));
+        let own = mdns::of_host(run.announced, host.ip);
+        pending.spawn(probe(host, own, Arc::clone(&shared), run.options));
     }
     while let Some(done) = pending.join_next().await {
         let probed = match done {
             Ok(probed) => probed,
             Err(error) => return Event::Failed(error.to_string()),
         };
-        let Some(answer) = answer::answer(probed, subnet, options.service_detection) else {
+        let Some(answer) = answer::answer(&probed, run.subnet, run.options, run.names) else {
             continue;
         };
         if events.send(Event::Host(Box::new(answer))).is_err() {
@@ -151,13 +179,19 @@ async fn probe_all(
     Event::Finished
 }
 
-/// Finds out what `options` allow about one host beyond what the sweep did.
-async fn probe(host: Host, scanner: Arc<PortScanner>, options: ScanOptions) -> Probed {
+/// Finds out what `options` allow about one host beyond what the sweep did; `mdns` is what it
+/// announced.
+async fn probe(
+    host: Host,
+    mdns: Vec<MdnsService>,
+    probes: Arc<Probes>,
+    options: ScanOptions,
+) -> Probed {
     let ports = if options.port_scan {
-        // Refused only for an invalid port list, and this one is fixed and valid (see the
-        // tests), so an error here means no open ports were found.
-        let ports = COMMON_TCP_PORTS.to_vec();
-        let results = scanner.scan_host(host.ip, ports, PORT_TIMEOUT_MS).await;
+        // Refused only for an invalid port list, and both lists are fixed and valid (see
+        // their tests), so an error here means no open ports were found.
+        let list = ports::ports(options.ports).to_vec();
+        let results = probes.ports.scan_host(host.ip, list, PORT_TIMEOUT_MS).await;
         results.unwrap_or_default()
     } else {
         Vec::new()
@@ -169,20 +203,17 @@ async fn probe(host: Host, scanner: Arc<PortScanner>, options: ScanOptions) -> P
     } else {
         None
     };
+    // The sweep's own ping keeps no time-to-live, so the OS family needs one more.
+    let ttl = if options.os_family {
+        probes.ping.ping(host.ip, PING_TIMEOUT_MS).await.ttl
+    } else {
+        None
+    };
     Probed {
         host,
         reverse_name,
         ports,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_common_ports_are_a_valid_port_list_with_each_port_once() {
-        netscli_core::validate_ports(COMMON_TCP_PORTS).unwrap();
-        assert!(COMMON_TCP_PORTS.windows(2).all(|w| w[0] < w[1]));
+        ttl,
+        mdns,
     }
 }

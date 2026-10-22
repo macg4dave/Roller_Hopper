@@ -104,5 +104,6 @@ export component FoundCardDetails inherits VerticalLayout {
     if card.mask != "": DetailField { label: @tr("details.mask"); value: card.mask; }
     if card.gateway != "": DetailField { label: @tr("details.gateway"); value: card.gateway; }
     if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
+    if card.vendor != "": DetailField { label: @tr("details.card-vendor"); value: card.vendor; }
     if card.services != "": DetailField { label: @tr("details.open-ports"); value: card.services; }
 }

@@ -10,7 +10,7 @@ use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
 use super::{AppState, Selection, convert, handler, update};
-use crate::model::{Found, FoundFilter, ScanOptions};
+use crate::model::{Found, FoundFilter, PortList, ScanOptions};
 use crate::scan::{self, Event, Scan};
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -85,7 +85,21 @@ impl AppState {
         match option {
             ui::DiscoveryOption::PortScan => options.port_scan = on,
             ui::DiscoveryOption::ServiceDetection => options.service_detection = on,
+            ui::DiscoveryOption::MdnsServices => options.mdns_services = on,
+            ui::DiscoveryOption::DeviceType => options.device_type = on,
+            ui::DiscoveryOption::OsFamily => options.os_family = on,
+            ui::DiscoveryOption::CardVendor => options.card_vendor = on,
         }
+    }
+
+    /// Picks the port list by its place in the dropdown: Simple, then Deep.
+    fn set_discovery_ports(&mut self, index: usize) {
+        let list = match index {
+            0 => PortList::Simple,
+            1 => PortList::Deep,
+            _ => return,
+        };
+        self.discovery.options.ports = list;
     }
 }
 
@@ -142,6 +156,9 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         st.set_discovery_option(option, on);
     });
     bridge.on_set_discovery_option(move |option, on| set_option((option, on)));
+    bridge.on_set_discovery_ports(handler(ui, state, |st, index| {
+        st.set_discovery_ports(convert::index(index));
+    }));
     bridge.on_set_found_filter(handler(ui, state, |st, filter| {
         st.discovery.filter = filter_from_ui(filter);
     }));
@@ -297,6 +314,29 @@ mod tests {
         assert_eq!((state.discovery.phase(), state.scans), (Phase::Finished, 1));
         assert!(!state.take_scan(254, [Event::Finished]), "counted once");
         assert_eq!(state.scans, 1);
+    }
+
+    #[test]
+    fn the_tick_boxes_and_port_list_set_what_the_next_run_finds_out() {
+        let mut state = AppState::new(mock_data::network());
+        state.set_discovery_ports(1);
+        state.set_discovery_option(ui::DiscoveryOption::OsFamily, false);
+        state.set_discovery_option(ui::DiscoveryOption::CardVendor, false);
+        let options = state.discovery.options;
+        assert_eq!(options.ports, PortList::Deep);
+        assert!(!options.os_family && !options.card_vendor);
+        assert!(
+            options.mdns_services && options.device_type,
+            "the rest stay on"
+        );
+        state.set_discovery_ports(7);
+        assert_eq!(
+            state.discovery.options.ports,
+            PortList::Deep,
+            "no such choice"
+        );
+        state.set_discovery_ports(0);
+        assert_eq!(state.discovery.options.ports, PortList::Simple);
     }
 
     #[test]

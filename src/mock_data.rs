@@ -74,6 +74,8 @@ impl Spec {
             manufacturer: self.manufacturer.map(str::to_owned),
             model: self.model.map(str::to_owned),
             hostname: self.hostname.map(str::to_owned),
+            os: None,
+            mdns_services: Vec::new(),
             last_seen: LastSeen {
                 minutes_ago: self.minutes_ago,
             },

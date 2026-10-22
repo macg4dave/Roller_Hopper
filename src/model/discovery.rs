@@ -19,19 +19,48 @@ use super::card::{CardId, MacAddr, NetworkCard};
 use super::device::{Device, DeviceId, DeviceKind, LastSeen, Status};
 use super::network::{ConnectionKind, Network};
 
-/// What a run looks for beyond which addresses answer. Without service detection, a host's
-/// hostname and the software on its ports stay unknown.
+/// Which TCP ports a port scan probes on each host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum PortList {
+    /// About thirty: remote access, file sharing, web pages, printing and cameras.
+    #[default]
+    Simple,
+    /// About a hundred: also mail, databases, media and casting, smart-home and admin consoles.
+    Deep,
+}
+
+/// What a run finds out beyond which addresses answer, each a tick box on the page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent on/off choices, one per tick box"
+)]
 pub(crate) struct ScanOptions {
+    /// Which common TCP ports are open, of the list `ports` picks.
     pub(crate) port_scan: bool,
+    pub(crate) ports: PortList,
+    /// Names from reverse DNS, and the software that names itself on open ports.
     pub(crate) service_detection: bool,
+    /// The services hosts announce over mDNS, with the model and maker they give.
+    pub(crate) mdns_services: bool,
+    /// A guess at what kind of device each host is.
+    pub(crate) device_type: bool,
+    /// A guess at each host's operating system family; adds a ping for its time-to-live.
+    pub(crate) os_family: bool,
+    /// Who made each network card, from its MAC address.
+    pub(crate) card_vendor: bool,
 }
 
 impl Default for ScanOptions {
     fn default() -> Self {
         Self {
             port_scan: true,
+            ports: PortList::Simple,
             service_detection: true,
+            mdns_services: true,
+            device_type: true,
+            os_family: true,
+            card_vendor: true,
         }
     }
 }

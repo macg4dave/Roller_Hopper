@@ -1,4 +1,4 @@
-import { FoundView } from "bridge.slint";
+import { FoundView, OsFamily } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { Chip } from "components/chip.slint";
@@ -16,6 +16,20 @@ export component FoundFacts inherits VerticalLayout {
     if found.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: found.manufacturer; }
     if found.model != "": DetailField { label: @tr("details.model"); value: found.model; }
     if found.hostname != "": DetailField { label: @tr("details.hostname"); value: found.hostname; }
+    if found.os-family != OsFamily.unknown: DetailField {
+        label: @tr("details.os");
+        value: Labels.os(found.os-family, found.os-detail);
+    }
+    if found.os-clues.length > 0: DetailField {
+        label: @tr("details.os-clues");
+        HorizontalLayout {
+            padding-top: 7px;
+            alignment: start;
+            spacing: Theme.space-xs;
+            for clue in found.os-clues: Chip { text: Labels.os-clue(clue); }
+        }
+    }
+    if found.mdns-services != "": DetailField { label: @tr("details.mdns-services"); value: found.mdns-services; }
     DetailField {
         label: @tr("discovery.found-by");
         HorizontalLayout {

@@ -96,6 +96,8 @@ export struct CardView {
     mask: string,
     gateway: string,
     mac: string,
+    // Who made the card, from its MAC address; empty when unknown.
+    vendor: string,
     // Where it is plugged in: the device's name, empty when nowhere, and the card's name and
     // place there, -1 when that device has only the one card.
     via-name: string,
@@ -121,6 +123,15 @@ export struct GuestView {
 /// A setting of the selected network card, typed on the edit page.
 export enum CardField { name, address, mask, gateway, mac }
 
+// A scan's guess at a device's operating system; unknown when it made none.
+export enum OsFamily { unknown, windows, macos, linux, ios, network }
+// What pointed the scan at an OS. `ttl` is the ping reply's time-to-live, for a ttl clue.
+export enum OsClueKind { device-model, apple-sync-port, ssh-banner, server-header, windows-ports, ttl }
+export struct OsClueView {
+    kind: OsClueKind,
+    ttl: int,
+}
+
 /// Read-only details of the selected device. Empty strings are not shown.
 export struct DeviceDetails {
     // What the device was detected as, and the icon it is shown with.
@@ -142,6 +153,10 @@ export struct DeviceDetails {
     manufacturer: string,
     model: string,
     hostname: string,
+    // As in FoundView.
+    os-family: OsFamily,
+    os-detail: string,
+    mdns-services: string,
     last-seen-minutes: int,
 }
 
@@ -207,7 +222,8 @@ export struct MapBounds {
 export enum DiscoveryPhase { idle, running, finished }
 // Why the network typed cannot be scanned; none when it can.
 export enum TargetError { none, empty, invalid, too-wide }
-export enum DiscoveryOption { port-scan, service-detection }
+// The scan's tick boxes. Which ports a port scan probes is a dropdown beside its box.
+export enum DiscoveryOption { port-scan, service-detection, mdns-services, device-type, os-family, card-vendor }
 // How a found host compares with the map: matched by MAC address.
 export enum FoundFinding { known, new, duplicate }
 export enum FoundDecision { pending, added, ignored }
@@ -222,8 +238,14 @@ export struct DiscoveryView {
     // is not one), and why what was typed cannot be scanned.
     target: string,
     target-error: TargetError,
+    // The tick boxes, and whether a port scan probes the Deep port list rather than Simple.
     port-scan: bool,
+    deep-ports: bool,
     service-detection: bool,
+    mdns-services: bool,
+    device-type: bool,
+    os-family: bool,
+    card-vendor: bool,
     // Addresses checked so far, of all of them.
     swept: int,
     addresses: int,
@@ -260,9 +282,10 @@ export struct FoundView {
     // Of the card it answered at, or of the card itself.
     ip: string,
     mac: string,
-    // Of a card's row only: its subnet mask and gateway, empty when it has none.
+    // Of a card's row only: its subnet mask and gateway, and who made it, empty when unknown.
     mask: string,
     gateway: string,
+    vendor: string,
     hostname: string,
     manufacturer: string,
     model: string,
@@ -278,6 +301,13 @@ export struct FoundView {
     // none).
     services: string,
     methods: [DiscoveryMethod],
+    // Its operating system as guessed, more precisely when a clue said (as given, such as
+    // Ubuntu), and the clues behind it.
+    os-family: OsFamily,
+    os-detail: string,
+    os-clues: [OsClueView],
+    // The mDNS service types it announced, such as "ipp, http"; empty when none.
+    mdns-services: string,
     unidentified: bool,
     finding: FoundFinding,
     // For a duplicate: the name of the device on the map with the same MAC address.
@@ -475,6 +505,8 @@ export global Bridge {
     callback start-discovery();
     callback stop-discovery();
     callback set-discovery-target(string);
+    // The port list a port scan probes: 0 Simple, 1 Deep.
+    callback set-discovery-ports(int);
     callback set-discovery-option(DiscoveryOption, bool);
     callback set-found-filter(FoundFilter);
     // Found hosts by their FoundView.index, -1 for none. Selecting one on the map selects its
