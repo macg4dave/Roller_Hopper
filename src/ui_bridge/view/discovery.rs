@@ -149,10 +149,6 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         Finding::Duplicate(id) => network.device(id).map(|d| d.name.trim()),
         Finding::Known(_) | Finding::New => None,
     };
-    let card = device
-        .cards
-        .iter()
-        .find(|c| c.address.is_some_and(|a| a.addr() == found.ip));
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let methods: Vec<_> = found.methods.iter().map(|&m| method(m)).collect();
     let (os_family, os_detail) = convert::os(device);
@@ -176,10 +172,6 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         icon: state.icons.choice(&network.icon(device)),
         custom_icon: device.icon.is_some(),
         notes: device.notes.as_str().into(),
-        services: card
-            .map(|c| c.services.to_string())
-            .unwrap_or_default()
-            .into(),
         methods: ModelRc::new(VecModel::from(methods)),
         os_family,
         os_detail,
@@ -224,7 +216,6 @@ fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::Fo
         gateway: convert::gateway(card),
         mac: convert::mac(card),
         vendor: convert::vendor(card),
-        services: card.services.to_string().into(),
         ..row.clone()
     });
     rows.collect()

@@ -5,11 +5,13 @@ import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
 import { StatusDot } from "components/status-dot.slint";
+import { CardDetails } from "card-details.slint";
 import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
 
-// Right panel: everything known about the selected device, with its network cards, or about
-// the selected card (its addresses and open ports) under its device's name. The pencil turns it
+// Right panel: everything known about the selected device, followed by each of its network
+// cards in full, or about the selected card (its addresses and open ports) under its device's
+// name. The pencil turns it
 // into the same editor as the edit page's, for the device or card, until Done.
 export component DetailsPanel inherits Rectangle {
     // Showing the editor rather than the details; ends when nothing is selected.
@@ -128,16 +130,7 @@ export component DetailsPanel inherits Rectangle {
                     label: @tr("details.card");
                     value: Labels.card-name(Bridge.card.name, Bridge.card.index);
                 }
-                DetailField { label: @tr("details.ip"); value: Bridge.card.ip == "" ? @tr("card.no-address") : Bridge.card.ip; }
-                if Bridge.card.mask != "": DetailField { label: @tr("details.mask"); value: Bridge.card.mask; }
-                if Bridge.card.gateway != "": DetailField { label: @tr("details.gateway"); value: Bridge.card.gateway; }
-                if Bridge.card.mac != "": DetailField { label: @tr("details.mac"); value: Bridge.card.mac; }
-                if Bridge.card.vendor != "": DetailField { label: @tr("details.card-vendor"); value: Bridge.card.vendor; }
-                DetailField {
-                    label: @tr("details.plugged-into");
-                    value: Labels.plugged-into(Bridge.card.via-name, Bridge.card.via-card, Bridge.card.via-index, Bridge.card.inferred);
-                }
-                if Bridge.card.services != "": DetailField { label: @tr("details.open-ports"); value: Bridge.card.services; }
+                CardDetails { card: Bridge.card; }
                 HorizontalLayout {
                     alignment: start;
                     padding-top: Theme.space-s;
@@ -154,13 +147,6 @@ export component DetailsPanel inherits Rectangle {
                     label: @tr("details.runs-on");
                     value: Labels.runs-on(Bridge.details.host-name, Bridge.details.guest);
                 }
-                for card in Bridge.cards: VerticalLayout {
-                    DetailField {
-                        label: Labels.card-name(card.name, card.index);
-                        value: Labels.card(card.ip, card.via-name, card.via-card, card.via-index, card.inferred);
-                    }
-                    if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
-                }
                 DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
                 if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
                 if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }
@@ -172,6 +158,27 @@ export component DetailsPanel inherits Rectangle {
                 if Bridge.details.mdns-services != "": DetailField { label: @tr("details.mdns-services"); value: Bridge.details.mdns-services; }
                 DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
                 if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
+
+                // Below the device, each of its network cards in full; its name selects it.
+                for card in Bridge.cards: VerticalLayout {
+                    padding-top: Theme.space-m;
+                    spacing: Theme.space-xs;
+                    Rectangle {
+                        height: 1px;
+                        background: Theme.border;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        padding-top: Theme.space-s;
+                        Button {
+                            text: Labels.card-name(card.name, card.index);
+                            icon: card.icon.image;
+                            colorize-icon: true;
+                            clicked => { Bridge.select-card(card.id); }
+                        }
+                    }
+                    CardDetails { card: card; }
+                }
             }
         }
     }

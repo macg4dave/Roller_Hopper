@@ -86,6 +86,13 @@ export struct NodePlace {
     root-y: float,
 }
 
+/// An open port of a network card, in port order.
+export struct PortView {
+    port: int,
+    udp: bool,
+    description: string,
+}
+
 /// A network card of the selected device, in its order. Settings not given are empty.
 export struct CardView {
     id: int,
@@ -104,8 +111,7 @@ export struct CardView {
     via-card: string,
     via-index: int,
     inferred: bool,
-    // Its open ports, as shown (empty when none).
-    services: string,
+    ports: [PortView],
     icon: IconChoice,
 }
 
@@ -158,13 +164,6 @@ export struct DeviceDetails {
     os-detail: string,
     mdns-services: string,
     last-seen-minutes: int,
-}
-
-/// An open port of the selected network card, in port order, for the edit page.
-export struct PortView {
-    port: int,
-    udp: bool,
-    description: string,
 }
 
 /// A role in the edit page's role list, in the same order as Bridge.roles.
@@ -301,9 +300,6 @@ export struct FoundView {
     // The icon was picked for this host rather than coming from its role.
     custom-icon: bool,
     notes: string,
-    // The open ports of the card it answered at, or of the card itself, as shown (empty when
-    // none).
-    services: string,
     methods: [DiscoveryMethod],
     // Its operating system as guessed, more precisely when a clue said (as given, such as
     // Ubuntu), and the clues behind it.

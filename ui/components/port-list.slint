@@ -1,0 +1,39 @@
+import { PortView } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { PortChip } from "chip.slint";
+
+// A network card's open ports under their label, one row each: the port, then what runs on it,
+// in columns as the discovery page's port editor shows them. Nothing when there are none.
+export component PortList inherits VerticalLayout {
+    in property <[PortView]> ports;
+
+    visible: ports.length > 0;
+    padding-top: Theme.space-xs;
+    padding-bottom: Theme.space-xs;
+    spacing: Theme.space-xs;
+
+    if ports.length > 0: Text {
+        text: @tr("details.open-ports");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+    }
+    for port in ports: HorizontalLayout {
+        spacing: Theme.space-s;
+        HorizontalLayout {
+            width: Theme.port-number-width;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                PortChip { port: port.port; udp: port.udp; }
+            }
+        }
+        Text {
+            text: port.description;
+            font-size: Theme.font-body;
+            color: Theme.text;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+}

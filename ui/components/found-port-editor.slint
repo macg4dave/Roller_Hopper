@@ -1,7 +1,7 @@
 import { Button, LineEdit } from "std-widgets.slint";
 import { Bridge } from "../bridge.slint";
 import { Theme } from "../theme.slint";
-import { Chip } from "chip.slint";
+import { PortChip } from "chip.slint";
 import { NameEdit } from "name-edit.slint";
 
 // Ports found on a discovery card, one row each: the port, its description, and a remove
@@ -23,11 +23,7 @@ export component FoundPortEditor inherits VerticalLayout {
             alignment: start;
             VerticalLayout {
                 alignment: center;
-                Chip {
-                    text: port.udp ? "\{port.port}/UDP" : "\{port.port}";
-                    colour: port.udp ? Theme.text-muted : Theme.accent;
-                    tint: port.udp ? Theme.hover : Theme.accent-soft;
-                }
+                PortChip { port: port.port; udp: port.udp; }
             }
         }
         NameEdit {

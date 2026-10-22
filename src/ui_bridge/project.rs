@@ -107,7 +107,7 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     ui.window().on_close_requested(move || {
         let mut close = true;
         update(&close_ui, &close_state, |st| {
-            close = st.ask_first(Then::Close)
+            close = st.ask_first(Then::Close);
         });
         if close {
             CloseRequestResponse::HideWindow
@@ -122,7 +122,7 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
 fn request(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, then: Then) {
     let mut go = false;
     update(ui, state, |st| {
-        go = !st.discovery.busy() && st.ask_first(then)
+        go = !st.discovery.busy() && st.ask_first(then);
     });
     if go {
         proceed(ui, state, then);

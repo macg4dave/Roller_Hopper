@@ -2,7 +2,7 @@
 //! it in the lists, and a node on the map drawn with the device's icon and name. A guest is
 //! listed in its host's editor.
 
-use slint::SharedString;
+use slint::{ModelRc, SharedString, VecModel};
 
 use crate::model::{CardId, ConnectionKind, Device, DeviceId, Network, NetworkCard};
 use crate::ui::{self, Labels};
@@ -77,7 +77,7 @@ pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> V
                 Some(_) | None => -1,
             },
             inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
-            services: card.services.to_string().into(),
+            ports: ModelRc::new(VecModel::from(convert::port_views(card))),
             icon: icons.choice(&card.icon),
         }
     });

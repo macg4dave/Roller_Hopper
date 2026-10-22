@@ -23,6 +23,16 @@ export component Chip inherits Rectangle {
     }
 }
 
+// An open port's number, marked when it is UDP rather than TCP.
+export component PortChip inherits Chip {
+    in property <int> port;
+    in property <bool> udp;
+
+    text: udp ? "\{port}/UDP" : "\{port}";
+    colour: udp ? Theme.text-muted : Theme.accent;
+    tint: udp ? Theme.hover : Theme.accent-soft;
+}
+
 // A found host's flag: New, a possible duplicate, or what the user did with it. Nothing for a
 // device already on the map.
 export component FlagChip inherits Chip {
