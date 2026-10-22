@@ -10,7 +10,7 @@ use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
 use super::{AppState, Selection, convert, handler, update};
-use crate::model::{Found, FoundFilter, PortList, ScanOptions};
+use crate::model::{Found, FoundFilter, FoundSort, PortList, ScanOptions};
 use crate::scan::{self, Event, Scan};
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -112,6 +112,15 @@ fn filter_from_ui(filter: ui::FoundFilter) -> FoundFilter {
     }
 }
 
+fn sort_from_ui(sort: ui::FoundSort) -> FoundSort {
+    match sort {
+        ui::FoundSort::Name => FoundSort::Name,
+        ui::FoundSort::Ip => FoundSort::Ip,
+        ui::FoundSort::Mac => FoundSort::Mac,
+        ui::FoundSort::Role => FoundSort::Role,
+    }
+}
+
 /// The run's controls and options, the result filter, and the found hosts. The network box
 /// starts with this computer's own subnet, when one is found; after that it holds what the
 /// user types, and Rust never rewrites it.
@@ -161,6 +170,9 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     }));
     bridge.on_set_found_filter(handler(ui, state, |st, filter| {
         st.discovery.filter = filter_from_ui(filter);
+    }));
+    bridge.on_sort_found(handler(ui, state, |st, sort| {
+        st.discovery.set_sort(sort_from_ui(sort));
     }));
     connect_found(ui, state);
 }

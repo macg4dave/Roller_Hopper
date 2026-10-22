@@ -56,6 +56,16 @@ pub(crate) enum FoundFilter {
     Duplicates,
 }
 
+/// The discovery-results column that orders host groups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum FoundSort {
+    Name,
+    #[default]
+    Ip,
+    Mac,
+    Role,
+}
+
 impl FoundFilter {
     pub(crate) fn admits(self, found: &Found) -> bool {
         match self {

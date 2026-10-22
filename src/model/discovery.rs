@@ -6,7 +6,7 @@ mod found;
 mod moves;
 mod target;
 
-pub(crate) use found::{Answer, Decision, Finding, Found, FoundFilter, Method};
+pub(crate) use found::{Answer, Decision, Finding, Found, FoundFilter, FoundSort, Method};
 pub(crate) use moves::Parent;
 pub(crate) use target::TargetError;
 
@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use ipnet::Ipv4Net;
 
 use super::card::{CardId, MacAddr, NetworkCard};
-use super::device::{Device, DeviceId, DeviceKind, LastSeen, Status};
+use super::device::{Device, DeviceId, DeviceKind, LastSeen, Role, Status};
 use super::network::{ConnectionKind, Network};
 
 /// Which TCP ports a port scan probes on each host.
@@ -113,6 +113,8 @@ pub(crate) struct Discovery {
     /// The subnet being scanned, or last scanned.
     target: Option<Ipv4Net>,
     pub(crate) filter: FoundFilter,
+    pub(crate) sort: FoundSort,
+    pub(crate) sort_descending: bool,
     /// The found host shown in the details, by its place in [`Self::found`].
     pub(crate) selected: Option<usize>,
     /// The card of that host shown instead, by its place among the host's cards.
@@ -173,7 +175,7 @@ impl Discovery {
         self.found().iter().filter(|f| filter.admits(f)).count()
     }
 
-    /// The found hosts the filter lets through, in address order, by their place in
+    /// The found hosts the filter lets through, in the selected column order, by their place in
     /// [`Self::found`], each with how many of them it runs within: as in the device list, a
     /// guest follows its host, indented under it, and stands on its own when its host is not
     /// shown.
@@ -185,7 +187,17 @@ impl Discovery {
             .filter(|(_, f)| self.filter.admits(f))
             .map(|(index, _)| index)
             .collect();
-        admitted.sort_by_key(|&index| found.get(index).map(|f| f.ip));
+        admitted.sort_by(|&left, &right| {
+            let order = match (found.get(left), found.get(right)) {
+                (Some(left), Some(right)) => self.compare_found(left, right),
+                _ => left.cmp(&right),
+            };
+            if self.sort_descending {
+                order.reverse()
+            } else {
+                order
+            }
+        });
         let host = |index: usize| {
             let host = found.get(index)?.device.guest?.host;
             let mut hosts = admitted.iter().copied();
@@ -211,6 +223,26 @@ impl Discovery {
         shown
     }
 
+    fn compare_found(&self, left: &Found, right: &Found) -> std::cmp::Ordering {
+        let text = |value: &str| value.to_lowercase();
+        match self.sort {
+            FoundSort::Name => text(&left.device.name).cmp(&text(&right.device.name)),
+            FoundSort::Ip => left.ip.cmp(&right.ip),
+            FoundSort::Mac => left.mac.map(|mac| mac.0).cmp(&right.mac.map(|mac| mac.0)),
+            FoundSort::Role => role_key(&left.device.role).cmp(&role_key(&right.device.role)),
+        }
+        .then_with(|| left.ip.cmp(&right.ip))
+    }
+
+    pub(crate) fn set_sort(&mut self, sort: FoundSort) {
+        if self.sort == sort {
+            self.sort_descending = !self.sort_descending;
+        } else {
+            self.sort = sort;
+            self.sort_descending = false;
+        }
+    }
+
     /// Starts a run over `target`, forgetting the last one's results. Refused (false) while a
     /// run is busy.
     pub(crate) fn start(&mut self, target: Ipv4Net) -> bool {
@@ -223,6 +255,8 @@ impl Discovery {
             target_text: std::mem::take(&mut self.target_text),
             target: Some(target),
             filter: self.filter,
+            sort: self.sort,
+            sort_descending: self.sort_descending,
             phase: Phase::Running,
             addresses,
             started: Some(Instant::now()),
@@ -331,6 +365,24 @@ impl Discovery {
         let id = network.insert_device(device, uplink);
         found.decision = Decision::Added(id);
         Some(id)
+    }
+}
+
+fn role_key(role: &Role) -> (u8, String) {
+    match role {
+        Role::AccessPoint => (0, "access point".into()),
+        Role::Camera => (0, "camera".into()),
+        Role::Desktop => (0, "desktop".into()),
+        Role::Iot => (0, "iot".into()),
+        Role::Laptop => (0, "laptop".into()),
+        Role::Nas => (0, "nas".into()),
+        Role::Other => (0, "other".into()),
+        Role::Phone => (0, "phone".into()),
+        Role::Printer => (0, "printer".into()),
+        Role::Router => (0, "router".into()),
+        Role::Server => (0, "server".into()),
+        Role::Switch => (0, "switch".into()),
+        Role::Custom(name) => (1, name.to_lowercase()),
     }
 }
 
@@ -597,6 +649,28 @@ mod tests {
             discovery.count(FoundFilter::Unidentified)
         );
         assert!(unidentified.iter().all(|&(_, depth)| depth == 0));
+    }
+
+    #[test]
+    fn result_columns_sort_both_ways() {
+        let (mut discovery, _) = finished();
+        discovery.filter = FoundFilter::Unidentified;
+        discovery.set_sort(FoundSort::Name);
+
+        let names = |state: &Discovery| {
+            state
+                .shown()
+                .into_iter()
+                .map(|(index, _)| state.found()[index].device.name.to_lowercase())
+                .collect::<Vec<_>>()
+        };
+        let ascending = names(&discovery);
+        assert!(ascending.windows(2).all(|pair| pair[0] <= pair[1]));
+
+        discovery.set_sort(FoundSort::Name);
+        let descending = names(&discovery);
+        assert!(descending.windows(2).all(|pair| pair[0] >= pair[1]));
+        assert_eq!(descending, ascending.into_iter().rev().collect::<Vec<_>>());
     }
 
     #[test]

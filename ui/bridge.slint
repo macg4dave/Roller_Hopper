@@ -228,6 +228,7 @@ export enum DiscoveryOption { port-scan, service-detection, mdns-services, devic
 export enum FoundFinding { known, new, duplicate }
 export enum FoundDecision { pending, added, ignored }
 export enum FoundFilter { all, new, unidentified, duplicates }
+export enum FoundSort { name, ip, mac, role }
 export enum DiscoveryMethod { arp, ping, mdns }
 export enum LogEvent { started, sweep, discovered, unidentified, duplicate, failed, stopped, finished }
 
@@ -251,6 +252,8 @@ export struct DiscoveryView {
     addresses: int,
     seconds: int,
     filter: FoundFilter,
+    sort: FoundSort,
+    sort-descending: bool,
     count-all: int,
     count-new: int,
     count-unidentified: int,
@@ -509,6 +512,7 @@ export global Bridge {
     callback set-discovery-ports(int);
     callback set-discovery-option(DiscoveryOption, bool);
     callback set-found-filter(FoundFilter);
+    callback sort-found(FoundSort);
     // Found hosts by their FoundView.index, -1 for none. Selecting one on the map selects its
     // device too, which is edited like any other. A host not on the map can be renamed, given a
     // role (index in roles), an icon (by id) or notes, then added to the map or ignored.

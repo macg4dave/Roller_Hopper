@@ -1,7 +1,7 @@
 import { Bridge, FoundDecision, FoundFinding, FoundView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
-import { Chip, FlagChip } from "chip.slint";
+import { FlagChip } from "chip.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { GuideLine } from "guide-line.slint";
 
@@ -9,10 +9,9 @@ import { GuideLine } from "guide-line.slint";
 // takes the rest of the width.
 export global FoundColumns {
     out property <length> icon: 20px;
-    out property <length> ip: 104px;
-    out property <length> mac: 128px;
-    out property <length> role: 100px;
-    out property <length> methods: 160px;
+    in-out property <length> ip: 104px;
+    in-out property <length> mac: 128px;
+    in-out property <length> role: 100px;
 }
 
 // One row of the discovery results. As in the device list, a host heads a group, with each of
@@ -128,24 +127,6 @@ export component FoundRow inherits Rectangle {
             width: cell.width;
             color: text-colour;
             font-size: card ? Theme.font-small : Theme.font-body;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-        // How the host was found; for a card, only whether the run saw it.
-        if !card: HorizontalLayout {
-            width: FoundColumns.methods;
-            alignment: start;
-            spacing: Theme.space-xs;
-            for method in found.methods: VerticalLayout {
-                alignment: center;
-                Chip { text: Labels.method(method); }
-            }
-        }
-        if card: Text {
-            text: found.seen ? "" : @tr("discovery.not-seen");
-            width: FoundColumns.methods;
-            color: Theme.text-muted;
-            font-size: Theme.font-small;
             vertical-alignment: center;
             overflow: elide;
         }

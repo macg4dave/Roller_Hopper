@@ -1,7 +1,46 @@
 import { Button, ListView } from "std-widgets.slint";
-import { Bridge, DiscoveryPhase, FoundFilter } from "bridge.slint";
+import { Bridge, DiscoveryPhase, FoundFilter, FoundSort } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { FoundColumns, FoundRow } from "components/found-row.slint";
+
+component SortableHeading inherits Rectangle {
+    in property <string> label;
+    in property <FoundSort> column;
+    in property <bool> resizable: true;
+    callback resize(length);
+
+    accessible-role: button;
+    accessible-label: label;
+
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        Text {
+            text: root.label;
+            font-size: Theme.font-small;
+            font-weight: 600;
+            color: Theme.text-muted;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        if Bridge.discovery.sort == root.column: Text {
+            text: Bridge.discovery.sort-descending ? "▼" : "▲";
+            font-size: Theme.font-small;
+            color: Theme.accent;
+        }
+    }
+
+    click := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Bridge.sort-found(root.column); }
+    }
+
+    if root.resizable: resize-handle := TouchArea {
+        x: root.width - self.width / 2;
+        width: Theme.table-resize-hit-width;
+        mouse-cursor: col-resize;
+        moved => { root.resize(self.mouse-x - self.pressed-x); }
+    }
+}
 
 // The hosts the discovery run found, each with its network cards, with filters for the ones
 // worth a look.
@@ -32,26 +71,44 @@ export component DiscoveryResults inherits VerticalLayout {
             padding-right: Theme.space-s + Theme.scrollbar-width;
             spacing: Theme.space-m;
             Rectangle { width: FoundColumns.icon; }
-            Text {
-                text: @tr("discovery.column.name");
+            SortableHeading {
+                label: @tr("discovery.column.name");
+                column: FoundSort.name;
                 horizontal-stretch: 1;
-                font-size: Theme.font-small;
-                font-weight: 600;
-                color: Theme.text-muted;
-                overflow: elide;
+                resize(delta) => {
+                    FoundColumns.ip = clamp(FoundColumns.ip - delta,
+                        Theme.table-column-min-width, Theme.table-column-max-width);
+                }
             }
-            for heading in [
-                { text: @tr("details.ip"), width: FoundColumns.ip },
-                { text: @tr("details.mac"), width: FoundColumns.mac },
-                { text: @tr("details.role"), width: FoundColumns.role },
-                { text: @tr("discovery.found-by"), width: FoundColumns.methods },
-            ]: Text {
-                text: heading.text;
-                width: heading.width;
-                font-size: Theme.font-small;
-                font-weight: 600;
-                color: Theme.text-muted;
-                overflow: elide;
+            SortableHeading {
+                label: @tr("details.ip");
+                column: FoundSort.ip;
+                width: FoundColumns.ip;
+                resize(delta) => {
+                    let change = clamp(delta,
+                        Theme.table-column-min-width - FoundColumns.ip,
+                        FoundColumns.mac - Theme.table-column-min-width);
+                    FoundColumns.ip += change;
+                    FoundColumns.mac -= change;
+                }
+            }
+            SortableHeading {
+                label: @tr("details.mac");
+                column: FoundSort.mac;
+                width: FoundColumns.mac;
+                resize(delta) => {
+                    let change = clamp(delta,
+                        Theme.table-column-min-width - FoundColumns.mac,
+                        FoundColumns.role - Theme.table-column-min-width);
+                    FoundColumns.mac += change;
+                    FoundColumns.role -= change;
+                }
+            }
+            SortableHeading {
+                label: @tr("details.role");
+                column: FoundSort.role;
+                width: FoundColumns.role;
+                resizable: false;
             }
         }
         Rectangle {

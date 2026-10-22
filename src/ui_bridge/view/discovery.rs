@@ -7,8 +7,8 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use super::sync;
 use crate::model::{
-    Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase, PortList,
-    TargetError,
+    Decision, Finding, Found, FoundFilter, FoundSort, LogEntry, LogEvent, Method, Parent, Phase,
+    PortList, TargetError,
 };
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::{AppState, convert};
@@ -40,6 +40,8 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         addresses: int(addresses),
         seconds: seconds(discovery.elapsed()),
         filter: filter(discovery.filter),
+        sort: sort(discovery.sort),
+        sort_descending: discovery.sort_descending,
         count_all: count(FoundFilter::All),
         count_new: count(FoundFilter::New),
         count_unidentified: count(FoundFilter::Unidentified),
@@ -297,6 +299,15 @@ fn filter(filter: FoundFilter) -> ui::FoundFilter {
         FoundFilter::New => ui::FoundFilter::New,
         FoundFilter::Unidentified => ui::FoundFilter::Unidentified,
         FoundFilter::Duplicates => ui::FoundFilter::Duplicates,
+    }
+}
+
+fn sort(sort: FoundSort) -> ui::FoundSort {
+    match sort {
+        FoundSort::Name => ui::FoundSort::Name,
+        FoundSort::Ip => ui::FoundSort::Ip,
+        FoundSort::Mac => ui::FoundSort::Mac,
+        FoundSort::Role => ui::FoundSort::Role,
     }
 }
 

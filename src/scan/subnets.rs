@@ -28,7 +28,10 @@ fn best(default: Option<Ipv4Net>, addresses: impl Iterator<Item = Ipv4Net>) -> O
     let routed = subnets
         .iter()
         .find(|s| default.is_some_and(|d| d.contains(*s)));
-    routed.or(subnets.first()).copied()
+    routed
+        .or(subnets.first())
+        .copied()
+        .or_else(|| default.and_then(subnet))
 }
 
 /// The subnet to scan for one of this computer's addresses; none for a link-local address or a
@@ -66,6 +69,12 @@ mod tests {
             first,
             "no default route"
         );
+    }
+
+    #[test]
+    fn the_default_route_is_the_fallback_when_interfaces_have_no_ipv4_address() {
+        let default = "192.168.20.0/24".parse().ok();
+        assert_eq!(best(default, std::iter::empty()), default);
     }
 
     #[test]
