@@ -1,5 +1,5 @@
 import { Palette, Spinner } from "std-widgets.slint";
-import { Bridge, GuestKind } from "bridge.slint";
+import { Bridge, FileProblemKind, GuestKind } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { Header } from "header.slint";
 import { Labels } from "labels.slint";
@@ -10,6 +10,7 @@ import { EditPage } from "edit-page.slint";
 import { DiscoveryPage } from "discovery-page.slint";
 import { Splitter } from "components/splitter.slint";
 import { MoveDialog } from "move-dialog.slint";
+import { FileProblemDialog, UnsavedDialog } from "project-dialogs.slint";
 import { AiSettingsWindow, AnswerEnd, GenerationSettings, InstallOutcome, ModelState } from "ai-settings-window.slint";
 
 export { Bridge, Labels, AiSettingsWindow, AnswerEnd, GenerationSettings, InstallOutcome, ModelState }
@@ -143,18 +144,19 @@ export component AppWindow inherits Window {
                     font-size: Theme.font-small;
                     vertical-alignment: center;
                 }
-                Rectangle { horizontal-stretch: 1; }
-                Text {
-                    text: @tr("status-bar.sample-only");
-                    color: Theme.text-muted;
-                    font-size: Theme.font-small;
-                    vertical-alignment: center;
-                }
             }
         }
     }
 
     if Bridge.move-question.shown: MoveDialog {
+        width: root.width;
+        height: root.height;
+    }
+    if Bridge.unsaved-question: UnsavedDialog {
+        width: root.width;
+        height: root.height;
+    }
+    if Bridge.file-problem.kind != FileProblemKind.none: FileProblemDialog {
         width: root.width;
         height: root.height;
     }

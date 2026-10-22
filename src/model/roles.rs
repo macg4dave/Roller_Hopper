@@ -4,10 +4,14 @@
 //! Standard role names are translated in the UI, so clashes with those are checked there; this
 //! list only keeps the names the user typed unique among themselves, ignoring case.
 
+use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
+
 use super::device::{Icon, Role};
 use super::groups::GroupId;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Entry {
     role: Role,
     /// The user's name for a standard role, replacing its translated one. Unused for custom
@@ -45,7 +49,8 @@ impl Entry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct Roles(Vec<Entry>);
 
 impl Default for Roles {
@@ -161,6 +166,19 @@ impl Roles {
         !standard
             .map(Entry::definition)
             .eq(default.0.iter().map(Entry::definition))
+    }
+
+    /// As the editors keep them: each role once, Other among them, and the names the user
+    /// typed unique ignoring case and never blank.
+    pub(crate) fn consistent(&self) -> bool {
+        let mut roles = HashSet::new();
+        let mut names = HashSet::new();
+        let unique = self.0.iter().all(|e| {
+            let name = e.name().map(|n| n.trim().to_lowercase());
+            let fresh_name = name.is_none_or(|n| !n.is_empty() && names.insert(n));
+            roles.insert(&e.role) && fresh_name
+        });
+        unique && roles.contains(&Role::Other)
     }
 
     /// Brings back the standard roles as they first were; custom roles, and the groups roles

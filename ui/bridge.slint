@@ -255,6 +255,8 @@ export struct DiscoveryView {
     count-new: int,
     count-unidentified: int,
     count-duplicates: int,
+    // New hosts still waiting for a decision, which import-found adds.
+    importable: int,
 }
 
 /// A host the run found, or in the results one of its network cards, which follow it as in the
@@ -329,6 +331,18 @@ export struct MoveQuestion {
     found: bool,
 }
 
+// The answers to "save changes first?".
+export enum UnsavedAnswer { save, discard, cancel }
+// Why a project could not be opened, or (save-failed) saved; none when nothing went wrong.
+export enum FileProblemKind { none, unreadable, too-large, not-project, newer, damaged, save-failed }
+
+/// A file operation that failed, shown until dismissed. `detail` is the system's own message,
+/// for unreadable and save-failed.
+export struct FileProblem {
+    kind: FileProblemKind,
+    detail: string,
+}
+
 /// A line of the discovery log. Which fields are filled depends on the event: `text` is a
 /// subnet, a device's name or why the scan failed (the system's own message), `ip` and `mac` a
 /// host's, `count` a number of addresses or hosts.
@@ -343,6 +357,16 @@ export struct LogView {
 }
 
 export global Bridge {
+    // The project file's name, empty until the project is saved; and whether it has changes
+    // not saved yet.
+    in property <string> project-name;
+    in property <bool> unsaved;
+    // New, Open or closing waits on the answer to "save changes first?" while this is set.
+    in property <bool> unsaved-question;
+    in property <FileProblem> file-problem;
+    // What the file dialogs call project files.
+    out property <string> project-file-type: @tr("project.file-type");
+
     // The map's nodes: every network card, drawn with its device's icon and name. Devices are
     // not on the map themselves.
     in property <[DeviceView]> nodes;
@@ -468,6 +492,14 @@ export global Bridge {
     // A card's own row dropped on the group of the device with this id makes it a child there.
     pure callback can-move-card(data-transfer, int) -> bool;
     callback move-card-to(data-transfer, int);
+    // The project file. New and Open ask first about unsaved changes (see unsaved-question),
+    // and wait while a scan runs; Save asks where only for a project never saved.
+    callback new-project();
+    callback open-project();
+    callback save-project();
+    callback save-project-as();
+    callback answer-unsaved(UnsavedAnswer);
+    callback dismiss-file-problem();
     // A move that would remove the parent the card leaves waits in move-question for these.
     callback confirm-move();
     callback cancel-move();
@@ -532,6 +564,9 @@ export global Bridge {
     callback edit-found-notes(int, string);
     callback add-found(int);
     callback ignore-found(int);
+    // Adds every new host still waiting for a decision to the map; ignored hosts and possible
+    // duplicates wait for the user.
+    callback import-found();
     // A card of a found host not on the map, by the host's index and the card's card-index: as
     // a drag payload, dropped on a found host's group (by its index) to become a child there,
     // or given the parent at an index in found-parent-choices.

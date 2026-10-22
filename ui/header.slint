@@ -2,7 +2,8 @@ import { Button } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 
-// Title, Scan and Settings. Search and the edit page are reached from the device list.
+// Title, the project file (its name, an unsaved mark, New, Open, Save and Save as), Scan and
+// Settings. Search and the edit page are reached from the device list.
 export component Header inherits Rectangle {
     // Scan was clicked: the discovery page is wanted.
     callback scan();
@@ -37,8 +38,36 @@ export component Header inherits Rectangle {
             color: Theme.text;
             vertical-alignment: center;
         }
+        // The file's name is the user's own, shown as given.
+        Text {
+            property <string> name: Bridge.project-name == "" ? @tr("project.untitled") : Bridge.project-name;
+            text: Bridge.unsaved ? @tr("header.project-unsaved", name) : name;
+            font-size: Theme.font-body;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
 
-        Rectangle { horizontal-stretch: 1; }
+        // A new project or another one waits until a scan ends.
+        Button {
+            text: @tr("header.new");
+            enabled: !Bridge.scanning;
+            clicked => { Bridge.new-project(); }
+        }
+        Button {
+            text: @tr("header.open");
+            enabled: !Bridge.scanning;
+            clicked => { Bridge.open-project(); }
+        }
+        Button {
+            text: @tr("header.save");
+            clicked => { Bridge.save-project(); }
+        }
+        Button {
+            text: @tr("header.save-as");
+            clicked => { Bridge.save-project-as(); }
+        }
 
         Button {
             text: Bridge.scanning ? @tr("header.scanning") : @tr("header.scan");

@@ -2,10 +2,13 @@
 //! roles on offer and their groups.
 
 mod cards;
+mod check;
 mod children;
 mod tree;
 
 pub(crate) use tree::Connection;
+
+use serde::{Deserialize, Serialize};
 
 use super::card::CardId;
 use super::device::{Device, DeviceId, Icon, Role, Status};
@@ -13,14 +16,14 @@ use super::groups::{GroupColour, GroupId, Groups, LineStyle};
 use super::roles::Roles;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum ConnectionKind {
     Known,
     Inferred,
 }
 
 /// A network card plugged into a card of another device, towards the router (`upstream`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct CardLink {
     pub(crate) upstream: CardId,
     pub(crate) card: CardId,
@@ -46,7 +49,8 @@ impl StatusFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// Read from a file, it is only used once [`Self::checked`].
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct Network {
     /// Each guest comes after its host, among the host's other guests, so every list shows the
     /// guests under their host.
@@ -59,6 +63,8 @@ pub(crate) struct Network {
 }
 
 impl Network {
+    /// The tests' sample networks; the app's start empty, or come from a file.
+    #[cfg(test)]
     pub(crate) fn new(devices: Vec<Device>, links: Vec<CardLink>) -> Self {
         Self {
             devices: children::hosts_first(devices),

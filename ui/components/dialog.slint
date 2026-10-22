@@ -1,0 +1,49 @@
+import { Theme } from "../theme.slint";
+
+// A question or message over the whole window, so nothing changes meanwhile: a title, a
+// message, and the buttons given as children, at the bottom right.
+export component Dialog inherits Rectangle {
+    in property <string> title;
+    in property <string> message;
+
+    background: Theme.scrim;
+
+    // Clicks outside the dialog do nothing.
+    TouchArea { }
+
+    Rectangle {
+        width: min(420px, parent.width - 2 * Theme.space-l);
+        height: box.preferred-height;
+        background: Theme.surface;
+        border-radius: Theme.radius;
+        border-color: Theme.border;
+        border-width: 1px;
+        drop-shadow-blur: 12px;
+        drop-shadow-color: Theme.scrim;
+        accessible-role: groupbox;
+        accessible-label: root.title;
+
+        box := VerticalLayout {
+            padding: Theme.space-l;
+            spacing: Theme.space-m;
+
+            Text {
+                text: root.title;
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+            }
+            Text {
+                text: root.message;
+                font-size: Theme.font-body;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-s;
+                @children
+            }
+        }
+    }
+}

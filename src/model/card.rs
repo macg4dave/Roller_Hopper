@@ -7,15 +7,17 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 use ipnet::Ipv4Net;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use super::device::Icon;
 use super::services::Services;
 
 /// Stable identifier of a network card, unique across the network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct CardId(pub(crate) u32);
 
-/// A MAC address, shown in the usual colon-separated upper-case form.
+/// A MAC address, shown in the usual colon-separated upper-case form, and saved in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct MacAddr(pub(crate) [u8; 6]);
 
@@ -23,6 +25,20 @@ impl fmt::Display for MacAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let octets: Vec<String> = self.0.iter().map(|octet| format!("{octet:02X}")).collect();
         f.write_str(&octets.join(":"))
+    }
+}
+
+impl Serialize for MacAddr {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for MacAddr {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        text.parse()
+            .map_err(|BadMac| de::Error::custom("not a MAC address"))
     }
 }
 
@@ -48,7 +64,7 @@ impl FromStr for MacAddr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct NetworkCard {
     pub(crate) id: CardId,
     /// The user's name for it, such as "LAN"; empty shows a numbered placeholder.

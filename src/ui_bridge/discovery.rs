@@ -89,6 +89,15 @@ impl AppState {
         }
     }
 
+    /// Adds every new host still waiting for a decision to the map and lays them out once. The
+    /// selection is taken again, so a host shown in the details is edited on the map now.
+    fn import_found(&mut self) {
+        if self.discovery.import(&mut self.network) > 0 {
+            self.lay_out_at_rest();
+            self.select_found(self.discovery.selected, self.discovery.selected_card);
+        }
+    }
+
     fn set_found_role(&mut self, index: usize, role: usize) {
         if let Some(role) = self.role(role) {
             self.discovery.edit(index, |d| d.role = role);
@@ -215,6 +224,8 @@ fn connect_found(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_ignore_found(handler(ui, state, |st, index| {
         st.discovery.ignore(convert::index(index));
     }));
+    let import = handler(ui, state, |st, ()| st.import_found());
+    bridge.on_import_found(move || import(()));
 }
 
 /// Renaming and re-iconing the cards of a found host not on the map.
@@ -430,6 +441,22 @@ mod tests {
         assert_eq!(device.role, crate::model::Role::Other);
         assert!(state.positions.contains_key(&device.cards[0].id));
         assert_eq!(state.selected, Some(Selection::Device(id)), "edited on");
+    }
+
+    #[test]
+    fn imported_hosts_are_laid_out_and_the_one_shown_is_edited_on_the_map() {
+        let mut state = AppState::new(mock_data::network());
+        finished(&mut state);
+        let mut hosts = state.discovery.found().iter();
+        let laptop = hosts.position(|f| f.device.name == "Guest Laptop");
+        state.select_found(laptop, None);
+        state.import_found();
+        let found = state.discovery.found();
+        let laptop_id = found[laptop.unwrap()].on_map().unwrap();
+        assert_eq!(state.selected, Some(Selection::Device(laptop_id)));
+        let added = found.iter().filter_map(Found::on_map);
+        let mut cards = added.filter_map(|id| state.network.device(id)?.primary_card());
+        assert!(cards.all(|c| state.positions.contains_key(&c.id)));
     }
 
     #[test]

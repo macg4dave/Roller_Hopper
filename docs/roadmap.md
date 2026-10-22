@@ -20,7 +20,7 @@ until their qualification task is done.
 
 ### Starting point in the code
 
-- Startup builds sample data into one UI-owned `Rc<RefCell<AppState>>`. The model in
+- Startup builds an empty network into one UI-owned `Rc<RefCell<AppState>>`. The model in
   `src/model/` has no Slint dependency, and `ui_bridge/view.rs` keeps `VecModel`s and updates
   only changed rows. Extend this: workers return owned data into the same state; no second
   inventory.
@@ -41,8 +41,8 @@ until their qualification task is done.
   `Answer`s over a channel the UI drains every 200 ms; Stop drops the task and shuts the runtime
   down without waiting. Names, banners and TXT values are bounded and control characters
   rejected. A card's OUI vendor is kept on the card, never as the device's maker. Only
-  built and unit-tested on Windows; no live run yet. The sample map stays; the fixture answers
-  in `mock_data/answers.rs` are test-only.
+  built and unit-tested on Windows; no live run yet. The sample network and the fixture
+  answers in `mock_data/` are test-only.
 - Gaps before real data:
   - A card has one optional IPv4/prefix and gateway.
   - Services are keyed by port number alone, with no transport (TCP vs UDP).
@@ -53,8 +53,9 @@ until their qualification task is done.
   - Status and relative last-seen are device-wide; empty values also mean "not collected".
   - Stop and failure both end in Finished (failure logs the system's message), with no
     separate cancelled or partial outcome. Discovery results and actions use list indices.
-  - `Network::new` trusts its inputs, and mutable access bypasses address validation. Layout
-    starts from rootless cards, so an imported rootless cycle would get no positions.
+  - Open checks a file's network (`Network::checked`: unique IDs, references, no guest or link
+    loops, roles and groups), but mutable access bypasses address validation and Open does
+    not check addresses.
   - `Found::detect` keeps the whole fixture device. Add copies it, and insertion connects its
     first card without rechecking address conflicts.
   - Every update and motion tick rebuilds view vectors. Measure before adding caches.
@@ -91,15 +92,17 @@ controls, changed only where the brief or an agreed decision says. It already de
   count in the status bar. Results show name, found-by method chips and the flags New,
   Duplicate?, Added and Ignored, with "Same MAC as"; a mapped card outside the scanned network
   shows Not seen. A mapped host gets its normal editor and Show on map; others get a pre-Add
-  form, Add to map and Ignore. The log has Info and Warning lines, and the header shows
+  form, Add to map and Ignore. Import, above the results, adds every New host not yet added
+  or ignored in one go; possible duplicates stay for review. The log has Info and Warning lines, and the header shows
   Scanning… while a run continues on another page.
 - Icons come from an `icons` folder beside the program (the source tree as fallback), with
   subfolders as categories, re-read whenever the picker opens.
 
 Gaps the UI shows against the plan:
 
-- No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
-  data only". Settings holds a pointer to the View menu and opens the AI settings window:
+- The header has New, Open, Save and Save as with the project name and an unsaved mark, and
+  asks Save / Don't save / Cancel before New, Open or closing loses changes (ahead of the
+  milestone order, at the user's request). New and Open wait while a scan runs. Settings holds a pointer to the View menu and opens the AI settings window:
   install Qwen3-4B-Q4_K_M (the only model offered), or list the user's own GGUF files from the
   models folder (Qwen3 only); Load or Unload one with Candle (CPU, or GPU in a `cuda` build,
   with a CUDA light), and Run it on an editable prompt and sample file (an nmap-style NAS) with
@@ -242,6 +245,13 @@ Gaps the UI shows against the plan:
 ### Project files
 
 - Serde + serde_json; one versioned `.rhopper.json` document. No SQLite alongside it.
+- **In place, version 1 (`src/project.rs`):** `format`, `version` and the project: the network
+  (devices, cards, services, guests, links as made and as found, roles, groups) and the map
+  arrangement, serialised straight from the model types. Open refuses non-projects, newer
+  versions, the agreed size/count/text limits and networks that fail `Network::checked`,
+  leaving the current project. Save writes through atomic-write-file (through a symlink to its
+  target), on the UI thread. Not yet saved: view state, scan runs and history, ignored hosts,
+  AI state, embedded icons. Not yet done: external-change detection, write receipts.
 - Open: parse into a separate candidate, bound size, counts and strings, validate references,
   ownership, display cycles, placement and finite coordinates, and apply supported
   migrations. Only after handling unsaved changes does it replace the project. Reject unknown
@@ -261,9 +271,9 @@ Gaps the UI shows against the plan:
 | Interfaces and gateways | netdev 0.46.3 | MIT, three OSes. Only if netscli-core lacks it. Doesn't pick per-destination routes. |
 | mDNS/DNS-SD | mdns-sd 0.21.6 | MIT/Apache, MSRV 1.71, in process. Not zeroconf (needs Bonjour/Avahi). |
 | DNS | hickory-resolver 0.26.3 | MSRV 1.88. System resolver policy; no default public DNS/DoH. Check split DNS over VPN. |
-| JSON | serde 1.0.229, serde_json 1.0.150 | Needs separate bounds and domain validation. |
-| Safe save | **Chosen: atomic-write-file 0.3.1** (BSD-3-Clause, MSRV 1.85; deps MIT/Apache) | Temp file in the same folder, `sync_all`, then rename; on Unix also `fsync`s the folder and keeps mode and owner (best effort). Dropping an uncommitted file deletes the temp and leaves the old file. It replaces a symlink rather than its target, so canonicalise the path first. Windows: no folder sync and permissions come from the folder; rename fails if another program holds the file open. Its 21 tests pass on Windows. Not tempfile: `persist` doesn't sync or keep the mode. Don't promise power-loss safety. |
-| File dialogs | **Chosen: rfd 0.17.2** with `default-features = false`; `gtk3` on Linux (all 60 packages MIT/Apache) | Without `gtk3`, Linux uses the portal with a `zenity` fallback, which runs another program; with it, the zenity module isn't compiled, but the system GTK3 library is required. Use `AsyncFileDialog` on `slint::spawn_local`, parented through Slint's default `raw-window-handle-06`. Builds on Windows; no dialog has been shown yet. |
+| JSON | **In use: serde 1.0.229 (`derive`), serde_json 1.0.154** | Bounds and domain checks are separate (`project.rs`, `Network::checked`). |
+| Safe save | **In use: atomic-write-file 0.3.1** (BSD-3-Clause, MSRV 1.85; deps MIT/Apache) | Temp file in the same folder, `sync_all`, then rename; on Unix also `fsync`s the folder and keeps mode and owner (best effort). Dropping an uncommitted file deletes the temp and leaves the old file. It replaces a symlink rather than its target, so canonicalise the path first. Windows: no folder sync and permissions come from the folder; rename fails if another program holds the file open. Its 21 tests pass on Windows. Not tempfile: `persist` doesn't sync or keep the mode. Don't promise power-loss safety. |
+| File dialogs | **In use: rfd 0.17.2** with `default-features = false`; `gtk3` on Linux (all 60 packages MIT/Apache) | Without `gtk3`, Linux uses the portal with a `zenity` fallback, which runs another program; with it, the zenity module isn't compiled, but the system GTK3 library is required. `AsyncFileDialog` on `slint::spawn_local`, parented through Slint's `raw-window-handle-06` feature (not a default; enabled). Builds on Windows; no dialog has been shown yet. |
 | Preferences path | directories 6.0.0 | Moved to Codeberg; maintenance not confirmed. |
 | ICMP | surge-ping 0.9.1 | Permissions differ by OS; no unprivileged Windows support established. Native Windows ICMP is an alternative. |
 | SSDP, OUI | ssdp-client 2.1.0; mac_oui 0.4.11 / oui-data 0.2.1 | Data licence and freshness unchecked. |
@@ -582,11 +592,10 @@ Goal: explicit saves that protect the previous file.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0040 | Add New, Open, Save and Save As to the header and connect the qualified native dialogs; cancelling a picker changes neither document nor path. | BE-0039, BE-0010 |
-| BE-0041 | Write a complete sibling temporary file, commit via the qualified replacement route, keep the old file on failure and report errors visibly. | BE-0040 |
+| BE-0041 | Test the save route's failures: a locked target (another program holding the file), a read-only folder and a full disk keep the old file and show the error. | — |
 | BE-0042 | One writer per file; detect external changes before replacing, as agreed. Test races and access failures. | BE-0041 |
 | BE-0043 | Serialise writes per destination with generation/revision/path receipts; Save As changes the active path only on success. | BE-0042 |
-| BE-0044 | Project name and unsaved mark in the header, replacing the "Sample data only" status; Save/Discard/Cancel before close, New or Open; invalid Open keeps the project; a document switch invalidates old callbacks. | BE-0043 |
+| BE-0044 | A document switch invalidates old callbacks (late dialogs and results); the unsaved check (whole-model comparison on every update) is measured at the agreed workload. | BE-0043 |
 | BE-0045 | Restore full state with motion at rest and old observations as last-known; a saved active run reopens as history; nothing starts traffic or AI on Open. | BE-0044 |
 
 Exit: save failure, picker cancel, external edits and stale receipts all keep the right file
@@ -598,8 +607,7 @@ Goal: a useful persistent manual project before real scanning.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0046 | Launch opens an empty, unsaved project whose empty map points to Scan and Add device; it supports manual devices, cards, contexts, roles/groups and icons without sample data. | BE-0045 |
-| BE-0107 | Replace Forget device with the agreed Remove device: confirmation, removes the device with its cards and guests, keeps its scan history, saved on the next Save. Test guests, selection and undo by not saving. | BE-0046 |
+| BE-0107 | Replace Forget device with the agreed Remove device: confirmation, removes the device with its cards and guests, keeps its scan history, saved on the next Save. Test guests, selection and undo by not saving. | BE-0045 |
 | BE-0047 | List/map selection, search, filters, editors, guest/card edits, card moves and custom roles all work against the one document, keeping drafts and selection. | BE-0107 |
 | BE-0048 | Demonstrate save/reopen, free branch moves and automatic arrangement with several cards and contexts; report source checks separately from approved visual checks. | BE-0047 |
 | BE-0049 | Remove simulation-only persistence assumptions; check the foundation against the product brief. | BE-0048 |
@@ -712,7 +720,7 @@ Goal: combined behaviour under realistic load.
 | BE-0093 | Stress queues and work limits; Stop stays responsive and late results are handled while AI or file work is busy; nothing collects after close. | BE-0092 |
 | BE-0094 | Measure about 250 devices by real card/service/history counts, including animation, projection, save snapshots and AI memory; optimise only measured bottlenecks. | BE-0093 |
 | BE-0095 | Keyboard/focus/error feedback, readable provenance and conflicts, no dead controls and complete translations across map, discovery, files and AI. | BE-0094 |
-| BE-0096 | Remove remaining production simulation paths and the sample network (no demo mode); update the README. | BE-0095 |
+| BE-0096 | Confirm no production simulation path remains (the sample network is test-only already; no demo mode); update the README. | BE-0095 |
 
 ## M-019: Self-contained builds on three platforms
 

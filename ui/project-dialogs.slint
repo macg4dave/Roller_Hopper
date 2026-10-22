@@ -1,0 +1,46 @@
+import { Button } from "std-widgets.slint";
+import { Bridge, FileProblemKind, UnsavedAnswer } from "bridge.slint";
+import { Dialog } from "components/dialog.slint";
+
+// Asks whether to save the project's changes before New, Open or closing the window loses them.
+export component UnsavedDialog inherits Dialog {
+    title: @tr("unsaved.title");
+    message: Bridge.project-name == ""
+        ? @tr("unsaved.question-untitled")
+        : @tr("unsaved.question", Bridge.project-name);
+
+    Button {
+        text: @tr("edit.cancel");
+        clicked => { Bridge.answer-unsaved(UnsavedAnswer.cancel); }
+    }
+    Button {
+        text: @tr("unsaved.discard");
+        clicked => { Bridge.answer-unsaved(UnsavedAnswer.discard); }
+    }
+    Button {
+        text: @tr("unsaved.save");
+        primary: true;
+        clicked => { Bridge.answer-unsaved(UnsavedAnswer.save); }
+    }
+}
+
+// Says why a project could not be opened or saved; the project, and any file saved before,
+// are left as they were.
+export component FileProblemDialog inherits Dialog {
+    property <FileProblemKind> kind: Bridge.file-problem.kind;
+    property <string> detail: Bridge.file-problem.detail;
+
+    title: kind == FileProblemKind.save-failed ? @tr("file-problem.save-title") : @tr("file-problem.open-title");
+    message: kind == FileProblemKind.unreadable ? @tr("file-problem.unreadable", detail)
+        : kind == FileProblemKind.too-large ? @tr("file-problem.too-large")
+        : kind == FileProblemKind.not-project ? @tr("file-problem.not-project")
+        : kind == FileProblemKind.newer ? @tr("file-problem.newer")
+        : kind == FileProblemKind.damaged ? @tr("file-problem.damaged")
+        : @tr("file-problem.save-failed", detail);
+
+    Button {
+        text: @tr("file-problem.ok");
+        primary: true;
+        clicked => { Bridge.dismiss-file-problem(); }
+    }
+}

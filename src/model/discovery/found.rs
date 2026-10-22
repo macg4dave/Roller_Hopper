@@ -127,6 +127,12 @@ impl Found {
         !matches!(self.finding, Finding::Known(_)) && !matches!(self.decision, Decision::Added(_))
     }
 
+    /// A new host still waiting for a decision, which Import adds. Ignored hosts and possible
+    /// duplicates wait for the user.
+    pub(crate) fn importable(&self) -> bool {
+        self.finding == Finding::New && self.decision == Decision::Pending
+    }
+
     /// The device on the map it is: the known device, or the one it was added as.
     pub(crate) fn on_map(&self) -> Option<DeviceId> {
         if let Finding::Known(id) = self.finding {

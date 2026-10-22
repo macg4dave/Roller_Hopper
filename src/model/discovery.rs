@@ -1,6 +1,7 @@
 //! A discovery run over one subnet: it takes the hosts the scanner reports as they come, flags
-//! those not on the map, and adds the ones the user picks. The scanning itself is elsewhere
-//! (`crate::scan`); nothing here touches a network, so runs can be replayed in tests.
+//! those not on the map, and adds the ones the user picks, or every new one at once. The
+//! scanning itself is elsewhere (`crate::scan`); nothing here touches a network, so runs can be
+//! replayed in tests.
 
 mod found;
 mod moves;
@@ -380,6 +381,25 @@ impl Discovery {
         found.decision = Decision::Added(id);
         Some(id)
     }
+
+    /// How many hosts [`Self::import`] would add.
+    pub(crate) fn importable(&self) -> usize {
+        self.hosts.iter().filter(|f| f.importable()).count()
+    }
+
+    /// Adds every new host still waiting for a decision to the map, each as [`Self::add`] does.
+    /// Returns how many were added.
+    pub(crate) fn import(&mut self, network: &mut Network) -> usize {
+        let hosts = self.hosts.iter().enumerate();
+        let pending: Vec<usize> = hosts
+            .filter(|(_, found)| found.importable())
+            .map(|(index, _)| index)
+            .collect();
+        pending
+            .into_iter()
+            .filter_map(|index| self.add(index, network))
+            .count()
+    }
 }
 
 fn role_key(role: &Role) -> (u8, String) {
@@ -650,6 +670,27 @@ mod tests {
         assert_eq!(discovery.found()[index].decision, Decision::Ignored);
         assert_eq!(network, before);
         assert!(discovery.add(index, &mut network).is_some());
+    }
+
+    #[test]
+    fn import_adds_every_undecided_new_host_and_leaves_the_rest_for_review() {
+        let (mut discovery, mut network) = finished();
+        let (ignored, _) = named(&discovery, "Guest Laptop");
+        discovery.ignore(ignored);
+        let (added, _) = named(&discovery, "Kitchen Speaker");
+        discovery.add(added, &mut network);
+        let waiting = discovery.importable();
+        assert!(waiting > 0);
+        let before = network.devices().len();
+
+        assert_eq!(discovery.import(&mut network), waiting);
+        assert_eq!(network.devices().len(), before + waiting);
+        assert_eq!(discovery.importable(), 0);
+        let decision = |name| named(&discovery, name).1.decision;
+        assert_eq!(decision("Guest Laptop"), Decision::Ignored, "left off");
+        let duplicate = named(&discovery, "IP Camera").1;
+        assert_eq!(duplicate.on_map(), None, "a possible duplicate waits");
+        assert_eq!(discovery.import(&mut network), 0, "nothing left");
     }
 
     #[test]

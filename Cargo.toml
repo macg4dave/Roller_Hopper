@@ -3,27 +3,37 @@ name = "network-mapper"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
-description = "UI prototype of a local network mapper (sample map, real discovery scan)"
+description = "A local network mapper: real discovery scans, a hand-editable map, project files"
 license = "MIT"
 publish = false
 
 [dependencies]
+# Saves a project through a temporary file beside it, so a failed save keeps the old file.
+atomic-write-file = "0.3.1"
 candle-core = "0.11.0"
 candle-nn = "0.11.0"
 candle-transformers = "0.11.0"
 dirs = "7.0.0"
-ipnet = { version = "2.12.2", default-features = false, features = ["std"] }
+ipnet = { version = "2.12.2", default-features = false, features = ["std", "serde"] }
 # The scanner: ping sweep, neighbour table, mDNS names and TCP connect probes. Never `pcap`
 # (needs a capture driver) or `db`.
 netscli-core = { version = "0.3.4", default-features = false, features = ["mdns"] }
+# The native Open and Save dialogs; on Linux through GTK3 (below), never a helper program.
+rfd = { version = "0.17.2", default-features = false }
+# The project file format.
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 sha2 = { version = "0.11.1", default-features = false }
 # Skia draws the scaled map (text, lines, icons) more cleanly than the default FemtoVG renderer.
-slint = { version = "1.18.1", features = ["renderer-skia"] }
+# The window handle parents the file dialogs to the window.
+slint = { version = "1.18.1", features = ["renderer-skia", "raw-window-handle-06"] }
 tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"] }
 # The runtime a scan runs on, off the UI thread; netscli-core is async on Tokio.
 tokio = { version = "1.54.0", default-features = false, features = ["rt-multi-thread"] }
 ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rfd = { version = "0.17.2", default-features = false, features = ["gtk3"] }
 
 [build-dependencies]
 slint-build = "1.18.1"

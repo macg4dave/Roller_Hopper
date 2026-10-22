@@ -4,9 +4,8 @@
 //!
 //! This module owns the state, the selection and the list's search, filter and folding. The
 //! rest is split by area: [`edit`] handles editing, [`map`] the topology map, [`discovery`] the
-//! discovery page's scan, [`view`] sends
-//! the state to the UI, [`convert`] translates between model and UI types, and [`icons`] reads
-//! the icon folder.
+//! discovery page's scan, [`project`] the project file, [`view`] sends the state to the UI,
+//! [`convert`] translates between model and UI types, and [`icons`] reads the icon folder.
 
 mod convert;
 mod discovery;
@@ -14,12 +13,14 @@ mod edit;
 mod i18n;
 mod icons;
 mod map;
+mod project;
 mod view;
 
 pub(crate) use i18n::select_language;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use slint::{ComponentHandle, SharedString, Weak};
@@ -28,6 +29,7 @@ use crate::model::{
     Arrangement, CardId, Device, DeviceId, Discovery, Network, NetworkCard, Positions,
     StatusFilter, tree_layout,
 };
+use crate::project::Project;
 use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
 use map::Motion;
@@ -63,12 +65,36 @@ pub(crate) struct AppState {
     scans: u32,
     /// Read from the icon folder by [`connect`], and again when the icon picker opens.
     icons: Icons,
+    /// The file the project was opened from or last saved to; `None` until it is saved.
+    file: Option<PathBuf>,
+    /// The project as it was opened or last saved, which tells whether it has changed since.
+    saved: Project,
+    /// What waits on the answer to "save changes first?", while it is asked.
+    unsaved_question: Option<project::Then>,
+    /// A file operation that failed, shown until the user dismisses it.
+    file_problem: Option<project::Problem>,
 }
 
 impl AppState {
     pub(crate) fn new(network: Network) -> Self {
         let arrangement = Arrangement::default();
-        let positions = tree_layout(&network, &arrangement);
+        Self::with_project(
+            Project {
+                network,
+                arrangement,
+            },
+            None,
+        )
+    }
+
+    /// The window's state for `project`, opened from `file`, with nothing changed yet.
+    fn with_project(project: Project, file: Option<PathBuf>) -> Self {
+        let positions = tree_layout(&project.network, &project.arrangement);
+        let saved = project.clone();
+        let Project {
+            network,
+            arrangement,
+        } = project;
         Self {
             network,
             motion: Motion::new(positions.clone()),
@@ -83,6 +109,10 @@ impl AppState {
             discovery: Discovery::default(),
             scans: 0,
             icons: Icons::default(),
+            file,
+            saved,
+            unsaved_question: None,
+            file_problem: None,
         }
     }
 
@@ -149,6 +179,7 @@ pub(crate) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     edit::connect(ui, state);
     map::connect(ui, state);
     discovery::connect(ui, state);
+    project::connect(ui, state);
     let (icons_ui, icons_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_refresh_icons(move || icons::refresh(&icons_ui, &icons_state));
 

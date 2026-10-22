@@ -204,6 +204,16 @@ export component TopologyCanvas inherits Rectangle {
         }
     }
 
+    // An empty map points to the two ways of filling it.
+    if Bridge.nodes.length == 0: Text {
+        text: @tr("map.empty");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+
     // While a card or device from the lists is held over the map.
     if drop.has-drag: Rectangle {
         border-width: 2px;

@@ -42,6 +42,7 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         count_new: count(FoundFilter::New),
         count_unidentified: count(FoundFilter::Unidentified),
         count_duplicates: count(FoundFilter::Duplicates),
+        importable: int(discovery.importable()),
     });
 
     push_found(bridge, labels, state);

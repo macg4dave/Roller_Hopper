@@ -1,60 +1,24 @@
 import { Button } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
-import { Theme } from "theme.slint";
+import { Dialog } from "components/dialog.slint";
 
 // Asks before a network card becomes a child of another parent when that would remove the
-// device, or found host, it leaves. It covers the whole window, so nothing changes meanwhile.
-export component MoveDialog inherits Rectangle {
+// device, or found host, it leaves.
+export component MoveDialog inherits Dialog {
     property <bool> found: Bridge.move-question.found;
 
-    background: Theme.scrim;
+    title: @tr("move.title");
+    message: found
+        ? @tr("move.question-found", Bridge.move-question.card, Bridge.move-question.from, Bridge.move-question.to)
+        : @tr("move.question", Bridge.move-question.card, Bridge.move-question.from, Bridge.move-question.to);
 
-    // Clicks outside the question do nothing.
-    TouchArea { }
-
-    Rectangle {
-        width: min(420px, parent.width - 2 * Theme.space-l);
-        height: question.preferred-height;
-        background: Theme.surface;
-        border-radius: Theme.radius;
-        border-color: Theme.border;
-        border-width: 1px;
-        drop-shadow-blur: 12px;
-        drop-shadow-color: Theme.scrim;
-        accessible-role: groupbox;
-        accessible-label: @tr("move.title");
-
-        question := VerticalLayout {
-            padding: Theme.space-l;
-            spacing: Theme.space-m;
-
-            Text {
-                text: @tr("move.title");
-                font-size: Theme.font-title;
-                font-weight: 600;
-                color: Theme.text;
-            }
-            Text {
-                text: found
-                    ? @tr("move.question-found", Bridge.move-question.card, Bridge.move-question.from, Bridge.move-question.to)
-                    : @tr("move.question", Bridge.move-question.card, Bridge.move-question.from, Bridge.move-question.to);
-                font-size: Theme.font-body;
-                color: Theme.text;
-                wrap: word-wrap;
-            }
-            HorizontalLayout {
-                alignment: end;
-                spacing: Theme.space-s;
-                Button {
-                    text: @tr("edit.cancel");
-                    clicked => { Bridge.cancel-move(); }
-                }
-                Button {
-                    text: @tr("move.confirm");
-                    primary: true;
-                    clicked => { Bridge.confirm-move(); }
-                }
-            }
-        }
+    Button {
+        text: @tr("edit.cancel");
+        clicked => { Bridge.cancel-move(); }
+    }
+    Button {
+        text: @tr("move.confirm");
+        primary: true;
+        clicked => { Bridge.confirm-move(); }
     }
 }

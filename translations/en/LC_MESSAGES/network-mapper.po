@@ -24,6 +24,75 @@ msgstr "Scanning…"
 msgid "header.settings"
 msgstr "Settings"
 
+# The project file. header.project-unsaved: {} is the project's name, marked as having changes
+# not saved yet.
+msgid "header.project-unsaved"
+msgstr "{} •"
+
+msgid "header.new"
+msgstr "New"
+
+msgid "header.open"
+msgstr "Open…"
+
+msgid "header.save"
+msgstr "Save"
+
+msgid "header.save-as"
+msgstr "Save as…"
+
+# The name of a project that has not been saved yet.
+msgid "project.untitled"
+msgstr "Untitled"
+
+# What the system's Open and Save dialogs call project files.
+msgid "project.file-type"
+msgstr "Network Mapper project"
+
+# Asked before New, Open or closing the window would lose changes. {} is the project's name.
+msgid "unsaved.title"
+msgstr "Save changes?"
+
+msgid "unsaved.question"
+msgstr "{} has changes that are not saved. Save them first?"
+
+msgid "unsaved.question-untitled"
+msgstr "This project has not been saved. Save it first?"
+
+msgid "unsaved.save"
+msgstr "Save"
+
+msgid "unsaved.discard"
+msgstr "Don't save"
+
+# When a project cannot be opened or saved. {} is the system's own message.
+msgid "file-problem.open-title"
+msgstr "Could not open the project"
+
+msgid "file-problem.save-title"
+msgstr "Could not save the project"
+
+msgid "file-problem.unreadable"
+msgstr "The file could not be read: {}"
+
+msgid "file-problem.too-large"
+msgstr "The file is too large to open: over 256 MB, too many devices, or text too long."
+
+msgid "file-problem.not-project"
+msgstr "This file is not a Network Mapper project."
+
+msgid "file-problem.newer"
+msgstr "This project was saved by a newer version of Network Mapper. Update the app to open it."
+
+msgid "file-problem.damaged"
+msgstr "The project file is damaged, so it was not opened. Your current project is unchanged."
+
+msgid "file-problem.save-failed"
+msgstr "{} Any file that was already there has been kept as it was."
+
+msgid "file-problem.ok"
+msgstr "OK"
+
 msgid "settings.title"
 msgstr "Settings"
 
@@ -370,6 +439,10 @@ msgstr[0] "{n} network card"
 msgstr[1] "{n} network cards"
 
 # Map
+# Shown in the middle of the map while it has no devices.
+msgid "map.empty"
+msgstr "No devices yet. Scan your network, or add a device by hand."
+
 msgid "map.zoom-in"
 msgstr "Zoom in"
 
@@ -998,13 +1071,10 @@ msgstr[0] "{n} device"
 msgstr[1] "{n} devices"
 
 msgid "scan.loaded"
-msgstr "Sample network loaded · {0}, {1} offline"
+msgstr "{0}, {1} offline"
 
 msgid "scan.complete"
 msgstr "Scan complete · {0}, {1} offline"
-
-msgid "status-bar.sample-only"
-msgstr "The map shows sample data. Scans are real."
 
 # Discovery page, opened by the Scan button. The scan probes the real network.
 msgid "discovery.title"
@@ -1130,6 +1200,12 @@ msgstr "Add to map"
 
 msgid "discovery.ignore"
 msgstr "Ignore"
+
+# Above the results: adds every new host not yet added or ignored. {n} is how many.
+msgid "discovery.import"
+msgid_plural "discovery.import.plural"
+msgstr[0] "Import {n} new host to the map"
+msgstr[1] "Import {n} new hosts to the map"
 
 msgid "discovery.show-on-map"
 msgstr "Show on map"

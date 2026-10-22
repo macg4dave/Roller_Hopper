@@ -1,11 +1,12 @@
 # Network Mapper
 
-A Rust + Slint desktop **UI prototype** of a local network mapper. The map shows in-memory
-sample data. The discovery page scans the IPv4 subnet you type for real with
+A Rust + Slint desktop local network mapper. The map starts empty. The discovery page scans the
+IPv4 subnet you type for real with
 [netscli-core](https://crates.io/crates/netscli-core): a ping sweep with the neighbour table and
-mDNS names, then TCP connects to common ports and reverse DNS; tick boxes add mDNS services,
-device type, OS family and card vendor. Found hosts can be added to the
-map, but nothing is saved yet. Settings → AI settings installs an AI
+mDNS names, then TCP connects to common ports and reverse DNS, with mDNS services, device type,
+OS family and card vendor. Found hosts can be added to the map one by one or imported together,
+and devices can be added by hand. New, Open, Save and Save as keep the map in a
+`.rhopper.json` project file. Settings → AI settings installs an AI
 model (Qwen3-4B-Q4_K_M, 2.5 GB) into the user's application data folder,
 loads one with [Candle](https://github.com/huggingface/candle), and runs it on an editable
 prompt and sample device file. The app runs Qwen3 GGUF files only; another one placed in that
@@ -58,10 +59,12 @@ src/ai.rs          the AI models offered, pinned by revision and hash, where the
                    Slint imports
 src/ai_settings.rs the AI settings window: install, load/unload, GPU switch and Run in the
                    background
-src/mock_data.rs   the sample network, and in mock_data/ the hosts a test discovery run finds
+src/project.rs     the project file: its versioned format, the checks Open makes, safe saving
+src/mock_data.rs   the tests' sample network, and in mock_data/ the hosts a test run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
 src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,
-                   lines, motion), discovery (running a scan), view/ (sending state to
+                   lines, motion), discovery (running a scan), project (New, Open, Save and
+                   the unsaved-changes question), view/ (sending state to
                    the UI), model ↔ Slint conversion, reading the icon folder, choosing the
                    language
 ui/                .slint files: app window, panels, canvas, edit and discovery pages,

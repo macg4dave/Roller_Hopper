@@ -2,7 +2,9 @@
 //! other, each split to the left and right of the trunk. This is layout only: what is plugged
 //! into what is in [`Network`], and a card's place here never changes its uplink.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+
+use serde::{Deserialize, Serialize};
 
 use super::card::CardId;
 use super::network::Network;
@@ -15,7 +17,7 @@ pub(crate) enum Side {
 }
 
 /// One level of devices hanging off a trunk, each side listed left to right.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct Tier {
     pub(crate) left: Vec<CardId>,
     pub(crate) right: Vec<CardId>,
@@ -66,10 +68,12 @@ pub(crate) struct Slot {
     pub(crate) before: Option<CardId>,
 }
 
-/// The tiers the user arranged under each device, until the layout is reset.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// The tiers the user arranged under each device, until the layout is reset. Ordered by card,
+/// so a saved project lists them the same way each time. Cards no longer connected there are
+/// passed over (see [`Self::tiers`]), so any card IDs read from a file are safe.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct Arrangement {
-    tiers: HashMap<CardId, Vec<Tier>>,
+    tiers: BTreeMap<CardId, Vec<Tier>>,
 }
 
 impl Arrangement {

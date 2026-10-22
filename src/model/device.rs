@@ -3,16 +3,20 @@
 //! User-visible wording for these types lives in the UI (`ui/labels.slint`) so it can be
 //! translated; only language-neutral formats (such as the MAC address) are produced here.
 
+use serde::{Deserialize, Serialize};
+
 use super::card::NetworkCard;
 use super::os::OsHint;
 
 /// Stable identifier of a device; not an index into any list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct DeviceId(pub(crate) u32);
 
 /// An icon file in the icon folder, named by its path there without `.svg`, with `/` between
 /// folders: `Network/Router`. The user can add icons, so this is an open set.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct Icon(pub(crate) String);
 
 impl Icon {
@@ -22,7 +26,7 @@ impl Icon {
 }
 
 /// What the device is, as detected. Fixed; the user edits the [`Role`] instead.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum DeviceKind {
     Router,
     Switch,
@@ -80,7 +84,7 @@ impl DeviceKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum Status {
     Online,
     Offline,
@@ -88,7 +92,7 @@ pub(crate) enum Status {
 }
 
 /// The user-assigned purpose of a device. Custom roles are the one open set.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum Role {
     Router,
     Switch,
@@ -143,7 +147,7 @@ impl Role {
 }
 
 /// What a guest runs as on its host.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum GuestKind {
     VirtualMachine,
     Container,
@@ -161,19 +165,19 @@ impl GuestKind {
 }
 
 /// A device that runs on another one, which may itself be a guest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct Guest {
     pub(crate) host: DeviceId,
     pub(crate) kind: GuestKind,
 }
 
 /// How long before the latest scan the device was last seen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct LastSeen {
     pub(crate) minutes_ago: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Device {
     pub(crate) id: DeviceId,
     pub(crate) name: String,

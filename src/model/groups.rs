@@ -3,12 +3,17 @@
 //! Group names are the user's own words, kept unique ignoring case. A group may have a colour,
 //! which its roles' devices are shown in, and a line style their lines are drawn in.
 
+use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
+
 /// Identifies a group, so renaming it does not lose the roles that are in it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct GroupId(u32);
 
 /// The colours a group can be given.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum GroupColour {
     Red,
     Orange,
@@ -19,7 +24,7 @@ pub(crate) enum GroupColour {
 }
 
 /// How the lines from a group's devices are drawn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub(crate) enum LineStyle {
     #[default]
     Solid,
@@ -46,7 +51,7 @@ impl LineStyle {
     ];
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Group {
     id: GroupId,
     name: String,
@@ -54,7 +59,7 @@ struct Group {
     line_style: LineStyle,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct Groups {
     list: Vec<Group>,
     next_id: u32,
@@ -106,6 +111,21 @@ impl Groups {
         if let Some(group) = self.list.iter_mut().find(|g| g.id == id) {
             new.clone_into(&mut group.name);
         }
+    }
+
+    pub(crate) fn contains(&self, id: GroupId) -> bool {
+        self.list.iter().any(|g| g.id == id)
+    }
+
+    /// As [`Self::add`] and [`Self::rename`] keep them: IDs unique and below the next one to
+    /// give out, names unique ignoring case and never blank.
+    pub(crate) fn consistent(&self) -> bool {
+        let mut ids = HashSet::new();
+        let mut names = HashSet::new();
+        self.list.iter().all(|g| {
+            let name = g.name.trim().to_lowercase();
+            g.id.0 < self.next_id && ids.insert(g.id) && !name.is_empty() && names.insert(name)
+        })
     }
 
     pub(crate) fn remove(&mut self, id: GroupId) {

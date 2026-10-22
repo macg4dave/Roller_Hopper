@@ -1,10 +1,8 @@
-//! The sample home network the map starts with, and for the tests the hosts that answer a
-//! discovery run of it (see [`answers`]).
+//! The sample home network the tests start from, and the hosts that answer a discovery run of
+//! it (see [`answers`]).
 
-#[cfg(test)]
 mod answers;
 
-#[cfg(test)]
 pub(crate) use answers::answers;
 
 use std::net::Ipv4Addr;

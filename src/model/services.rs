@@ -2,14 +2,16 @@
 
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum ServiceProtocol {
     Tcp,
     Udp,
 }
 
 /// An open port and what runs on it, such as a protocol name; the description may be empty.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Service {
     pub(crate) port: u16,
     pub(crate) protocol: ServiceProtocol,
@@ -31,9 +33,19 @@ impl fmt::Display for Service {
     }
 }
 
-/// A device's open ports, kept in port order with each port listed once.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// A device's open ports, kept in port order with each port listed once. Read from a file, they
+/// are put in that order, and a port listed again is dropped.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(from = "Vec<Service>")]
 pub(crate) struct Services(Vec<Service>);
+
+impl From<Vec<Service>> for Services {
+    fn from(mut services: Vec<Service>) -> Self {
+        services.sort_by_key(|s| (s.port, s.protocol));
+        services.dedup_by_key(|s| (s.port, s.protocol));
+        Self(services)
+    }
+}
 
 impl Services {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Service> {

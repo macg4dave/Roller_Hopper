@@ -47,6 +47,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_selection(&bridge, &labels, state);
     push_card(&bridge, &labels, state);
     push_move_question(&bridge, &labels, state);
+    super::project::push(&bridge, state);
 }
 
 /// Builds the rows of the lists and the nodes of the map.
