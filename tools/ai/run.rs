@@ -29,6 +29,12 @@ pub(crate) struct Args {
     schema: Option<PathBuf>,
     #[arg(long, default_value_t = 700)]
     max_tokens: usize,
+    /// Load the model on CUDA device 0 (requires the `cuda` feature).
+    #[arg(long)]
+    gpu: bool,
+    /// Use Qwen3's thinking prompt and recommended thinking sampling profile.
+    #[arg(long)]
+    think: bool,
 }
 
 pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
@@ -48,20 +54,24 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
             .unwrap_or_else(|| folder.join("cases.json")),
     )?;
     let started = Instant::now();
-    let mut model = Model::load(&args.model, false, DType::F32).map_err(engine_error)?;
-    writeln!(
-        io::stderr().lock(),
-        "model loaded in {:.1}s",
-        started.elapsed().as_secs_f64()
-    )?;
+    let mut model = Model::load(&args.model, args.gpu, DType::F32).map_err(engine_error)?;
+    let load_seconds = started.elapsed().as_secs_f64();
+    writeln!(io::stderr().lock(), "model loaded in {load_seconds:.1}s")?;
     let mut output = BufWriter::new(File::create(&args.output)?);
     for case in &cases {
-        let mut record = ask(&mut model, case, &prompt, &schema, args.max_tokens)?;
+        let request = Request {
+            prompt: &prompt,
+            schema: &schema,
+            max_tokens: args.max_tokens,
+            think: args.think,
+        };
+        let mut record = ask(&mut model, case, request)?;
         if let Some(fields) = record.as_object_mut() {
             fields.insert(
                 "model".into(),
                 json!(args.model.file_name().map(|name| name.to_string_lossy())),
             );
+            fields.insert("load_seconds".into(), json!(load_seconds));
         }
         writeln!(output, "{record}")?;
         output.flush()?;
@@ -78,37 +88,70 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn ask(
-    model: &mut Model,
-    case: &Case,
-    prompt: &str,
-    schema: &Value,
+#[derive(Clone, Copy)]
+struct Request<'a> {
+    prompt: &'a str,
+    schema: &'a Value,
     max_tokens: usize,
-) -> io::Result<Value> {
+    think: bool,
+}
+
+fn ask(model: &mut Model, case: &Case, request: Request<'_>) -> io::Result<Value> {
+    let evidence_text = serde_json::to_string_pretty(&case.evidence).map_err(io::Error::other)?;
+    let evidence_ids = super::response::evidence_ids(&evidence_text)
+        .ok_or_else(|| io::Error::other(format!("case {} has invalid evidence", case.id)))?;
+    if evidence_ids != case.evidence_ids {
+        return Err(io::Error::other(format!(
+            "case {} evidence IDs do not match its recorded IDs",
+            case.id
+        )));
+    }
     let question = format!(
         "Evidence about one device:\n{}\nAnswer with JSON matching this schema:\n{}",
-        serde_json::to_string_pretty(&case.evidence).map_err(io::Error::other)?,
-        schema_for(schema, &case.evidence_ids)?
+        evidence_text,
+        schema_for(request.schema, &case.evidence_ids)?
     );
+    let (temperature, top_p) = if request.think {
+        (0.6, 0.95)
+    } else {
+        (0.7, 0.8)
+    };
     let settings = Settings {
-        sampling: Sampling::ArgMax,
+        sampling: Sampling::TopKThenTopP {
+            k: 20,
+            p: top_p,
+            temperature,
+        },
         min_p: 0.0,
         repeat_penalty: 1.0,
-        max_tokens,
+        presence_penalty: 1.5,
+        max_tokens: request.max_tokens,
         context_tokens: 32_768,
-        think: false,
+        think: request.think,
+        evidence_ids: case.evidence_ids.clone(),
+        enforce_schema: false,
     };
     let started = Instant::now();
     let answer = model
-        .answer((prompt, &question), &settings, &|| false, &mut |_| {})
+        .answer(
+            (request.prompt, &question),
+            &settings,
+            &|| false,
+            &mut |_| {},
+        )
         .map_err(engine_error)?;
-    debug_assert!(answer.tokens <= max_tokens);
+    debug_assert!(answer.tokens <= request.max_tokens);
     debug_assert!(answer.prompt_tokens <= settings.context_tokens);
     debug_assert!(!answer.stopped);
     let parsed = serde_json::from_str::<Value>(&answer.text).unwrap_or(Value::Null);
-    Ok(
-        json!({"id": case.id, "answer": parsed, "raw": answer.text, "seconds": started.elapsed().as_secs_f64()}),
-    )
+    Ok(json!({
+        "id": case.id,
+        "answer": parsed,
+        "raw": answer.text,
+        "seconds": started.elapsed().as_secs_f64(),
+        "tokens": answer.tokens,
+        "prompt_tokens": answer.prompt_tokens
+    }))
 }
 
 fn engine_error(error: super::engine::Error) -> io::Error {

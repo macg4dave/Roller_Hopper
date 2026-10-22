@@ -11,8 +11,8 @@ use std::rc::Rc;
 use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
 use crate::ai::{
-    self, Answered, End, Generation, Job, MODELS, ModelFormat, Precision, RunError, Worker,
-    WorkerEvent,
+    self, Answered, End, Generation, Job, MODELS, ModelFormat, Precision, RunError, TaskProfile,
+    Worker, WorkerEvent,
 };
 use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
@@ -43,6 +43,12 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     window.on_restore_generation(move |index| {
         if let Some(open) = resetting.upgrade() {
             restore_generation_profile(&open, index);
+        }
+    });
+    let thinking = window.as_weak();
+    window.on_select_thinking(move |index, enabled| {
+        if let Some(open) = thinking.upgrade() {
+            set_generation_profile(&open, index, Generation::qwen3(enabled));
         }
     });
     let refreshing = window.as_weak();
@@ -114,7 +120,7 @@ fn connect_worker(window: &AiSettingsWindow) {
     let stopper = Rc::clone(&worker);
     window.on_stop(move || stopper.stop());
     let running = window.as_weak();
-    window.on_run(move |prompt, input| {
+    window.on_run(move |profile, prompt, input| {
         if let Some(open) = running.upgrade() {
             let (system, user) = (prompt.into(), input.into());
             let settings = generation_for_loaded_model(&open);
@@ -122,6 +128,7 @@ fn connect_worker(window: &AiSettingsWindow) {
                 system,
                 user,
                 settings,
+                profile: TaskProfile::from_index(profile),
             };
             send(&open, &worker, job);
         }
@@ -200,7 +207,11 @@ fn restore_generation(window: &AiSettingsWindow) {
 }
 
 fn restore_generation_profile(window: &AiSettingsWindow, index: i32) {
-    let defaults = generation::to_ui(&Generation::default());
+    set_generation_profile(window, index, Generation::default());
+}
+
+fn set_generation_profile(window: &AiSettingsWindow, index: i32, profile: Generation) {
+    let defaults = generation::to_ui(&profile);
     match index {
         0 => window.set_gguf_generation(defaults),
         1 => window.set_safetensors_generation(defaults),
@@ -298,6 +309,8 @@ fn state(error: RunError) -> ModelState {
         RunError::Broken => ModelState::Broken,
         RunError::NoGpu => ModelState::NoGpu,
         RunError::InsufficientGpuMemory => ModelState::InsufficientGpuMemory,
+        RunError::InvalidInput => ModelState::InvalidInput,
+        RunError::InvalidOutput => ModelState::InvalidOutput,
         RunError::TooLong { .. } => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,
     }

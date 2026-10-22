@@ -9,13 +9,16 @@ mod chat;
 #[path = "../../src/ai/engine.rs"]
 mod engine;
 #[cfg(feature = "ai")]
-#[path = "../../src/ai/weights.rs"]
-mod weights;
+#[path = "../../src/ai/response.rs"]
+mod response;
 #[cfg(feature = "ai")]
 #[path = "run.rs"]
 mod run;
 #[path = "score.rs"]
 mod score;
+#[cfg(feature = "ai")]
+#[path = "../../src/ai/weights.rs"]
+mod weights;
 
 use std::{io, path::Path};
 

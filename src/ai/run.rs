@@ -41,6 +41,44 @@ pub(crate) enum ModelFormat {
     Safetensors,
 }
 
+/// A narrow instruction over the same strict result schema. Focused runs reduce how many
+/// judgements a small local model must make at once without changing what callers can trust.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum TaskProfile {
+    #[default]
+    Identify,
+    DeviceType,
+    OsFamily,
+    Description,
+    Conflicts,
+}
+
+impl TaskProfile {
+    pub(crate) fn from_index(index: i32) -> Self {
+        match index {
+            1 => Self::DeviceType,
+            2 => Self::OsFamily,
+            3 => Self::Description,
+            4 => Self::Conflicts,
+            _ => Self::Identify,
+        }
+    }
+
+    fn instruction(self) -> &'static str {
+        match self {
+            Self::Identify => "Complete the whole identification.",
+            Self::DeviceType => "Focus on device type; use Unknown for unsupported OS claims.",
+            Self::OsFamily => "Focus on OS family; use Unknown for unsupported type claims.",
+            Self::Description => {
+                "Focus on a concise evidence-cited description; keep uncertain fields Unknown."
+            }
+            Self::Conflicts => {
+                "Focus on conflicting evidence; lower confidence and prefer Unknown when it is unresolved."
+            }
+        }
+    }
+}
+
 impl ModelFormat {
     pub(crate) fn from_path(path: &Path) -> Self {
         if path.is_dir() {
@@ -64,6 +102,7 @@ pub(crate) enum Job {
         system: String,
         user: String,
         settings: Generation,
+        profile: TaskProfile,
     },
 }
 
@@ -103,6 +142,8 @@ pub(crate) enum RunError {
     Broken,
     NoGpu,
     InsufficientGpuMemory,
+    InvalidInput,
+    InvalidOutput,
     TooLong { prompt_tokens: usize, limit: usize },
     Failed,
 }
@@ -162,9 +203,11 @@ fn work(inbox: &Receiver<Job>, stop: &AtomicBool, report: &dyn Fn(WorkerEvent)) 
                 system,
                 user,
                 settings,
+                profile,
             } => {
                 let result = loaded.as_mut().map_or(Err(RunError::NoModel), |model| {
                     report(WorkerEvent::Running);
+                    let system = format!("{system}\n\nTask focus: {}", profile.instruction());
                     answer(model, (&system, &user), settings.bounded(), stop, report)
                 });
                 report(WorkerEvent::Finished(result));
@@ -180,15 +223,19 @@ fn answer(
     stop: &AtomicBool,
     report: &dyn Fn(WorkerEvent),
 ) -> Result<Answered, RunError> {
+    let evidence_ids = super::response::evidence_ids(texts.1).ok_or(RunError::InvalidInput)?;
     let started = Instant::now();
     let mut first_token = None;
     let settings = Settings {
         sampling: generation.sampling(),
         min_p: generation.min_p,
         repeat_penalty: generation.repeat_penalty,
+        presence_penalty: generation.presence_penalty,
         max_tokens: generation.max_tokens,
         context_tokens: generation.context_tokens,
         think: generation.think,
+        evidence_ids,
+        enforce_schema: true,
     };
     let answer = model.answer(
         texts,
@@ -224,7 +271,9 @@ impl From<engine::Error> for RunError {
             engine::Error::NoTokenizer => Self::NoTokenizer,
             engine::Error::Broken => Self::Broken,
             engine::Error::NoGpu => Self::NoGpu,
+            #[cfg(feature = "cuda")]
             engine::Error::InsufficientGpuMemory => Self::InsufficientGpuMemory,
+            engine::Error::InvalidOutput => Self::InvalidOutput,
             engine::Error::TooLong {
                 prompt_tokens,
                 limit,
@@ -272,6 +321,7 @@ mod tests {
                 max_tokens: 16,
                 ..Generation::default()
             },
+            profile: TaskProfile::Identify,
         }
     }
     fn load(model: PathBuf) -> Job {

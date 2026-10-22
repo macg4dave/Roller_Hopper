@@ -113,6 +113,12 @@ msgstr "No usable NVIDIA graphics card was found. Switch off CUDA to load the mo
 msgid "ai-settings.state-insufficient-gpu-memory"
 msgstr "This model is too large for the graphics card's available memory. Switch off CUDA to load it on the processor, or choose a smaller model."
 
+msgid "ai-settings.state-invalid-input"
+msgstr "The evidence must be a JSON array of 1 to 10 items with unique E-number IDs, source, age and a fact object."
+
+msgid "ai-settings.state-invalid-output"
+msgstr "The model did not produce a safe result matching the required fields and submitted evidence IDs. Nothing was accepted."
+
 msgid "ai-settings.state-running"
 msgstr "Answering… this can take a minute or more on the processor."
 
@@ -139,6 +145,24 @@ msgstr "The model stopped with an error part-way through its answer."
 
 msgid "ai-settings.prompt"
 msgstr "Prompt"
+
+msgid "ai-settings.task"
+msgstr "Task"
+
+msgid "ai-settings.task-identify"
+msgstr "Full identification"
+
+msgid "ai-settings.task-type"
+msgstr "Device type"
+
+msgid "ai-settings.task-os"
+msgstr "OS family"
+
+msgid "ai-settings.task-description"
+msgstr "Description"
+
+msgid "ai-settings.task-conflicts"
+msgstr "Conflicting evidence"
 
 msgid "ai-settings.input"
 msgstr "Device evidence (sample file)"
@@ -264,6 +288,12 @@ msgstr "Repeat penalty"
 msgid "ai-settings.repeat-penalty-explained"
 msgstr "Above 1, makes the model less likely to repeat what it has just written. 1 is off."
 
+msgid "ai-settings.presence-penalty"
+msgstr "Presence penalty"
+
+msgid "ai-settings.presence-penalty-explained"
+msgstr "Makes words already used in the answer less likely to appear again. Qwen3 recommends 1.5; 0 is off."
+
 msgid "ai-settings.max-tokens"
 msgstr "Answer limit (tokens)"
 
@@ -280,7 +310,7 @@ msgid "ai-settings.think"
 msgstr "Let the model think first"
 
 msgid "ai-settings.think-explained"
-msgstr "Models that can, such as Qwen3, write out their reasoning before the answer. Slower and longer, so raise the answer limit; sometimes more accurate. Other models ignore it."
+msgstr "Uses Qwen3's recommended thinking or direct-answer settings. Reasoning is kept separate from the final answer. Other models ignore the thinking control."
 
 msgid "ai-settings.restore-defaults"
 msgstr "Restore defaults"

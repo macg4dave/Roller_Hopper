@@ -290,6 +290,14 @@ Gaps the UI shows against the plan:
   `tools/a.i.testmodels/Qwen2.5-0.5B-Instruct-GGUF` CUDA smoke test pass; this Qwen2.5 fixture
   proves the CUDA inference path, not the choice or usefulness of the main Qwen3 AI. The
   identification timings above need re-measuring in the integrated path.
+- **Qwen3 controls now follow its model contract.** Thinking off inserts the closed reasoning
+  section rather than relying on `/no_think`; thinking and direct modes apply their documented
+  temperature/top-p/top-k/min-p presets, with adjustable presence penalty. Reasoning is not
+  exposed as the answer. Evidence input is bounded and validated, generation stops at one JSON
+  object, and the app accepts only the exact fields, categories and submitted evidence IDs.
+  Focused type, OS, description and conflict profiles reuse the same strict result shape. The
+  stable ChatML system/schema prefix is tokenised once per loaded model and invalidated by an
+  edit. These source checks do not replace Qwen3-4B quality and resource qualification.
 - Earlier alternatives (a replacement, never a second model):
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
     (MSRV 1.92; official ONNX Runtime builds can send telemetry by default) or tract 0.23.9

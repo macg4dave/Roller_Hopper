@@ -12,8 +12,8 @@ pub(crate) const MAX_CONTEXT_TOKENS: usize = 32_768;
 /// The smallest context limit, which still fits the identification prompt.
 const MIN_CONTEXT_TOKENS: usize = 512;
 
-/// The default is the evaluation tool's: greedy, so the same prompt always gives the same
-/// answer, with thinking off.
+/// The model's bounded generation controls. The default is Qwen3's recommended non-thinking
+/// profile; switching thinking mode applies its corresponding recommended profile.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Generation {
     /// 0 picks the likeliest token every time; higher values let less likely ones through.
@@ -27,6 +27,8 @@ pub(crate) struct Generation {
     pub(crate) min_p: f32,
     /// Above 1, makes tokens already in the text less likely; 1 for none.
     pub(crate) repeat_penalty: f32,
+    /// Subtracts this from every token already present in the answer; 0 for none.
+    pub(crate) presence_penalty: f32,
     /// Stops a model that never ends its turn; never more than the context limit.
     pub(crate) max_tokens: usize,
     /// The most tokens the prompt and answer may hold together; the model's own limit, if
@@ -38,22 +40,30 @@ pub(crate) struct Generation {
 
 impl Default for Generation {
     fn default() -> Self {
-        Self {
-            temperature: 0.0,
-            top_p: 1.0,
-            top_k: 0,
-            min_p: 0.0,
-            repeat_penalty: 1.0,
-            // Enough for the identification answer.
-            max_tokens: 700,
-            // Enough for the identification prompt and answer, with a modest cache.
-            context_tokens: 8192,
-            think: false,
-        }
+        Self::qwen3(false)
     }
 }
 
 impl Generation {
+    /// Qwen3's documented sampling profile for thinking or direct answers. The run remains
+    /// bounded for this app rather than adopting the model card's general-purpose output size.
+    pub(crate) fn qwen3(think: bool) -> Self {
+        let (temperature, top_p) = if think { (0.6, 0.95) } else { (0.7, 0.8) };
+        Self {
+            temperature,
+            top_p,
+            top_k: 20,
+            min_p: 0.0,
+            repeat_penalty: 1.0,
+            presence_penalty: 1.5,
+            // Enough for the identification answer.
+            max_tokens: 700,
+            // Enough for the identification prompt and answer, with a modest cache.
+            context_tokens: 8192,
+            think,
+        }
+    }
+
     /// The same settings within their limits; a value that is not a number takes the default.
     pub(crate) fn bounded(self) -> Self {
         let default = Self::default();
@@ -73,6 +83,7 @@ impl Generation {
             top_k: self.top_k.min(1000),
             min_p: within(self.min_p, 0.0, 1.0, default.min_p),
             repeat_penalty: within(self.repeat_penalty, 1.0, 2.0, default.repeat_penalty),
+            presence_penalty: within(self.presence_penalty, 0.0, 2.0, default.presence_penalty),
             max_tokens: self.max_tokens.clamp(1, context_tokens),
             context_tokens,
             ..self
@@ -122,12 +133,21 @@ mod tests {
     }
 
     #[test]
-    fn the_default_is_greedy_and_fits_an_identification_answer() {
+    fn qwen3_profiles_follow_the_models_recommended_sampling() {
         let default = Generation::default();
-        assert_eq!(picking(&default), (0.0, Some(1), None));
+        assert_eq!(
+            picking(&default),
+            (f64::from(0.7_f32), Some(20), Some(f64::from(0.8_f32)))
+        );
         assert_eq!(default.max_tokens, 700);
         assert!(!default.think);
         assert_eq!(default.bounded(), default);
+        let thinking = Generation::qwen3(true);
+        assert_eq!(
+            picking(&thinking),
+            (f64::from(0.6_f32), Some(20), Some(f64::from(0.95_f32)))
+        );
+        assert!(thinking.think);
     }
 
     #[test]
@@ -135,6 +155,8 @@ mod tests {
         // Values f32 holds exactly, so they compare equal after widening.
         let warm = Generation {
             temperature: 0.75,
+            top_p: 1.0,
+            top_k: 0,
             ..Generation::default()
         };
         assert_eq!(picking(&warm), (0.75, None, None));
@@ -163,16 +185,18 @@ mod tests {
             top_k: 1_000_000,
             min_p: f32::NAN,
             repeat_penalty: 9.0,
+            presence_penalty: 9.0,
             max_tokens: 0,
             context_tokens: 0,
             think: true,
         }
         .bounded();
-        assert!(wild.temperature.abs() < f32::EPSILON);
+        assert!((wild.temperature - 0.7).abs() < f32::EPSILON);
         assert!((wild.top_p - 0.01).abs() < f32::EPSILON);
         assert_eq!(wild.top_k, 1000);
         assert!(wild.min_p.abs() < f32::EPSILON);
         assert!((wild.repeat_penalty - 2.0).abs() < f32::EPSILON);
+        assert!((wild.presence_penalty - 2.0).abs() < f32::EPSILON);
         assert_eq!(wild.max_tokens, 1);
         assert_eq!(wild.context_tokens, MIN_CONTEXT_TOKENS);
         assert!(wild.think);

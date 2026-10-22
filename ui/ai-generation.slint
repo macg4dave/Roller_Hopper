@@ -10,6 +10,7 @@ export struct GenerationSettings {
     top-k: int,
     min-p: float,
     repeat-penalty: float,
+    presence-penalty: float,
     max-tokens: int,
     context-tokens: int,
     think: bool,
@@ -88,6 +89,7 @@ component GenerationSettingsPanel inherits VerticalLayout {
     in property <bool> enabled;
 
     callback restore-defaults();
+    callback select-thinking(bool);
 
     spacing: Theme.space-m;
 
@@ -132,6 +134,14 @@ component GenerationSettingsPanel inherits VerticalLayout {
         value <=> root.settings.repeat-penalty;
         enabled: root.enabled;
     }
+    SliderSetting {
+        text: @tr("ai-settings.presence-penalty");
+        explanation: @tr("ai-settings.presence-penalty-explained");
+        minimum: 0;
+        maximum: 2;
+        value <=> root.settings.presence-penalty;
+        enabled: root.enabled;
+    }
     NumberSetting {
         text: @tr("ai-settings.max-tokens");
         explanation: @tr("ai-settings.max-tokens-explained");
@@ -156,6 +166,7 @@ component GenerationSettingsPanel inherits VerticalLayout {
             text: @tr("ai-settings.think");
             checked <=> root.settings.think;
             enabled: root.enabled;
+            toggled => { root.select-thinking(self.checked); }
         }
         Note { text: @tr("ai-settings.think-explained"); }
     }
@@ -181,6 +192,7 @@ export component GenerationPanel inherits VerticalLayout {
     in property <bool> enabled;
 
     callback restore-defaults(int);
+    callback select-thinking(int, bool);
     callback select-precision();
 
     spacing: Theme.space-m;
@@ -209,6 +221,7 @@ export component GenerationPanel inherits VerticalLayout {
         max-context-tokens: root.max-context-tokens;
         enabled: root.enabled;
         restore-defaults => { root.restore-defaults(0); }
+        select-thinking(think) => { root.select-thinking(0, think); }
     }
     if root.tab-index == 1: GenerationSettingsPanel {
         settings <=> root.safetensors-settings;
@@ -219,6 +232,7 @@ export component GenerationPanel inherits VerticalLayout {
             root.precision = 0;
             root.select-precision();
         }
+        select-thinking(think) => { root.select-thinking(1, think); }
 
         VerticalLayout {
             spacing: Theme.space-xs;

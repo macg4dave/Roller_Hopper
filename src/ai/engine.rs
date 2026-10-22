@@ -1,6 +1,7 @@
 //! Direct Candle loading and autoregressive generation for local text models.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +12,7 @@ use candle_transformers::generation::{LogitsProcessor, Sampling};
 use tokenizers::Tokenizer;
 
 use super::chat::{self, Format};
+use super::response;
 use super::weights::{Kind, Weights};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,7 +24,9 @@ pub(crate) enum Error {
     NoTokenizer,
     Broken,
     NoGpu,
+    #[cfg(feature = "cuda")]
     InsufficientGpuMemory,
+    InvalidOutput,
     TooLong {
         prompt_tokens: usize,
         limit: usize,
@@ -34,9 +38,15 @@ pub(crate) struct Settings {
     pub(crate) sampling: Sampling,
     pub(crate) min_p: f32,
     pub(crate) repeat_penalty: f32,
+    pub(crate) presence_penalty: f32,
     pub(crate) max_tokens: usize,
     pub(crate) context_tokens: usize,
     pub(crate) think: bool,
+    /// Empty for free text; otherwise require the device-identification schema and only these
+    /// evidence citations.
+    pub(crate) evidence_ids: Vec<String>,
+    /// Refuse a completed answer that does not satisfy the identification contract.
+    pub(crate) enforce_schema: bool,
 }
 
 pub(crate) struct Answer {
@@ -56,6 +66,12 @@ pub(crate) struct Model {
     specials: Vec<String>,
     device: Device,
     context_limit: usize,
+    prefix: Option<PromptPrefix>,
+}
+
+struct PromptPrefix {
+    text: String,
+    tokens: Vec<u32>,
 }
 
 /// A model whose weights are not loaded yet: its tokenizer and format are checked first, so an
@@ -82,6 +98,7 @@ impl Model {
 
     fn load_gguf(path: &Path, gpu: bool) -> Result<Self, Error> {
         let mut file = File::open(path).map_err(|_| Error::Missing)?;
+        #[cfg(feature = "cuda")]
         let file_bytes = file.metadata().map_err(|_| Error::Missing)?.len();
         let content = gguf_file::Content::read(&mut file).map_err(|_| Error::Broken)?;
         let architecture = metadata_string(&content, "general.architecture")?;
@@ -95,6 +112,7 @@ impl Model {
         let declared =
             metadata_usize(&content, &format!("{architecture}.context_length")).unwrap_or(32_768);
         let parts = Parts::new(tokenizer, gpu, declared.min(kind.gguf_position_limit()))?;
+        #[cfg(feature = "cuda")]
         parts.require_gpu_memory(file_bytes)?;
         let weights = Weights::gguf(kind, content, &mut file, &parts.device)?;
         Ok(parts.with(weights))
@@ -135,15 +153,12 @@ impl Model {
         let mut generated = Vec::with_capacity(maximum);
         let mut picker = LogitsProcessor::from_sampling(299_792_458, settings.sampling.clone());
         let mut text = String::new();
+        let mut stopped = false;
         self.weights.reset();
         for step in 0..maximum {
             if stop() {
-                return Ok(Answer {
-                    text,
-                    tokens: generated.len(),
-                    prompt_tokens,
-                    stopped: true,
-                });
+                stopped = true;
+                break;
             }
             let (tokens, offset) = if step == 0 {
                 (prompt.as_slice(), 0)
@@ -167,34 +182,53 @@ impl Model {
                 break;
             }
             generated.push(token);
-            text = self
+            let raw = self
                 .tokenizer
                 .decode(&generated, true)
                 .map_err(|_| Error::Failed)?;
+            response::visible(&raw, settings.think).clone_into(&mut text);
+            output(&text);
+            if !settings.evidence_ids.is_empty() && response::complete_json(&text).is_some() {
+                break;
+            }
+        }
+        if !stopped && settings.enforce_schema {
+            text = response::validate(&text, &settings.evidence_ids).ok_or(Error::InvalidOutput)?;
             output(&text);
         }
         Ok(Answer {
             text,
             tokens: generated.len(),
             prompt_tokens,
-            stopped: false,
+            stopped,
         })
     }
 
     /// The prompt's tokens in the model's chat format, and how many answer tokens fit after
     /// them within the context limit.
-    fn encode(&self, texts: (&str, &str), settings: &Settings) -> Result<(Vec<u32>, usize), Error> {
-        let prompt = self.format.prompt(
-            &chat::plain(texts.0, &self.specials),
-            &chat::plain(texts.1, &self.specials),
-            settings.think,
-        );
-        let tokens = self
-            .tokenizer
-            .encode(prompt, true)
-            .map_err(|_| Error::Failed)?
-            .get_ids()
-            .to_vec();
+    fn encode(
+        &mut self,
+        texts: (&str, &str),
+        settings: &Settings,
+    ) -> Result<(Vec<u32>, usize), Error> {
+        let system = chat::plain(texts.0, &self.specials);
+        let user = chat::plain(texts.1, &self.specials);
+        let (prefix, turn) = self.format.prompt_parts(&system, &user, settings.think);
+        let tokens = if prefix.is_empty() {
+            self.tokenizer
+                .encode(turn, true)
+                .map_err(|_| Error::Failed)?
+                .get_ids()
+                .to_vec()
+        } else {
+            let mut prefix_tokens = self.prefix_tokens(prefix)?;
+            let turn_tokens = self
+                .tokenizer
+                .encode(turn, false)
+                .map_err(|_| Error::Failed)?;
+            prefix_tokens.extend_from_slice(turn_tokens.get_ids());
+            prefix_tokens
+        };
         let prompt_tokens = tokens.len();
         let limit = self.context_limit.min(settings.context_tokens);
         let room = limit
@@ -205,6 +239,25 @@ impl Model {
                 limit,
             })?;
         Ok((tokens, settings.max_tokens.min(room)))
+    }
+
+    fn prefix_tokens(&mut self, text: String) -> Result<Vec<u32>, Error> {
+        if let Some(cached) = &self.prefix
+            && cached.text == text
+        {
+            return Ok(cached.tokens.clone());
+        }
+        let tokens = self
+            .tokenizer
+            .encode(text.clone(), true)
+            .map_err(|_| Error::Failed)?
+            .get_ids()
+            .to_vec();
+        self.prefix = Some(PromptPrefix {
+            text,
+            tokens: tokens.clone(),
+        });
+        Ok(tokens)
     }
 }
 
@@ -228,12 +281,14 @@ impl Parts {
             format: self.format,
             device: self.device,
             context_limit: self.context_limit,
+            prefix: None,
         }
     }
 
     /// Leaves room beyond the on-disk quantised weights for CUDA kernels, temporary tensors
     /// and the attention cache. Loading without that room can terminate the process inside the
     /// NVIDIA driver before Candle can return an allocation error.
+    #[cfg(feature = "cuda")]
     fn require_gpu_memory(&self, weight_bytes: u64) -> Result<(), Error> {
         let Device::Cuda(device) = &self.device else {
             return Ok(());
@@ -250,12 +305,13 @@ impl Parts {
 }
 
 /// A quantised model needs temporary allocations and an attention cache in addition to its
-/// weights, while the Slint renderer shares the GPU. Keep at least 4.5 GiB or half the file
-/// free, whichever is larger; otherwise CUDA inference can starve the renderer and terminate
-/// the app.
+/// weights, while the Slint renderer shares the GPU. Keep at least 2 GiB or half the file free,
+/// whichever is larger. This admits Qwen3-4B Q4 on an 8 GiB GPU while retaining room for its
+/// bounded 8K attention cache and the UI.
+#[cfg(any(feature = "cuda", test))]
 fn enough_gpu_memory(weight_bytes: u64, free_bytes: usize) -> bool {
     const GIB: u64 = 1024 * 1024 * 1024;
-    let headroom = (8 * GIB / 2).max(weight_bytes / 2);
+    let headroom = (2 * GIB).max(weight_bytes / 2);
     weight_bytes
         .checked_add(headroom)
         .is_some_and(|required| required <= free_bytes as u64)
@@ -267,13 +323,7 @@ fn pick_token(
     settings: &Settings,
     generated: &[u32],
 ) -> Result<u32, Error> {
-    let logits = if settings.repeat_penalty > 1.0 {
-        let recent = generated.iter().rev().take(64).copied().collect::<Vec<_>>();
-        candle_transformers::utils::apply_repeat_penalty(logits, settings.repeat_penalty, &recent)
-            .map_err(|_| Error::Failed)?
-    } else {
-        logits.clone()
-    };
+    let logits = penalise(logits, generated, settings)?;
     let minimum = settings.min_p;
     picker
         .sample_f(&logits, |probabilities| {
@@ -284,6 +334,41 @@ fn pick_token(
                 .for_each(|probability| *probability = 0.0);
         })
         .map_err(|_| Error::Failed)
+}
+
+/// Applies both controls in one host copy; Candle's sampler already reads the whole logits
+/// vector on the host, so keeping these together avoids a second device round-trip.
+fn penalise(logits: &Tensor, generated: &[u32], settings: &Settings) -> Result<Tensor, Error> {
+    if settings.repeat_penalty <= 1.0 && settings.presence_penalty <= 0.0 {
+        return Ok(logits.clone());
+    }
+    let device = logits.device();
+    let mut values = logits
+        .to_dtype(DType::F32)
+        .and_then(|tensor| tensor.to_vec1::<f32>())
+        .map_err(|_| Error::Failed)?;
+    let recent: HashSet<u32> = generated.iter().rev().take(64).copied().collect();
+    let present: HashSet<u32> = generated.iter().copied().collect();
+    for token in present {
+        let Some(value) = usize::try_from(token)
+            .ok()
+            .and_then(|index| values.get_mut(index))
+        else {
+            continue;
+        };
+        if settings.presence_penalty > 0.0 {
+            *value -= settings.presence_penalty;
+        }
+        if settings.repeat_penalty > 1.0 && recent.contains(&token) {
+            if *value >= 0.0 {
+                *value /= settings.repeat_penalty;
+            } else {
+                *value *= settings.repeat_penalty;
+            }
+        }
+    }
+    let len = values.len();
+    Tensor::from_vec(values, len, device).map_err(|_| Error::Failed)
 }
 
 fn device(gpu: bool) -> Result<Device, Error> {
@@ -351,7 +436,7 @@ mod tests {
     fn gpu_admission_keeps_runtime_headroom_beyond_quantised_weights() {
         const GIB_U64: u64 = 1024 * 1024 * 1024;
         const GIB_USIZE: usize = 1024 * 1024 * 1024;
-        assert!(!enough_gpu_memory(3 * GIB_U64, 7 * GIB_USIZE));
-        assert!(enough_gpu_memory(2 * GIB_U64, 7 * GIB_USIZE));
+        assert!(!enough_gpu_memory(3 * GIB_U64, 4 * GIB_USIZE));
+        assert!(enough_gpu_memory(3 * GIB_U64, 5 * GIB_USIZE));
     }
 }

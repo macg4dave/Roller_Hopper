@@ -43,7 +43,15 @@ impl Format {
     /// The conversation up to the start of the model's answer. `think` opens Qwen3's
     /// reasoning; the other families have no such switch and ignore it. The texts must
     /// already be [`plain`].
-    pub(crate) fn prompt(self, system: &str, user: &str, think: bool) -> String {
+    #[cfg(test)]
+    fn prompt(self, system: &str, user: &str, think: bool) -> String {
+        let (prefix, turn) = self.prompt_parts(system, user, think);
+        format!("{prefix}{turn}")
+    }
+
+    /// A reusable system prefix and the evidence-bearing turn. Only `ChatML` has a special-token
+    /// boundary that makes separate tokenisation exactly equivalent for arbitrary text.
+    pub(crate) fn prompt_parts(self, system: &str, user: &str, think: bool) -> (String, String) {
         let system_turn = |open: &str, close: &str| {
             if system.is_empty() {
                 String::new()
@@ -52,33 +60,47 @@ impl Format {
             }
         };
         match self {
-            Self::ChatMl { thinking } => format!(
-                "{}<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{}",
+            Self::ChatMl { thinking } => (
                 system_turn("<|im_start|>system\n", "<|im_end|>\n"),
-                match (thinking, think) {
-                    (true, true) => "<think>\n",
-                    (true, false) => "<think>\n\n</think>\n\n",
-                    (false, _) => "",
-                }
+                format!(
+                    "<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{}",
+                    match (thinking, think) {
+                        (true, true) => "<think>\n",
+                        (true, false) => "<think>\n\n</think>\n\n",
+                        (false, _) => "",
+                    }
+                ),
             ),
-            Self::Llama3 => format!(
-                "{}<|start_header_id|>user<|end_header_id|>\n\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
-                system_turn(
-                    "<|start_header_id|>system<|end_header_id|>\n\n",
-                    "<|eot_id|>"
-                )
+            Self::Llama3 => (
+                String::new(),
+                format!(
+                    "{}<|start_header_id|>user<|end_header_id|>\n\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+                    system_turn(
+                        "<|start_header_id|>system<|end_header_id|>\n\n",
+                        "<|eot_id|>"
+                    )
+                ),
             ),
-            Self::Gemma => format!(
-                "<start_of_turn>user\n{}{user}<end_of_turn>\n<start_of_turn>model\n",
-                system_turn("", "\n\n")
+            Self::Gemma => (
+                String::new(),
+                format!(
+                    "<start_of_turn>user\n{}{user}<end_of_turn>\n<start_of_turn>model\n",
+                    system_turn("", "\n\n")
+                ),
             ),
-            Self::Phi3 => format!(
-                "{}<|user|>\n{user}<|end|>\n<|assistant|>\n",
-                system_turn("<|system|>\n", "<|end|>\n")
+            Self::Phi3 => (
+                String::new(),
+                format!(
+                    "{}<|user|>\n{user}<|end|>\n<|assistant|>\n",
+                    system_turn("<|system|>\n", "<|end|>\n")
+                ),
             ),
-            Self::Glm4 => format!(
-                "[gMASK]<sop>{}<|user|>\n{user}<|assistant|>\n",
-                system_turn("<|system|>\n", "")
+            Self::Glm4 => (
+                String::new(),
+                format!(
+                    "[gMASK]<sop>{}<|user|>\n{user}<|assistant|>\n",
+                    system_turn("<|system|>\n", "")
+                ),
             ),
         }
     }

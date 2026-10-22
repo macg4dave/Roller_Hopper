@@ -8,13 +8,16 @@ mod chat;
 mod engine;
 mod generation;
 mod install;
+mod response;
 mod run;
 mod samples;
 mod weights;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
 pub(crate) use install::{InstallError, install};
-pub(crate) use run::{Answered, End, Job, ModelFormat, Precision, RunError, Worker, WorkerEvent};
+pub(crate) use run::{
+    Answered, End, Job, ModelFormat, Precision, RunError, TaskProfile, Worker, WorkerEvent,
+};
 
 use std::fs;
 use std::path::{Path, PathBuf};
