@@ -25,9 +25,8 @@ validate the GPU-capable app. Use the maintained command when you only need a CU
 cargo tool cuda build
 ```
 
-Candle's CUDA dependencies are cached in Cargo's normal target directory. The former
-`cuda-cache/` belongs to the removed engine and remains untouched until the user chooses to remove
-it. The first Candle CUDA build after the engine switch has not been authorised or qualified yet.
+Candle's CUDA dependencies are cached in Cargo's normal target directory. The Windows CUDA build
+and local Qwen2.5 GGUF and Safetensors inference tests are qualified.
 
 | Need | Version | Notes |
 | --- | --- | --- |
@@ -37,8 +36,8 @@ it. The first Candle CUDA build after the engine switch has not been authorised 
 
 Restart the terminal or editor after installing so it sees the new environment variables.
 
-- **CUDA qualification is pending.** The Candle source path and CPU model tests are verified; do
-  not treat that as evidence that the default CUDA build or live GPU inference works.
+- **CUDA is covered by local smoke tests.** The ignored release tests load the repository's local
+  Qwen2.5 GGUF and Safetensors fixtures on device 0 and require each to generate output.
 
 ## The CPU-only build
 

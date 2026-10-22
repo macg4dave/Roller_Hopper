@@ -284,7 +284,8 @@ Gaps the UI shows against the plan:
   the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
 - **Runtime now Candle 0.11**, shared by the app and evaluation tool: direct GGUF and
   Hugging Face safetensors loading with local tokenizers. Both formats now use one small,
-  synchronous inference path. The timings above need re-measuring in the integrated path.
+  synchronous inference path. The Windows CUDA build and Qwen2.5 GGUF/Safetensors load-and-generate
+  smoke tests pass; the identification timings above need re-measuring in the integrated path.
 - Earlier alternatives (a replacement, never a second model):
   - SmolLM2-360M-Instruct Q8_0 (about 386 MB).
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15

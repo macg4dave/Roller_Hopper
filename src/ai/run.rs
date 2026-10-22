@@ -10,6 +10,23 @@ use std::time::{Duration, Instant};
 use super::engine::{self, Model, Settings};
 use super::generation::Generation;
 
+/// The on-disk model format, which has its own answer settings in the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ModelFormat {
+    Gguf,
+    Safetensors,
+}
+
+impl ModelFormat {
+    fn from_path(path: &PathBuf) -> Self {
+        if path.is_dir() {
+            Self::Safetensors
+        } else {
+            Self::Gguf
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) enum Job {
     Load {
@@ -27,7 +44,7 @@ pub(crate) enum Job {
 pub(crate) enum WorkerEvent {
     Unloaded,
     Loading,
-    Ready,
+    Ready(ModelFormat),
     LoadFailed(RunError),
     Running,
     Output(String),
@@ -101,10 +118,11 @@ fn work(inbox: &Receiver<Job>, stop: &AtomicBool, report: &dyn Fn(WorkerEvent)) 
             } => {
                 loaded = None;
                 report(WorkerEvent::Loading);
+                let format = ModelFormat::from_path(&path);
                 match Model::load(&path, gpu).map_err(RunError::from) {
                     Ok(model) => {
                         loaded = Some(model);
-                        report(WorkerEvent::Ready);
+                        report(WorkerEvent::Ready(format));
                     }
                     Err(error) => report(WorkerEvent::LoadFailed(error)),
                 }
@@ -256,21 +274,50 @@ mod tests {
     }
 
     #[test]
+    fn a_file_is_gguf_and_a_model_folder_is_safetensors() {
+        let dir = std::env::temp_dir().join(format!("network-mapper-format-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(ModelFormat::from_path(&dir.join("model.gguf")), ModelFormat::Gguf);
+        assert_eq!(ModelFormat::from_path(&dir), ModelFormat::Safetensors);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     #[ignore = "local 491 MB model smoke test; run in release"]
     fn local_gguf_model_loads_and_answers() {
-        smoke_local_model(test_model(
-            "Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        ));
+        smoke_local_model(gguf_test_model(), false);
     }
 
     #[test]
     #[ignore = "local 988 MB model smoke test; run in release"]
     fn local_safetensors_model_loads_and_answers() {
-        smoke_local_model(test_model("Qwen2.5-0.5B-Instruct"));
+        smoke_local_model(test_model("Qwen2.5-0.5B-Instruct"), false);
     }
 
-    fn smoke_local_model(model: PathBuf) {
-        let seen = events(vec![load(Some(model)), run()], |event| {
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "local CUDA GGUF smoke test; run in release"]
+    fn local_cuda_gguf_model_loads_and_answers() {
+        smoke_local_model(gguf_test_model(), true);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "local CUDA safetensors smoke test; run in release"]
+    fn local_cuda_safetensors_model_loads_and_answers() {
+        smoke_local_model(test_model("Qwen2.5-0.5B-Instruct"), true);
+    }
+
+    fn smoke_local_model(model: PathBuf, gpu: bool) {
+        let format = ModelFormat::from_path(&model);
+        let jobs = vec![
+            Job::Load {
+                model: Some(model),
+                gpu,
+            },
+            run(),
+        ];
+        let seen = events(jobs, |event| {
             matches!(event, WorkerEvent::Finished(_) | WorkerEvent::LoadFailed(_))
         });
         assert_eq!(
@@ -278,7 +325,7 @@ mod tests {
             Some(
                 &[
                     WorkerEvent::Loading,
-                    WorkerEvent::Ready,
+                    WorkerEvent::Ready(format),
                     WorkerEvent::Running
                 ][..]
             )
@@ -297,5 +344,9 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tools/a.i.testmodels")
             .join(relative)
+    }
+
+    fn gguf_test_model() -> PathBuf {
+        test_model("Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf")
     }
 }

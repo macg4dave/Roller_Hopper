@@ -47,10 +47,14 @@ export component AiSettingsWindow inherits Window {
 
     in-out property <string> prompt;
     in-out property <string> input;
+    in-out property <int> evidence-index: 0;
     in property <string> output;
 
     // How the model picks each word, and the most tokens a prompt and its answer may hold.
-    in-out property <GenerationSettings> generation;
+    in-out property <GenerationSettings> gguf-generation;
+    in-out property <GenerationSettings> safetensors-generation;
+    in-out property <int> generation-tab-index: 0;
+    in property <int> loaded-format-index: -1;
     in property <int> max-context-tokens;
     // The last answer: its length in tokens, how long it took and how it ended, with its
     // prompt's length and the time to its first token.
@@ -69,9 +73,10 @@ export component AiSettingsWindow inherits Window {
     callback run(string, string);
     // Ends the answer being written, keeping what it has so far.
     callback stop();
-    callback restore-generation();
+    callback restore-generation(int);
     // Puts back the default prompt and sample evidence.
     callback restore-texts();
+    callback select-evidence(int);
 
     title: @tr("ai-settings.title");
     preferred-width: 1120px;
@@ -193,10 +198,12 @@ export component AiSettingsWindow inherits Window {
 
                     Card {
                         GenerationPanel {
-                            settings <=> root.generation;
+                            gguf-settings <=> root.gguf-generation;
+                            safetensors-settings <=> root.safetensors-generation;
+                            tab-index <=> root.generation-tab-index;
                             max-context-tokens: root.max-context-tokens;
                             enabled: state != ModelState.running;
-                            restore-defaults => { root.restore-generation(); }
+                            restore-defaults(index) => { root.restore-generation(index); }
                         }
                     }
 
@@ -222,6 +229,7 @@ export component AiSettingsWindow inherits Window {
                 AiTrial {
                     prompt <=> root.prompt;
                     input <=> root.input;
+                    evidence-index <=> root.evidence-index;
                     output: root.output;
                     can-run: state == ModelState.ready || state == ModelState.too-long || state == ModelState.failed;
                     running: state == ModelState.running;
@@ -233,6 +241,7 @@ export component AiSettingsWindow inherits Window {
                     run(prompt, input) => { root.run(prompt, input); }
                     stop => { root.stop(); }
                     restore-texts => { root.restore-texts(); }
+                    select-evidence(index) => { root.select-evidence(index); }
                 }
             }
         }

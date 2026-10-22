@@ -1,0 +1,99 @@
+[
+  {
+    "name": "truenas-server",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"38 s","fact":{"address":"192.168.10.20","status":"up","mac":"3C:EC:EF:72:41:90","vendor":"Super Micro Computer"}},
+      {"id":"E2","source":"reverse-dns","age":"38 s","fact":{"ptr":"vault-nas.home.arpa"}},
+      {"id":"E3","source":"tcp-syn","age":"37 s","fact":{"scanned":"1-10000","open":[22,80,111,139,443,445,2049,3260,6000,9000],"closed":9990}},
+      {"id":"E4","source":"service-detection","age":"36 s","fact":{"port":"443/tcp","service":"https","product":"nginx","http_title":"TrueNAS - vault-nas","tls":{"subject_cn":"vault-nas","issuer_cn":"TrueNAS Self-signed Certificate","alpn":["h2","http/1.1"]}}},
+      {"id":"E5","source":"service-detection","age":"36 s","fact":{"port":"445/tcp","service":"microsoft-ds","product":"Samba smbd","version":"4.20.2","smb_dialects":["3.0.2","3.1.1"],"signing":"required"}},
+      {"id":"E6","source":"service-detection","age":"35 s","fact":{"port":"2049/tcp","service":"nfs","rpc_program":100003,"versions":[3,4]}},
+      {"id":"E7","source":"service-detection","age":"35 s","fact":{"port":"3260/tcp","service":"iscsi","product":"TrueNAS iSCSI target","targets":["iqn.2005-10.org.freenas.ctl:vm-storage"]}},
+      {"id":"E8","source":"mdns","age":"31 s","fact":{"name":"vault-nas.local","services":["_smb._tcp","_nfs._tcp","_http._tcp","_ssh._tcp"],"txt":{"model":"TrueNAS SCALE","version":"24.10"}}},
+      {"id":"E9","source":"snmp","age":"28 s","fact":{"sys_name":"vault-nas","sys_descr":"Linux vault-nas 6.6.44-production+truenas x86_64","interfaces":4,"uptime_days":61.3}},
+      {"id":"E10","source":"os-fingerprint","age":"27 s","fact":{"matches":[{"name":"Linux 6.1-6.8","accuracy":98,"type":"storage"},{"name":"FreeBSD 13","accuracy":83,"type":"general purpose"}],"distance_hops":1}}
+    ]
+  },
+  {
+    "name": "windows-server",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"1 min","fact":{"address":"10.20.0.12","status":"up","mac":"00:15:5D:43:91:07","vendor":"Microsoft"}},
+      {"id":"E2","source":"reverse-dns","age":"1 min","fact":{"ptr":"dc01.office.example"}},
+      {"id":"E3","source":"tcp-syn","age":"58 s","fact":{"scanned":"1-5000","open":[53,88,135,139,389,445,464,593,636,3268,3269,3389],"closed":4988}},
+      {"id":"E4","source":"service-detection","age":"55 s","fact":{"port":"389/tcp","service":"ldap","product":"Microsoft Windows Active Directory LDAP","domain":"office.example","site":"Default-First-Site-Name"}},
+      {"id":"E5","source":"service-detection","age":"55 s","fact":{"port":"445/tcp","service":"microsoft-ds","os":"Windows Server 2022 Standard 20348","computer_name":"DC01","workgroup":"OFFICE","smb_signing":"required"}},
+      {"id":"E6","source":"service-detection","age":"54 s","fact":{"port":"3389/tcp","service":"ms-wbt-server","product":"Microsoft Terminal Services","tls_subject":"CN=DC01.office.example"}},
+      {"id":"E7","source":"os-fingerprint","age":"51 s","fact":{"matches":[{"name":"Microsoft Windows Server 2022","accuracy":99,"type":"general purpose"}],"distance_hops":1}}
+    ]
+  },
+  {
+    "name": "home-router",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"22 s","fact":{"address":"192.168.1.1","status":"up","mac":"A4:2B:B0:18:44:2C","vendor":"TP-Link Corporation Limited"}},
+      {"id":"E2","source":"tcp-syn","age":"21 s","fact":{"scanned":"1000 common ports","open":[53,80,443],"closed":997}},
+      {"id":"E3","source":"udp","age":"20 s","fact":{"scanned":[53,67,68,123,1900],"open":[53,67,1900],"closed":[68,123]}},
+      {"id":"E4","source":"service-detection","age":"18 s","fact":{"port":"80/tcp","service":"http","product":"uHTTPd","http_title":"Archer AX55","server":"TP-LINK Router"}},
+      {"id":"E5","source":"ssdp","age":"16 s","fact":{"device_type":"InternetGatewayDevice:2","friendly_name":"Archer AX55","manufacturer":"TP-Link","model_name":"Archer AX55","services":["WANIPConnection:2","Layer3Forwarding:1"]}},
+      {"id":"E6","source":"os-fingerprint","age":"15 s","fact":{"matches":[{"name":"OpenWrt Linux 5.4","accuracy":94,"type":"router"},{"name":"Linux 4.4","accuracy":89,"type":"WAP"}]}}
+    ]
+  },
+  {
+    "name": "office-printer",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"2 min","fact":{"address":"192.168.10.45","status":"up","mac":"3C:2A:F4:70:11:B8","vendor":"Brother Industries"}},
+      {"id":"E2","source":"tcp-connect","age":"2 min","fact":{"scanned":[80,443,515,631,9100],"open":[80,443,515,631,9100]}},
+      {"id":"E3","source":"snmp","age":"2 min","fact":{"sys_name":"BRN3C2AF47011B8","sys_descr":"Brother MFC-L3770CDW series","device_status":"idle","page_count":18432,"toner":{"black_percent":62,"cyan_percent":40,"magenta_percent":38,"yellow_percent":44}}},
+      {"id":"E4","source":"mdns","age":"3 min","fact":{"name":"Brother MFC-L3770CDW._ipp._tcp.local","services":["_ipp._tcp","_ipps._tcp","_printer._tcp","_scanner._tcp"],"txt":{"ty":"Brother MFC-L3770CDW series","pdl":"application/pdf,image/urf,image/pwg-raster"}}},
+      {"id":"E5","source":"service-detection","age":"2 min","fact":{"port":"9100/tcp","service":"jetdirect","product":"Brother printer","model":"MFC-L3770CDW"}}
+    ]
+  },
+  {
+    "name": "wifi-access-point",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"4 min","fact":{"address":"192.168.10.6","status":"up","mac":"74:83:C2:3A:10:02","vendor":"Ubiquiti Inc."}},
+      {"id":"E2","source":"tcp-syn","age":"4 min","fact":{"scanned":"1000 common ports","open":[22,8080,8443],"closed":997}},
+      {"id":"E3","source":"service-detection","age":"4 min","fact":{"port":"22/tcp","service":"ssh","product":"OpenSSH","version":"8.4p1 Debian"}},
+      {"id":"E4","source":"mdns","age":"5 min","fact":{"name":"U6-Lite.local","services":["_ssh._tcp","_http._tcp"],"txt":{"model":"U6-Lite","board":"UAL6","version":"6.6.65"}}}
+    ]
+  },
+  {
+    "name": "linux-desktop",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"43 s","fact":{"address":"192.168.10.73","status":"up","mac":"70:85:C2:B1:2D:90","vendor":"ASRock Incorporation"}},
+      {"id":"E2","source":"reverse-dns","age":"43 s","fact":{"ptr":"workstation.home.arpa"}},
+      {"id":"E3","source":"tcp-syn","age":"41 s","fact":{"scanned":"1000 common ports","open":[22,1716],"closed":998}},
+      {"id":"E4","source":"service-detection","age":"40 s","fact":{"port":"22/tcp","service":"ssh","product":"OpenSSH","version":"9.6p1 Ubuntu 3ubuntu13.8","banner":"SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.8"}}
+    ]
+  },
+  {
+    "name": "smart-tv",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"6 min","fact":{"address":"192.168.1.84","status":"up","mac":"64:CB:E9:82:0F:31","vendor":"LG Electronics"}},
+      {"id":"E2","source":"tcp-connect","age":"6 min","fact":{"scanned":[80,443,3000,3001,8008,8009,9080],"open":[3000,3001,9080]}},
+      {"id":"E3","source":"ssdp","age":"7 min","fact":{"friendly_name":"Living Room TV","manufacturer":"LG Electronics","model_name":"OLED55C3PUA","device_type":"MediaRenderer:1"}}
+    ]
+  },
+  {
+    "name": "video-doorbell",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"8 min","fact":{"address":"192.168.1.116","status":"up","mac":"34:3E:A4:19:77:02","vendor":"Ring LLC"}},
+      {"id":"E2","source":"tcp-connect","age":"8 min","fact":{"scanned":[80,443,554,8554],"open":[443],"filtered":[554,8554]}},
+      {"id":"E3","source":"dhcp-observation","age":"3 h","fact":{"hostname":"ring-doorbell-77","vendor_class":"dhcpcd-6.11.5"}}
+    ]
+  },
+  {
+    "name": "cheap-cctv-camera",
+    "evidence": [
+      {"id":"E1","source":"arp","age":"12 min","fact":{"address":"192.168.1.203","status":"up","mac":"00:12:41:8C:2A:09","vendor":"Unknown"}},
+      {"id":"E2","source":"tcp-connect","age":"12 min","fact":{"scanned":[23,80,443,554,8000,8080],"open":[80,554]}},
+      {"id":"E3","source":"service-detection","age":"11 min","fact":{"port":"80/tcp","service":"http","server":"uc-httpd/1.0.0","http_title":"IP Camera"}}
+    ]
+  },
+  {
+    "name": "unknown-host",
+    "evidence": [
+      {"id":"E1","source":"icmp-echo","age":"17 min","fact":{"address":"10.20.30.91","status":"up","latency_ms":18.7}},
+      {"id":"E2","source":"tcp-syn","age":"17 min","fact":{"scanned":[22,80,443,445,3389],"open":[],"filtered":[22,80,443,445,3389]}}
+    ]
+  }
+]

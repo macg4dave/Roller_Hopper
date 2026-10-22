@@ -1,4 +1,4 @@
-import { Button, ProgressIndicator, TextEdit } from "std-widgets.slint";
+import { Button, ComboBox, ProgressIndicator, TextEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Note, SectionTitle } from "ai-text.slint";
 
@@ -10,6 +10,7 @@ export enum AnswerEnd { none, complete, limit, stopped }
 export component AiTrial inherits VerticalLayout {
     in-out property <string> prompt;
     in-out property <string> input;
+    in-out property <int> evidence-index;
     in property <string> output;
     in property <bool> can-run;
     in property <bool> running;
@@ -22,6 +23,7 @@ export component AiTrial inherits VerticalLayout {
     callback run(string, string);
     callback stop();
     callback restore-texts();
+    callback select-evidence(int);
 
     spacing: Theme.space-s;
 
@@ -43,7 +45,32 @@ export component AiTrial inherits VerticalLayout {
         vertical-stretch: 3;
     }
 
-    SectionTitle { text: @tr("ai-settings.input"); }
+    HorizontalLayout {
+        spacing: Theme.space-s;
+        SectionTitle {
+            text: @tr("ai-settings.input");
+            horizontal-stretch: 1;
+        }
+        evidence-picker := ComboBox {
+            model: [
+                @tr("ai-settings.evidence.truenas"),
+                @tr("ai-settings.evidence.windows-server"),
+                @tr("ai-settings.evidence.router"),
+                @tr("ai-settings.evidence.printer"),
+                @tr("ai-settings.evidence.access-point"),
+                @tr("ai-settings.evidence.linux-pc"),
+                @tr("ai-settings.evidence.smart-tv"),
+                @tr("ai-settings.evidence.doorbell"),
+                @tr("ai-settings.evidence.cheap-camera"),
+                @tr("ai-settings.evidence.unknown")
+            ];
+            current-index <=> root.evidence-index;
+            enabled: !root.running;
+            selected(value) => {
+                root.select-evidence(evidence-picker.current-index);
+            }
+        }
+    }
     TextEdit {
         text <=> root.input;
         wrap: word-wrap;

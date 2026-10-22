@@ -8,10 +8,11 @@ mod engine;
 mod generation;
 mod install;
 mod run;
+mod samples;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
 pub(crate) use install::{InstallError, install};
-pub(crate) use run::{Answered, End, Job, RunError, Worker, WorkerEvent};
+pub(crate) use run::{Answered, End, Job, ModelFormat, RunError, Worker, WorkerEvent};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -77,8 +78,7 @@ pub(crate) const PROMPT: &str = concat!(
     include_str!("../tools/ai/schema.json"),
 );
 
-/// A sample device to try the prompt on, in the form the evaluation tool sends.
-pub(crate) const SAMPLE_EVIDENCE: &str = include_str!("ai/sample-evidence.txt");
+pub(crate) use samples::evidence_sample;
 
 /// The models offered for install, recommended first.
 pub(crate) const MODELS: &[Model] = &[

@@ -84,12 +84,9 @@ built around them.
   or speed. Run them in release mode with
   `cargo test --release -- --ignored local_`. CUDA is a default feature; for a CPU-only smoke
   check, add `--no-default-features`.
-- **CUDA builds use the cache.** Keep the default CUDA feature enabled for ordinary builds, runs,
-  tests and gates; `.cargo/config.toml` makes all of them reuse `cuda-cache/`. Permission is needed
-  to populate, invalidate or rebuild that cache, not to consume it. If `nvcc`, `cicc` or `ptxas`
-  starts unexpectedly, stop and report the cache miss. Never substitute `cargo clean`, a new target
-  directory or a CPU-only build for the normal cached CUDA build. Follow the protected-cache rules
-  in [AGENTS.md](../../AGENTS.md#protected-cuda-cache).
+- **CUDA is the normal build.** Keep the default CUDA feature enabled for ordinary builds, runs,
+  tests and gates. Candle's CUDA dependencies use Cargo's normal target directory. A CPU-only check
+  is useful for diagnosis but does not qualify the normal app.
 
 ### Tests are not the source of truth
 

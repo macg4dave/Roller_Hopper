@@ -1,7 +1,7 @@
 # CUDA build
 
 The app uses Candle's CUDA backend. Cargo keeps compiled dependencies in its normal target
-directory; the former `cuda-cache/` belongs to the removed engine and this tool never touches it.
+directory.
 
 ```sh
 cargo tool cuda build

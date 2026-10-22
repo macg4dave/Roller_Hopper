@@ -134,6 +134,36 @@ msgstr "Prompt"
 msgid "ai-settings.input"
 msgstr "Device evidence (sample file)"
 
+msgid "ai-settings.evidence.truenas"
+msgstr "TrueNAS server · very detailed"
+
+msgid "ai-settings.evidence.windows-server"
+msgstr "Windows server · very detailed"
+
+msgid "ai-settings.evidence.router"
+msgstr "Home router · detailed"
+
+msgid "ai-settings.evidence.printer"
+msgstr "Office printer · detailed"
+
+msgid "ai-settings.evidence.access-point"
+msgstr "Wi-Fi access point · moderate"
+
+msgid "ai-settings.evidence.linux-pc"
+msgstr "Linux desktop · moderate"
+
+msgid "ai-settings.evidence.smart-tv"
+msgstr "Smart TV · limited"
+
+msgid "ai-settings.evidence.doorbell"
+msgstr "Video doorbell · limited"
+
+msgid "ai-settings.evidence.cheap-camera"
+msgstr "Cheap CCTV camera · sparse"
+
+msgid "ai-settings.evidence.unknown"
+msgstr "Unknown host · minimal"
+
 msgid "ai-settings.run"
 msgstr "Run"
 
@@ -173,6 +203,12 @@ msgstr "Stopped. The answer so far is kept."
 # How the model picks each word of its answer.
 msgid "ai-settings.generation"
 msgstr "Answer settings"
+
+msgid "ai-settings.generation-gguf"
+msgstr "GGUF"
+
+msgid "ai-settings.generation-safetensors"
+msgstr "Safetensors"
 
 msgid "ai-settings.temperature"
 msgstr "Temperature"

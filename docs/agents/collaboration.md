@@ -37,9 +37,8 @@ before starting any task. Part of the agent rules indexed in [AGENTS.md](../../A
 - `cargo fmt --all` rewrites every file. Run it only when the working tree holds nothing but your
   own changes; otherwise format just your files with `rustfmt <path>`. The gate's
   `cargo fmt --all --check` never writes, so it is always safe.
-- Do not delete or regenerate shared outputs another agent may be using (build output, lock
-  files). Normal CUDA builds reuse `cuda-cache/`; invalidating or rebuilding that protected cache
-  needs the user's explicit permission under [AGENTS.md](../../AGENTS.md#protected-cuda-cache).
+- Do not delete or regenerate shared outputs another agent may be using (build output or lock
+  files).
 
 ## Handing over
 

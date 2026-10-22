@@ -1,4 +1,4 @@
-import { Button, Slider, SpinBox, Switch } from "std-widgets.slint";
+import { Button, Slider, SpinBox, Switch, TabWidget } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Note, SectionTitle } from "ai-text.slint";
 
@@ -79,7 +79,7 @@ component NumberSetting inherits VerticalLayout {
     Note { text: root.explanation; }
 }
 
-export component GenerationPanel inherits VerticalLayout {
+component GenerationSettingsPanel inherits VerticalLayout {
     in-out property <GenerationSettings> settings;
     // The most tokens a prompt and its answer may hold together.
     in property <int> max-context-tokens;
@@ -90,7 +90,6 @@ export component GenerationPanel inherits VerticalLayout {
 
     spacing: Theme.space-m;
 
-    SectionTitle { text: @tr("ai-settings.generation"); }
     SliderSetting {
         text: @tr("ai-settings.temperature");
         explanation: @tr("ai-settings.temperature-explained");
@@ -164,6 +163,41 @@ export component GenerationPanel inherits VerticalLayout {
             text: @tr("ai-settings.restore-defaults");
             enabled: root.enabled;
             clicked => { root.restore-defaults(); }
+        }
+    }
+}
+
+export component GenerationPanel inherits VerticalLayout {
+    in-out property <GenerationSettings> gguf-settings;
+    in-out property <GenerationSettings> safetensors-settings;
+    in-out property <int> tab-index;
+    in property <int> max-context-tokens;
+    in property <bool> enabled;
+
+    callback restore-defaults(int);
+
+    spacing: Theme.space-m;
+
+    SectionTitle { text: @tr("ai-settings.generation"); }
+    tabs := TabWidget {
+        current-index <=> root.tab-index;
+        Tab {
+            title: @tr("ai-settings.generation-gguf");
+            GenerationSettingsPanel {
+                settings <=> root.gguf-settings;
+                max-context-tokens: root.max-context-tokens;
+                enabled: root.enabled;
+                restore-defaults => { root.restore-defaults(0); }
+            }
+        }
+        Tab {
+            title: @tr("ai-settings.generation-safetensors");
+            GenerationSettingsPanel {
+                settings <=> root.safetensors-settings;
+                max-context-tokens: root.max-context-tokens;
+                enabled: root.enabled;
+                restore-defaults => { root.restore-defaults(1); }
+            }
         }
     }
 }
