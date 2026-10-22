@@ -95,11 +95,14 @@ controls, changed only where the brief or an agreed decision says. It already de
   form, Add to map and Ignore. Import, above the results, adds every New host not yet added
   or ignored in one go; possible duplicates stay for review. Import with AI (at the user's
   request, ahead of M-016) does the same one host at a time: it loads the installed
-  Qwen3-4B-Q4_K_M, sends the host's and cards' facts with the default prompt, and fills only
-  empty fields from a medium/high-confidence answer (unknown type with its role, no OS family
-  as "Suggested by AI", empty notes from the description) before adding it; Stop leaves the
-  rest. The answer is schema-checked but unscored (BE-0011, BLK-008); Android has no OS family
-  in the app, so it is left empty. The AI settings window and the import share one worker,
+  Qwen3-4B-Q4_K_M, sends the host's and cards' facts with the default prompt, and, at the
+  user's decision, replaces what the scan made of it with a medium/high-confidence answer
+  (type with the role that follows it unless one was picked, OS family as "Suggested by AI",
+  notes from the description) and with the prompt's `suggested_name`, unless the name came
+  from a full hostname such as `pc.local`, before adding it; Stop leaves the rest. Edits made
+  in the pre-Add form before Import with AI are replaced too (no manual/auto provenance yet,
+  BE-0019). The answer is schema-checked but unscored (BE-0011, BLK-008); Android has no OS
+  family in the app, so the scan's stays. The AI settings window and the import share one worker,
   which unloads the model after 5 idle minutes. The log has Info and Warning lines, and the
   header shows Scanning… while a run continues on another page.
 - Icons come from an `icons` folder beside the program (the source tree as fallback), with
@@ -112,8 +115,10 @@ Gaps the UI shows against the plan:
   milestone order, at the user's request). New and Open wait while a scan runs. Settings holds a pointer to the View menu and opens the AI settings window:
   install Qwen3-4B-Q4_K_M (the only model offered), or list the user's own GGUF files from the
   models folder (Qwen3 only); Load or Unload one with Candle (CPU, or GPU in a `cuda` build,
-  with a CUDA light), and Run it on an editable prompt and sample file (an nmap-style NAS) with
-  adjustable answer settings. An edited prompt is saved in the app's data folder until it is
+  with a CUDA light), and Run it on an editable prompt and device text with adjustable answer
+  settings. Its left sidebar scans a network of its own (the network box and Scan, as on the
+  discovery page, apart from the map) and lists the hosts found; picking one fills the device
+  text with the evidence Import with AI sends for it (the mock samples are gone). An edited prompt is saved in the app's data folder until it is
   restored to the default (`src/ai/default-prompt.txt`); the answer settings and device text
   are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.

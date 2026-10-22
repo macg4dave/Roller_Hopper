@@ -1,0 +1,108 @@
+import { Button, LineEdit, ListView, ProgressIndicator } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Labels } from "labels.slint";
+import { TargetError } from "bridge.slint";
+import { Note, SectionTitle } from "ai-text.slint";
+
+// A host the sidebar's scan found. `index` is its place among all the hosts found, which
+// select-host takes; `name` is empty when nothing told it.
+export struct AiScanHost {
+    index: int,
+    name: string,
+    ip: string,
+}
+
+// The AI settings window's sidebar: scans a network as the discovery page does and lists the
+// hosts found. Picking one puts the evidence Import with AI would send for it in the device
+// text.
+export component AiScanPanel inherits VerticalLayout {
+    in-out property <string> target;
+    // Why what was typed is not a network a scan can take, if it is not.
+    in property <TargetError> target-error;
+    property <bool> target-valid: target-error == TargetError.none;
+    in property <bool> scanning;
+    // Addresses checked so far, of all of them.
+    in property <int> swept;
+    in property <int> addresses;
+    in property <[AiScanHost]> hosts;
+    in property <int> host-index: -1;
+
+    callback set-target(string);
+    callback scan();
+    callback stop-scan();
+    callback select-host(int);
+
+    spacing: Theme.space-s;
+
+    SectionTitle { text: @tr("ai-settings.scan.network"); }
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        LineEdit {
+            text <=> root.target;
+            enabled: !root.scanning;
+            horizontal-stretch: 1;
+            edited(text) => { root.set-target(text); }
+            accepted => {
+                if root.target-valid { root.scan(); }
+            }
+        }
+        Button {
+            text: root.scanning ? @tr("ai-settings.scan.stop") : @tr("ai-settings.scan.start");
+            icon: root.scanning ? @image-url("icons/stop.svg") : @image-url("icons/scan.svg");
+            colorize-icon: true;
+            primary: !root.scanning;
+            enabled: root.scanning || root.target-valid;
+            clicked => {
+                if root.scanning {
+                    root.stop-scan();
+                } else {
+                    root.scan();
+                }
+            }
+        }
+    }
+    if !root.target-valid && !root.scanning: Note { text: Labels.target-problem(root.target-error); }
+    if root.scanning: ProgressIndicator {
+        progress: root.addresses > 0 ? root.swept / root.addresses : 0;
+    }
+
+    SectionTitle {
+        text: @tr("ai-settings.scan.devices" | "ai-settings.scan.devices.plural" % root.hosts.length);
+    }
+    if root.hosts.length == 0: Note {
+        text: root.scanning ? @tr("ai-settings.scan.searching") : @tr("ai-settings.scan.empty");
+    }
+    ListView {
+        vertical-stretch: 1;
+        for host in root.hosts: Rectangle {
+            height: Theme.row-height;
+            border-radius: Theme.radius;
+            background: host.index == root.host-index ? Theme.accent-soft
+                : touch.has-hover ? Theme.hover : transparent;
+            accessible-role: list-item;
+            accessible-label: Labels.found-name(host.name);
+            accessible-item-selectable: true;
+            accessible-item-selected: host.index == root.host-index;
+
+            VerticalLayout {
+                padding-left: Theme.space-s;
+                padding-right: Theme.space-s;
+                alignment: center;
+                Text {
+                    text: Labels.found-name(host.name);
+                    color: Theme.text;
+                    overflow: elide;
+                }
+                Text {
+                    text: host.ip;
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.select-host(host.index); }
+            }
+        }
+    }
+}

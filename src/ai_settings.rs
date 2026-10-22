@@ -1,12 +1,14 @@
 //! Connects the AI settings window to [`crate::ai`]: installs models in the background, loads
-//! and unloads the one picked, and runs it on the prompt and evidence, so the window stays
-//! responsive through downloads of gigabytes and answers that take minutes.
+//! and unloads the one picked, and runs it on the prompt and a host's evidence, which its
+//! sidebar ([`scan`]) scans for, so the window stays responsive through downloads of gigabytes
+//! and answers that take minutes.
 //!
 //! The window starts the app's one AI worker, which Import with AI shares: the model's loading
 //! and unloading show here whoever asked for them, and each run's events go to whoever asked.
 
 mod generation;
 mod install;
+mod scan;
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -31,28 +33,22 @@ pub(crate) fn connect(
     show_installed(&window);
     let prompt = ai::data_dir().map_or_else(|| ai::PROMPT.to_owned(), |d| saved_prompt::load(&d));
     window.set_prompt(prompt.into());
-    show_evidence(&window, 0);
+    scan::connect(&window);
     restore_generation(&window);
     window.set_max_context_tokens(i32::try_from(ai::MAX_CONTEXT_TOKENS).unwrap_or(i32::MAX));
     // A CUDA build uses the GPU unless the user switches it off.
     window.set_gpu_built(ai::gpu_built());
     window.set_use_gpu(ai::gpu_built());
     let restoring = window.as_weak();
-    window.on_restore_texts(move || {
+    window.on_restore_prompt(move || {
         if let Some(open) = restoring.upgrade() {
-            restore_texts(&open);
+            restore_prompt(&open);
         }
     });
     let editing = window.as_weak();
     window.on_prompt_edited(move |text| {
         if let Some(open) = editing.upgrade() {
             save_prompt(&open, &text);
-        }
-    });
-    let selecting = window.as_weak();
-    window.on_select_evidence(move |index| {
-        if let Some(open) = selecting.upgrade() {
-            show_evidence(&open, index);
         }
     });
     let resetting = window.as_weak();
@@ -174,25 +170,16 @@ fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
     send(window, worker, Job::Load { model, gpu });
 }
 
-/// Puts back the default prompt, forgetting the user's saved one, and the first sample.
-fn restore_texts(window: &AiSettingsWindow) {
+/// Puts back the default prompt, forgetting the user's saved one.
+fn restore_prompt(window: &AiSettingsWindow) {
     window.set_prompt(ai::PROMPT.into());
     save_prompt(window, ai::PROMPT);
-    show_evidence(window, 0);
 }
 
 /// Keeps the user's prompt for next time, saying so in the window when it cannot be saved.
 fn save_prompt(window: &AiSettingsWindow, text: &str) {
     let saved = ai::data_dir().is_some_and(|dir| saved_prompt::save(&dir, text).is_ok());
     window.set_prompt_not_saved(!saved);
-}
-
-fn show_evidence(window: &AiSettingsWindow, index: i32) {
-    let Some(evidence) = usize::try_from(index).ok().and_then(ai::evidence_sample) else {
-        return;
-    };
-    window.set_evidence_index(index);
-    window.set_input(evidence.into());
 }
 
 fn restore_generation(window: &AiSettingsWindow) {

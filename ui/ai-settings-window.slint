@@ -5,9 +5,11 @@ import { GenerationPanel, GenerationSettings } from "ai-generation.slint";
 import { AiTrial, AnswerEnd } from "ai-trial.slint";
 import { AiInstallPanel, InstallOutcome } from "ai-install-panel.slint";
 import { AiModelPanel, ModelState } from "ai-model-panel.slint";
+import { AiScanHost, AiScanPanel } from "ai-scan-panel.slint";
 import { Light } from "components/light.slint";
+import { TargetError } from "bridge.slint";
 
-export { GenerationSettings, AnswerEnd, InstallOutcome, ModelState }
+export { AiScanHost, GenerationSettings, AnswerEnd, InstallOutcome, ModelState }
 
 // An automation switch that nothing can act on yet, so it stays off and disabled, with what it
 // will do.
@@ -25,9 +27,9 @@ component AiControl inherits VerticalLayout {
     Note { text: root.explanation; }
 }
 
-// Its own window, opened from Settings: lights for the model and CUDA, installing models,
-// loading one, trying it on a prompt and an evidence file, and the AI settings the user
-// controls.
+// Its own window, opened from Settings: lights for the model and CUDA, a sidebar that scans a
+// network and lists its hosts, installing models, loading one, trying it on a prompt and a
+// host's evidence, and the AI settings the user controls.
 export component AiSettingsWindow inherits Window {
     in property <[string]> offered-names;
     in property <[float]> offered-gb;
@@ -49,8 +51,17 @@ export component AiSettingsWindow inherits Window {
     // The edited prompt could not be saved in the app's data folder.
     in property <bool> prompt-not-saved;
     in-out property <string> input;
-    in-out property <int> evidence-index: 0;
     in property <string> output;
+
+    // The sidebar's scan: the network typed, whether a scan can take it, how far a running
+    // scan has got, the hosts found and the one whose evidence is in the device text.
+    in-out property <string> scan-target;
+    in property <TargetError> scan-target-error;
+    in property <bool> scanning;
+    in property <int> scan-swept;
+    in property <int> scan-addresses;
+    in property <[AiScanHost]> scan-hosts;
+    in property <int> scan-host-index: -1;
 
     // How the model picks each word, and the most tokens a prompt and its answer may hold.
     in-out property <GenerationSettings> generation;
@@ -75,16 +86,20 @@ export component AiSettingsWindow inherits Window {
     callback stop();
     callback restore-generation();
     callback select-thinking(bool);
-    // Puts back the default prompt, forgetting the saved one, and the sample evidence.
-    callback restore-texts();
+    // Puts back the default prompt, forgetting the saved one.
+    callback restore-prompt();
     // The user changed the prompt; it is saved for next time.
     callback prompt-edited(string);
-    callback select-evidence(int);
+    callback set-scan-target(string);
+    callback scan();
+    callback stop-scan();
+    // A found host by its AiScanHost.index: its evidence goes in the device text.
+    callback select-scan-host(int);
 
     title: @tr("ai-settings.title");
-    preferred-width: 1120px;
+    preferred-width: 1440px;
     preferred-height: 820px;
-    min-width: 860px;
+    min-width: 1180px;
     min-height: 620px;
     background: Theme.background;
     default-font-size: Theme.font-body;
@@ -165,6 +180,23 @@ export component AiSettingsWindow inherits Window {
             padding: Theme.space-l;
             spacing: Theme.space-l;
 
+            Card {
+                width: Theme.list-width;
+                AiScanPanel {
+                    target <=> root.scan-target;
+                    target-error: root.scan-target-error;
+                    scanning: root.scanning;
+                    swept: root.scan-swept;
+                    addresses: root.scan-addresses;
+                    hosts: root.scan-hosts;
+                    host-index: root.scan-host-index;
+                    set-target(text) => { root.set-scan-target(text); }
+                    scan => { root.scan(); }
+                    stop-scan => { root.stop-scan(); }
+                    select-host(index) => { root.select-scan-host(index); }
+                }
+            }
+
             settings-scroll := ScrollView {
                 width: 400px;
 
@@ -233,7 +265,6 @@ export component AiSettingsWindow inherits Window {
                 AiTrial {
                     prompt <=> root.prompt;
                     input <=> root.input;
-                    evidence-index <=> root.evidence-index;
                     output: root.output;
                     can-run: state == ModelState.ready || state == ModelState.too-long
                         || state == ModelState.failed;
@@ -245,10 +276,9 @@ export component AiSettingsWindow inherits Window {
                     answer-end: root.answer-end;
                     run(prompt, input) => { root.run(prompt, input); }
                     stop => { root.stop(); }
-                    restore-texts => { root.restore-texts(); }
+                    restore-prompt => { root.restore-prompt(); }
                     prompt-not-saved: root.prompt-not-saved;
                     prompt-edited(text) => { root.prompt-edited(text); }
-                    select-evidence(index) => { root.select-evidence(index); }
                 }
             }
         }

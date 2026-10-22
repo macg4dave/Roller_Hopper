@@ -18,7 +18,10 @@ mod map;
 mod project;
 mod view;
 
+pub(crate) use convert::target_error;
+pub(crate) use discovery::Running;
 pub(crate) use i18n::select_language;
+pub(crate) use view::sync;
 
 use std::cell::RefCell;
 use std::collections::HashSet;

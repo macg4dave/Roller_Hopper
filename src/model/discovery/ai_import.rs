@@ -92,7 +92,7 @@ impl Discovery {
         next
     }
 
-    /// Takes the model's answer for the host it has: `fill` fills that host's empty fields, then
+    /// Takes the model's answer for the host it has: `fill` puts it in that host's fields, then
     /// it is added to the map as [`Discovery::add`] does. Returns the device added, if any.
     pub(crate) fn identified(
         &mut self,

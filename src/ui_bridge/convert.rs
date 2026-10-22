@@ -9,7 +9,7 @@ use slint::SharedString;
 use super::icons::Icons;
 use crate::model::{
     CardId, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle, Network,
-    NetworkCard, OsClue, OsFamily, Point, Role, Snap, Status, StatusFilter,
+    NetworkCard, OsClue, OsFamily, Point, Role, Snap, Status, StatusFilter, TargetError,
 };
 use crate::ui::{self, Labels};
 
@@ -20,6 +20,17 @@ const PAD_TOP: f32 = 40.0;
 const PAD_BOTTOM: f32 = 115.0;
 /// The subnet prefix of an address typed without one: that of most home networks.
 pub(super) const TYPED_PREFIX: u8 = 24;
+
+/// Why the typed network cannot be scanned, if it cannot; for the discovery page and the AI
+/// settings window's scan.
+pub(crate) fn target_error(error: Option<TargetError>) -> ui::TargetError {
+    match error {
+        None => ui::TargetError::None,
+        Some(TargetError::Empty) => ui::TargetError::Empty,
+        Some(TargetError::Invalid) => ui::TargetError::Invalid,
+        Some(TargetError::TooWide) => ui::TargetError::TooWide,
+    }
+}
 
 pub(super) fn ui_id(id: DeviceId) -> i32 {
     // Ids come from our own data and stay far below i32::MAX; -1 means "no device" to the UI.

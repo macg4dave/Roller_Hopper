@@ -570,9 +570,9 @@ export global Bridge {
     // Adds every new host still waiting for a decision to the map; ignored hosts and possible
     // duplicates wait for the user.
     callback import-found();
-    // Import with AI: the same hosts, each with the empty fields the AI is confident about
-    // filled in (type, OS family, notes) before it is added; and stopping it, which leaves the
-    // rest waiting.
+    // Import with AI: the same hosts, each with what the scan made of it (type, OS family,
+    // notes, and a name not from a full hostname) replaced by what the AI is confident about
+    // before it is added; and stopping it, which leaves the rest waiting.
     callback import-found-with-ai();
     callback stop-ai-import();
     // A card of a found host not on the map, by the host's index and the card's card-index: as

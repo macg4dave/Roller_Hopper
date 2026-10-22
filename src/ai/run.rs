@@ -374,7 +374,10 @@ mod tests {
     #[cfg(feature = "cuda")]
     fn repeated_runs(relative: &str) {
         const RUNS: usize = 6;
-        let evidence = super::super::evidence_sample(0).unwrap();
+        // The evidence Import with AI sends for the sample network's first found host.
+        let network = crate::mock_data::network();
+        let host = crate::mock_data::answers(&network).swap_remove(0);
+        let evidence = super::super::evidence(&host.device, &host.methods);
         let identify = || Job::Run {
             asker: Asker::Trial,
             system: super::super::PROMPT.into(),

@@ -10,7 +10,6 @@ mod identify;
 mod install;
 mod response;
 mod run;
-mod samples;
 pub(crate) mod saved_prompt;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
@@ -76,8 +75,6 @@ impl Choice {
 /// evaluation tool reads its own `tools/ai/prompt.md` and schema. It is the model's
 /// instruction, not UI text, so it is not translated.
 pub(crate) const PROMPT: &str = include_str!("ai/default-prompt.txt");
-
-pub(crate) use samples::evidence_sample;
 
 /// The models offered for install: only the main application AI.
 pub(crate) const MODELS: &[Model] = &[

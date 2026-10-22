@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use ipnet::Ipv4Net;
-use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
+use slint::{ComponentHandle, SharedString, Timer, TimerMode};
 
 use super::{AppState, Selection, convert, handler, update};
 use crate::model::{Found, FoundFilter, FoundSort, ScanMode, ScanOptions, ScanProgress};
@@ -44,19 +44,8 @@ impl AppState {
         progress: ScanProgress,
         events: impl IntoIterator<Item = Event>,
     ) -> bool {
-        self.discovery.reach(progress);
-        for event in events {
-            match event {
-                Event::Host(answer) => self.discovery.answer(*answer, &self.network),
-                Event::Finished => {
-                    if self.discovery.finish() {
-                        self.scans += 1;
-                    }
-                }
-                Event::Failed(reason) => {
-                    self.discovery.fail(reason);
-                }
-            }
+        if scan::record(&mut self.discovery, progress, events, &self.network) {
+            self.scans += 1;
         }
         self.discovery.busy()
     }
@@ -159,7 +148,14 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
             }
         });
         if let Some(scan) = started {
-            start_running.watch(scan, &start_ui, &start_state);
+            let (watch_ui, watch_state) = (start_ui.clone(), Rc::clone(&start_state));
+            start_running.watch(scan, move |scan| {
+                let mut going = false;
+                update(&watch_ui, &watch_state, |st| {
+                    going = st.take_scan(scan.progress(), scan.events());
+                });
+                going
+            });
         }
     });
     let stop = handler(ui, state, |st, ()| st.stop_discovery());
@@ -289,28 +285,25 @@ fn connect_found_cards(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_remove_found_port(move |host, card, port| remove((host, card, port)));
 }
 
-/// The scan running, if any, and the timer that takes in what it reports.
+/// The scan running, if any, and the timer that takes in what it reports. The discovery page
+/// and the AI settings window's scan each have one.
 #[derive(Default)]
-struct Running {
+pub(crate) struct Running {
     scan: RefCell<Option<Scan>>,
     timer: Timer,
 }
 
 impl Running {
-    /// Takes in what `started` reports until it ends (or the window closes).
-    fn watch(self: &Rc<Self>, started: Scan, ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>) {
+    /// Has `take` take in what `started` reports, every [`POLL`], until it says the scan has
+    /// ended (or this is dropped).
+    pub(crate) fn watch(self: &Rc<Self>, started: Scan, take: impl Fn(&Scan) -> bool + 'static) {
         self.scan.replace(Some(started));
-        let (ui, state, this) = (ui.clone(), Rc::clone(state), Rc::downgrade(self));
+        let this = Rc::downgrade(self);
         self.timer.start(TimerMode::Repeated, POLL, move || {
             let Some(running) = this.upgrade() else {
                 return;
             };
-            let mut going = false;
-            if let Some(scan) = running.scan.borrow().as_ref() {
-                update(&ui, &state, |st| {
-                    going = st.take_scan(scan.progress(), scan.events());
-                });
-            }
+            let going = running.scan.borrow().as_ref().is_some_and(&take);
             if !going {
                 running.end();
             }
@@ -318,7 +311,7 @@ impl Running {
     }
 
     /// Stops taking in the scan, and stops the scan if it is still going.
-    fn end(&self) {
+    pub(crate) fn end(&self) {
         self.timer.stop();
         self.scan.take();
     }

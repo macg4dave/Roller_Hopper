@@ -1,5 +1,6 @@
 //! Import with AI on the discovery page: loads the main application AI, asks it about each new
-//! host in turn, fills in the empty fields it is confident about, and adds the host to the map.
+//! host in turn, puts what it is confident about in place of what the scan made of the host
+//! ([`crate::ai::Identity::fill`]), and adds the host to the map.
 //! The worker is the one the AI settings window started; the model unloads itself once idle
 //! ([`crate::ai::IDLE_UNLOAD`]). The queue of hosts is the run's
 //! ([`crate::model::Discovery::begin_ai_import`]).
@@ -157,7 +158,9 @@ impl Importing {
             return;
         };
         let found = st.discovery.found().get(index);
-        let user = found.map(|f| ai::evidence(&f.device)).unwrap_or_default();
+        let user = found
+            .map(|f| ai::evidence(&f.device, &f.methods))
+            .unwrap_or_default();
         self.answer.take();
         let job = Job::Run {
             asker: Asker::Import,

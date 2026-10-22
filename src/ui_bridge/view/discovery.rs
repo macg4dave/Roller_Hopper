@@ -8,7 +8,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use super::sync;
 use crate::model::{
     AiImportPhase, Decision, Finding, Found, FoundFilter, FoundSort, LogEntry, LogEvent, Method,
-    Parent, Phase, ScanMode, TargetError,
+    Parent, Phase, ScanMode,
 };
 use crate::ui::{self, Bridge, Labels};
 use crate::ui_bridge::{AppState, convert};
@@ -29,7 +29,7 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     bridge.set_discovery(ui::DiscoveryView {
         phase: phase(discovery.phase()),
         target: target.map(|t| t.to_string()).unwrap_or_default().into(),
-        target_error: target_error(next.err()),
+        target_error: convert::target_error(next.err()),
         mode: scan_mode(discovery.options.mode),
         swept: int(swept),
         addresses: int(addresses),
@@ -299,15 +299,6 @@ fn phase(phase: Phase) -> ui::DiscoveryPhase {
         Phase::Idle => ui::DiscoveryPhase::Idle,
         Phase::Running => ui::DiscoveryPhase::Running,
         Phase::Finished => ui::DiscoveryPhase::Finished,
-    }
-}
-
-fn target_error(error: Option<TargetError>) -> ui::TargetError {
-    match error {
-        None => ui::TargetError::None,
-        Some(TargetError::Empty) => ui::TargetError::Empty,
-        Some(TargetError::Invalid) => ui::TargetError::Invalid,
-        Some(TargetError::TooWide) => ui::TargetError::TooWide,
     }
 }
 

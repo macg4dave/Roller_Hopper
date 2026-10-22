@@ -262,7 +262,7 @@ fn count(network: &Network, filter: StatusFilter) -> i32 {
 
 /// Updates a `VecModel` in place, touching only rows that changed. Returns a new model to set
 /// when the property does not hold a `VecModel` yet (its initial empty value).
-pub(super) fn sync<T: Clone + PartialEq + 'static>(
+pub(crate) fn sync<T: Clone + PartialEq + 'static>(
     model: &ModelRc<T>,
     rows: Vec<T>,
 ) -> Option<ModelRc<T>> {

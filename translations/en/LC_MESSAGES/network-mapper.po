@@ -212,35 +212,27 @@ msgstr "Your changes to the prompt could not be saved, so they will be lost when
 msgid "ai-settings.input"
 msgstr "Device text (sent exactly as written)"
 
-msgid "ai-settings.evidence.truenas"
-msgstr "TrueNAS server · very detailed"
+# The AI settings window's sidebar: a network to scan, as on the discovery page.
+msgid "ai-settings.scan.network"
+msgstr "Network"
 
-msgid "ai-settings.evidence.windows-server"
-msgstr "Windows server · very detailed"
+msgid "ai-settings.scan.start"
+msgstr "Scan"
 
-msgid "ai-settings.evidence.router"
-msgstr "Home router · detailed"
+msgid "ai-settings.scan.stop"
+msgstr "Stop"
 
-msgid "ai-settings.evidence.printer"
-msgstr "Office printer · detailed"
+# Over the hosts the sidebar's scan found. {n} is how many.
+msgid "ai-settings.scan.devices"
+msgid_plural "ai-settings.scan.devices.plural"
+msgstr[0] "{n} device"
+msgstr[1] "{n} devices"
 
-msgid "ai-settings.evidence.access-point"
-msgstr "Wi-Fi access point · moderate"
+msgid "ai-settings.scan.searching"
+msgstr "Looking for devices…"
 
-msgid "ai-settings.evidence.linux-pc"
-msgstr "Linux desktop · moderate"
-
-msgid "ai-settings.evidence.smart-tv"
-msgstr "Smart TV · limited"
-
-msgid "ai-settings.evidence.doorbell"
-msgstr "Video doorbell · limited"
-
-msgid "ai-settings.evidence.cheap-camera"
-msgstr "Cheap CCTV camera · sparse"
-
-msgid "ai-settings.evidence.unknown"
-msgstr "Unknown host · minimal"
+msgid "ai-settings.scan.empty"
+msgstr "Scan a network, then pick a device to put what Import with AI would send about it in the device text."
 
 msgid "ai-settings.run"
 msgstr "Run"
@@ -249,8 +241,8 @@ msgstr "Run"
 msgid "ai-settings.stop"
 msgstr "Stop"
 
-msgid "ai-settings.restore-texts"
-msgstr "Restore prompt and sample"
+msgid "ai-settings.restore-prompt"
+msgstr "Restore prompt"
 
 msgid "ai-settings.output"
 msgstr "Output"
@@ -1211,8 +1203,9 @@ msgid_plural "discovery.import.plural"
 msgstr[0] "Import {n} new host to the map"
 msgstr[1] "Import {n} new hosts to the map"
 
-# Beside Import: the same hosts, each with the empty fields the AI is confident about filled in
-# (type, OS family, notes) before it is added.
+# Beside Import: the same hosts, each with what the scan made of it (type, OS family, notes,
+# and a name not taken from a full hostname) replaced by what the AI is confident about before
+# it is added.
 msgid "discovery.ai-import"
 msgstr "Import with AI"
 

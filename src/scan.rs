@@ -30,7 +30,7 @@ use netscli_core::{
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::{JoinHandle, JoinSet};
 
-use crate::model::{Answer, ScanOptions, ScanProgress};
+use crate::model::{Answer, Discovery, Network, ScanOptions, ScanProgress};
 use answer::Probed;
 use ports::{PortNames, PortPlan};
 
@@ -99,6 +99,29 @@ impl Scan {
     pub(crate) fn events(&self) -> TryIter<'_, Event> {
         self.events.try_iter()
     }
+}
+
+/// Takes in what a running scan reported into the record of its run: how far it has got, and
+/// the hosts found, compared with `network`. True if it reported finishing, which ended the run
+/// (stopping or failing is not finishing).
+pub(crate) fn record(
+    discovery: &mut Discovery,
+    progress: ScanProgress,
+    events: impl IntoIterator<Item = Event>,
+    network: &Network,
+) -> bool {
+    discovery.reach(progress);
+    let mut finished = false;
+    for event in events {
+        match event {
+            Event::Host(answer) => discovery.answer(*answer, network),
+            Event::Finished => finished |= discovery.finish(),
+            Event::Failed(reason) => {
+                discovery.fail(reason);
+            }
+        }
+    }
+    finished
 }
 
 impl Drop for Scan {
