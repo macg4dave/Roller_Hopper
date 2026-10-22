@@ -2,14 +2,11 @@
 
 A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-memory mock data
 only — there is no real network discovery or scanning. Settings → AI settings installs an AI
-model (Qwen3-4B, 2.5 GB; or Qwen3-0.6B, 0.6 GB) into the user's application data folder,
+model (Qwen3-4B-Q4_K_M, 2.5 GB) into the user's application data folder,
 loads one with [Candle](https://github.com/huggingface/candle), and runs it on an editable
-prompt and sample device file. A Qwen2, Qwen3, Llama 3, Gemma 3, Phi-3 or GLM-4 text model of
-your own — a GGUF file, or a Hugging Face safetensors model folder (`config.json`,
-`tokenizer.json` and `*.safetensors`) — placed in that `models` folder
-(`%APPDATA%\Network Mapper\models\` on Windows) or one folder down there is listed beside
-them. Its own tokenizer is used; a Gemma 3 or Phi-3 GGUF file needs the model's
-`tokenizer.json` beside it.
+prompt and sample device file. The app runs Qwen3 GGUF files only; another one placed in that
+`models` folder (`%APPDATA%\Network Mapper\models\` on Windows) or one folder down there is
+listed beside it.
 
 ## Run
 
@@ -21,9 +18,8 @@ The default build includes CUDA for running the AI on an NVIDIA graphics card. W
 first, and the CPU-only build, are in [docs/building.md](docs/building.md); what a computer
 needs to run a built copy is in [docs/installing.md](docs/installing.md).
 
-The models under `tools/a.i.testmodels/` are development assets, not interchangeable product
-choices: `Qwen2.5-0.5B-Instruct-GGUF` is the small CUDA smoke-test fixture, while the Qwen3 model
-under `Qwen3/` is the main application AI being qualified.
+The models under `tools/a.i.testmodels/` are development assets for the GPU smoke tests:
+`Qwen3/` is a copy of the application AI and `Qwen3_0.6B/` a small Qwen3 for quick checks.
 
 ## Icons
 

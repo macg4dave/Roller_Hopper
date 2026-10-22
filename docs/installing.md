@@ -25,12 +25,9 @@ model goes into `%APPDATA%\Network Mapper\models\`.
 
 | Model | Download and disk space |
 | --- | --- |
-| Qwen3-4B (the main application AI) | 2.5 GB |
-| Qwen3-0.6B | 0.6 GB |
+| Qwen3-4B-Q4_K_M (the application AI) | 2.5 GB |
 
-Memory needs are still being measured. Earlier tests needed about 2.3 GB of RAM for Qwen3-0.6B
-on the processor, and the larger model needs more. The repository's Qwen2.5 GGUF is only a CUDA
-smoke-test fixture; it is not the application AI offered to users.
+Memory needs are still being measured.
 
 ## Running the AI on an NVIDIA graphics card
 
@@ -44,7 +41,7 @@ needs all of the following, even if you only use the processor:
   `cudart64_13.dll`, `cublas64_13.dll`, `cublasLt64_13.dll`, `curand64_10.dll`,
   `nvrtc64_130_0.dll`, `nvrtc-builtins64_132.dll` and the `cudnn*64_9.dll` files.
   Without `cudart64_13.dll`, Windows will not start the app.
-- **Graphics memory:** earlier tests used about 3 GB for Qwen3-0.6B and about 6.4 GB for
-  Qwen3-4B. These are being re-measured.
+- **Graphics memory:** earlier tests used about 6.4 GB for Qwen3-4B. This is being
+  re-measured.
 
 On a computer without these, use a CPU-only build: it needs none of them.

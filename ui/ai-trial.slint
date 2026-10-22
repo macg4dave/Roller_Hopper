@@ -11,7 +11,6 @@ export component AiTrial inherits VerticalLayout {
     in-out property <string> prompt;
     in-out property <string> input;
     in-out property <int> evidence-index;
-    in-out property <int> task-index;
     in property <string> output;
     in property <bool> can-run;
     in property <bool> running;
@@ -21,7 +20,7 @@ export component AiTrial inherits VerticalLayout {
     in property <float> first-token-seconds;
     in property <AnswerEnd> answer-end;
 
-    callback run(int, string, string);
+    callback run(string, string);
     callback stop();
     callback restore-texts();
     callback select-evidence(int);
@@ -40,26 +39,6 @@ export component AiTrial inherits VerticalLayout {
     }
 
     SectionTitle { text: @tr("ai-settings.prompt"); }
-    HorizontalLayout {
-        spacing: Theme.space-s;
-        Text {
-            text: @tr("ai-settings.task");
-            color: Theme.text;
-            vertical-alignment: center;
-        }
-        task-picker := ComboBox {
-            horizontal-stretch: 1;
-            model: [
-                @tr("ai-settings.task-identify"),
-                @tr("ai-settings.task-type"),
-                @tr("ai-settings.task-os"),
-                @tr("ai-settings.task-description"),
-                @tr("ai-settings.task-conflicts")
-            ];
-            current-index <=> root.task-index;
-            enabled: !root.running;
-        }
-    }
     TextEdit {
         text <=> root.prompt;
         wrap: word-wrap;
@@ -108,7 +87,7 @@ export component AiTrial inherits VerticalLayout {
             colorize-icon: true;
             primary: true;
             enabled: root.can-run && !root.running;
-            clicked => { root.run(root.task-index, root.prompt, root.input); }
+            clicked => { root.run(root.prompt, root.input); }
         }
         Button {
             text: @tr("ai-settings.stop");

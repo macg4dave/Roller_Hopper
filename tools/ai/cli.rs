@@ -16,9 +16,6 @@ mod response;
 mod run;
 #[path = "score.rs"]
 mod score;
-#[cfg(feature = "ai")]
-#[path = "../../src/ai/weights.rs"]
-mod weights;
 
 use std::{io, path::Path};
 

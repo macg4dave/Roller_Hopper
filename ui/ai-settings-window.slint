@@ -48,15 +48,10 @@ export component AiSettingsWindow inherits Window {
     in-out property <string> prompt;
     in-out property <string> input;
     in-out property <int> evidence-index: 0;
-    in-out property <int> task-index: 0;
     in property <string> output;
 
     // How the model picks each word, and the most tokens a prompt and its answer may hold.
-    in-out property <GenerationSettings> gguf-generation;
-    in-out property <GenerationSettings> safetensors-generation;
-    in-out property <int> generation-tab-index: 0;
-    in-out property <int> safetensors-precision: 0;
-    in property <int> loaded-format-index: -1;
+    in-out property <GenerationSettings> generation;
     in property <int> max-context-tokens;
     // The last answer: its length in tokens, how long it took and how it ended, with its
     // prompt's length and the time to its first token.
@@ -72,13 +67,12 @@ export component AiSettingsWindow inherits Window {
     callback unload();
     callback refresh();
     callback set-gpu(bool);
-    callback run(int, string, string);
+    // Sends the prompt and device text exactly as written.
+    callback run(string, string);
     // Ends the answer being written, keeping what it has so far.
     callback stop();
-    callback restore-generation(int);
-    callback select-thinking(int, bool);
-    // Reloads a loaded safetensors model in the precision picked.
-    callback select-precision();
+    callback restore-generation();
+    callback select-thinking(bool);
     // Puts back the default prompt and sample evidence.
     callback restore-texts();
     callback select-evidence(int);
@@ -205,16 +199,11 @@ export component AiSettingsWindow inherits Window {
 
                     Card {
                         GenerationPanel {
-                            gguf-settings <=> root.gguf-generation;
-                            safetensors-settings <=> root.safetensors-generation;
-                            tab-index <=> root.generation-tab-index;
-                            loaded-format-index: root.loaded-format-index;
-                            precision <=> root.safetensors-precision;
+                            settings <=> root.generation;
                             max-context-tokens: root.max-context-tokens;
                             enabled: state != ModelState.running;
-                            restore-defaults(index) => { root.restore-generation(index); }
-                            select-thinking(index, think) => { root.select-thinking(index, think); }
-                            select-precision => { root.select-precision(); }
+                            restore-defaults => { root.restore-generation(); }
+                            select-thinking(think) => { root.select-thinking(think); }
                         }
                     }
 
@@ -241,10 +230,8 @@ export component AiSettingsWindow inherits Window {
                     prompt <=> root.prompt;
                     input <=> root.input;
                     evidence-index <=> root.evidence-index;
-                    task-index <=> root.task-index;
                     output: root.output;
                     can-run: state == ModelState.ready || state == ModelState.too-long
-                        || state == ModelState.invalid-input || state == ModelState.invalid-output
                         || state == ModelState.failed;
                     running: state == ModelState.running;
                     answer-tokens: root.answer-tokens;
@@ -252,7 +239,7 @@ export component AiSettingsWindow inherits Window {
                     prompt-tokens: root.prompt-tokens;
                     first-token-seconds: root.first-token-seconds;
                     answer-end: root.answer-end;
-                    run(profile, prompt, input) => { root.run(profile, prompt, input); }
+                    run(prompt, input) => { root.run(prompt, input); }
                     stop => { root.stop(); }
                     restore-texts => { root.restore-texts(); }
                     select-evidence(index) => { root.select-evidence(index); }

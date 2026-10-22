@@ -1,32 +1,33 @@
-//! Direct Candle loading and autoregressive generation for local text models.
+//! Direct Candle loading and autoregressive generation for a Qwen3 GGUF file.
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use candle_core::quantized::{gguf_file, tokenizer::TokenizerFromGguf};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
 use candle_transformers::generation::{LogitsProcessor, Sampling};
+use candle_transformers::models::quantized_qwen3::ModelWeights;
 use tokenizers::Tokenizer;
 
-use super::chat::{self, Format};
+use super::chat;
 use super::response;
-use super::weights::{Kind, Weights};
+
+/// The most prompt tokens one forward step takes. On the GPU, Candle's Qwen3 attention holds a
+/// score for every pair of positions in a step, so a whole prompt at once needs more than a
+/// gigabyte beside Qwen3-4B on an 8 GiB card, and running out there can kill the process inside
+/// the driver. The answer is the same, since each chunk attends to everything cached before it.
+const PROMPT_STEP: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Error {
     Missing,
-    /// An architecture or chat format the engine does not run.
+    /// Not a Qwen3 model.
     Unsupported,
-    /// A GGUF file whose tokenizer Candle cannot read, with no `tokenizer.json` beside it.
-    NoTokenizer,
     Broken,
     NoGpu,
     #[cfg(feature = "cuda")]
     InsufficientGpuMemory,
-    InvalidOutput,
     TooLong {
         prompt_tokens: usize,
         limit: usize,
@@ -42,11 +43,8 @@ pub(crate) struct Settings {
     pub(crate) max_tokens: usize,
     pub(crate) context_tokens: usize,
     pub(crate) think: bool,
-    /// Empty for free text; otherwise require the device-identification schema and only these
-    /// evidence citations.
-    pub(crate) evidence_ids: Vec<String>,
-    /// Refuse a completed answer that does not satisfy the identification contract.
-    pub(crate) enforce_schema: bool,
+    /// Ends the answer once it holds one complete JSON object, for callers that want only that.
+    pub(crate) stop_at_json: bool,
 }
 
 pub(crate) struct Answer {
@@ -57,9 +55,8 @@ pub(crate) struct Answer {
 }
 
 pub(crate) struct Model {
-    weights: Weights,
+    weights: ModelWeights,
     tokenizer: Tokenizer,
-    format: Format,
     /// The tokens that end the model's turn.
     stops: Vec<u32>,
     /// The tokenizer's special tokens, which prompt text is kept from spelling out.
@@ -74,71 +71,39 @@ struct PromptPrefix {
     tokens: Vec<u32>,
 }
 
-/// A model whose weights are not loaded yet: its tokenizer and format are checked first, so an
-/// unsupported model is refused before gigabytes are read.
-struct Parts {
-    tokenizer: Tokenizer,
-    format: Format,
-    device: Device,
-    context_limit: usize,
-}
-
 impl Model {
-    /// Loads a GGUF file, or a safetensors folder with its weights held as `dtype`; a GGUF
-    /// file keeps its own quantisation.
-    pub(crate) fn load(path: &Path, gpu: bool, dtype: DType) -> Result<Self, Error> {
-        if path.is_dir() {
-            Self::load_safetensors(path, gpu, dtype)
-        } else if path.is_file() {
-            Self::load_gguf(path, gpu)
-        } else {
-            Err(Error::Missing)
+    /// Loads a Qwen3 GGUF file. Its architecture and tokenizer are checked first, so another
+    /// model is refused before gigabytes are read.
+    pub(crate) fn load(path: &Path, gpu: bool) -> Result<Self, Error> {
+        if !path.is_file() {
+            return Err(Error::Missing);
         }
-    }
-
-    fn load_gguf(path: &Path, gpu: bool) -> Result<Self, Error> {
         let mut file = File::open(path).map_err(|_| Error::Missing)?;
         #[cfg(feature = "cuda")]
         let file_bytes = file.metadata().map_err(|_| Error::Missing)?.len();
         let content = gguf_file::Content::read(&mut file).map_err(|_| Error::Broken)?;
-        let architecture = metadata_string(&content, "general.architecture")?;
-        let kind = Kind::of_gguf(&architecture).ok_or(Error::Unsupported)?;
-        // Candle reads only BPE tokenizers from GGUF metadata; SentencePiece ones (Gemma,
-        // Phi-3) come from the model's own tokenizer.json beside the file.
-        let tokenizer = Tokenizer::from_gguf(&content).or_else(|_| {
-            Tokenizer::from_file(path.with_file_name("tokenizer.json"))
-                .map_err(|_| Error::NoTokenizer)
-        })?;
-        let declared =
-            metadata_usize(&content, &format!("{architecture}.context_length")).unwrap_or(32_768);
-        let parts = Parts::new(tokenizer, gpu, declared.min(kind.gguf_position_limit()))?;
+        if metadata_string(&content, "general.architecture")? != "qwen3" {
+            return Err(Error::Unsupported);
+        }
+        let tokenizer = Tokenizer::from_gguf(&content).map_err(|_| Error::Broken)?;
+        if !chat::is_qwen3(&tokenizer) {
+            return Err(Error::Unsupported);
+        }
+        let context_limit = metadata_usize(&content, "qwen3.context_length").unwrap_or(32_768);
+        let device = device(gpu)?;
         #[cfg(feature = "cuda")]
-        parts.require_gpu_memory(file_bytes)?;
-        let weights = Weights::gguf(kind, content, &mut file, &parts.device)?;
-        Ok(parts.with(weights))
-    }
-
-    fn load_safetensors(folder: &Path, gpu: bool, dtype: DType) -> Result<Self, Error> {
-        let config_text = read(folder.join("config.json"))?;
-        let config: serde_json::Value =
-            serde_json::from_str(&config_text).map_err(|_| Error::Broken)?;
-        let kind = config
-            .get("model_type")
-            .and_then(serde_json::Value::as_str)
-            .ok_or(Error::Broken)
-            .and_then(|name| Kind::of_safetensors(name).ok_or(Error::Unsupported))?;
-        let context_limit = config
-            .get("max_position_embeddings")
-            .and_then(serde_json::Value::as_u64)
-            .and_then(|n| usize::try_from(n).ok())
-            .unwrap_or(32_768);
-        let tokenizer =
-            Tokenizer::from_file(folder.join("tokenizer.json")).map_err(|_| Error::Broken)?;
-        let parts = Parts::new(tokenizer, gpu, context_limit)?;
-        let tensors = load_tensors(folder, &parts.device)?;
-        let vb = VarBuilder::from_tensors(tensors, dtype, &parts.device);
-        let weights = Weights::safetensors(kind, &config_text, vb, &parts.device)?;
-        Ok(parts.with(weights))
+        require_gpu_memory(&device, file_bytes)?;
+        let weights =
+            ModelWeights::from_gguf(content, &mut file, &device).map_err(|_| Error::Broken)?;
+        Ok(Self {
+            weights,
+            stops: chat::stop_tokens(&tokenizer),
+            specials: chat::special_tokens(&tokenizer),
+            tokenizer,
+            device,
+            context_limit,
+            prefix: None,
+        })
     }
 
     pub(crate) fn answer(
@@ -154,29 +119,18 @@ impl Model {
         let mut picker = LogitsProcessor::from_sampling(299_792_458, settings.sampling.clone());
         let mut text = String::new();
         let mut stopped = false;
-        self.weights.reset();
+        self.weights.clear_kv_cache();
         for step in 0..maximum {
             if stop() {
                 stopped = true;
                 break;
             }
-            let (tokens, offset) = if step == 0 {
-                (prompt.as_slice(), 0)
+            let logits = if step == 0 {
+                self.next_logits(&prompt, 0)?
             } else {
-                (
-                    std::slice::from_ref(generated.last().ok_or(Error::Failed)?),
-                    prompt_tokens + step - 1,
-                )
+                let last = generated.last().ok_or(Error::Failed)?;
+                self.next_logits(std::slice::from_ref(last), prompt_tokens + step - 1)?
             };
-            let input = Tensor::new(tokens, &self.device)
-                .and_then(|tensor| tensor.unsqueeze(0))
-                .map_err(|_| Error::Failed)?;
-            let logits = self
-                .weights
-                .forward(&input, offset)?
-                .squeeze(0)
-                .and_then(|value| value.squeeze(0))
-                .map_err(|_| Error::Failed)?;
             let token = pick_token(&mut picker, &logits, settings, &generated)?;
             if self.stops.contains(&token) {
                 break;
@@ -188,13 +142,9 @@ impl Model {
                 .map_err(|_| Error::Failed)?;
             response::visible(&raw, settings.think).clone_into(&mut text);
             output(&text);
-            if !settings.evidence_ids.is_empty() && response::complete_json(&text).is_some() {
+            if settings.stop_at_json && response::complete_json(&text).is_some() {
                 break;
             }
-        }
-        if !stopped && settings.enforce_schema {
-            text = response::validate(&text, &settings.evidence_ids).ok_or(Error::InvalidOutput)?;
-            output(&text);
         }
         Ok(Answer {
             text,
@@ -204,8 +154,26 @@ impl Model {
         })
     }
 
-    /// The prompt's tokens in the model's chat format, and how many answer tokens fit after
-    /// them within the context limit.
+    /// The logits for the token after `tokens`, which follow `offset` tokens already in the
+    /// cache, fed [`PROMPT_STEP`] tokens at a time.
+    fn next_logits(&mut self, tokens: &[u32], offset: usize) -> Result<Tensor, Error> {
+        let mut logits = None;
+        for (index, chunk) in tokens.chunks(PROMPT_STEP).enumerate() {
+            let input = Tensor::new(chunk, &self.device)
+                .and_then(|tensor| tensor.unsqueeze(0))
+                .and_then(|input| self.weights.forward(&input, offset + index * PROMPT_STEP))
+                .map_err(|_| Error::Failed)?;
+            logits = Some(input);
+        }
+        logits
+            .ok_or(Error::Failed)?
+            .squeeze(0)
+            .and_then(|value| value.squeeze(0))
+            .map_err(|_| Error::Failed)
+    }
+
+    /// The prompt's tokens in Qwen3's chat format, and how many answer tokens fit after them
+    /// within the context limit.
     fn encode(
         &mut self,
         texts: (&str, &str),
@@ -213,7 +181,7 @@ impl Model {
     ) -> Result<(Vec<u32>, usize), Error> {
         let system = chat::plain(texts.0, &self.specials);
         let user = chat::plain(texts.1, &self.specials);
-        let (prefix, turn) = self.format.prompt_parts(&system, &user, settings.think);
+        let (prefix, turn) = chat::prompt_parts(&system, &user, settings.think);
         let tokens = if prefix.is_empty() {
             self.tokenizer
                 .encode(turn, true)
@@ -261,47 +229,22 @@ impl Model {
     }
 }
 
-impl Parts {
-    fn new(tokenizer: Tokenizer, gpu: bool, context_limit: usize) -> Result<Self, Error> {
-        let format = Format::of(&tokenizer).ok_or(Error::Unsupported)?;
-        Ok(Self {
-            tokenizer,
-            format,
-            device: device(gpu)?,
-            context_limit,
-        })
-    }
-
-    fn with(self, weights: Weights) -> Model {
-        Model {
-            weights,
-            stops: self.format.stop_tokens(&self.tokenizer),
-            specials: chat::special_tokens(&self.tokenizer),
-            tokenizer: self.tokenizer,
-            format: self.format,
-            device: self.device,
-            context_limit: self.context_limit,
-            prefix: None,
-        }
-    }
-
-    /// Leaves room beyond the on-disk quantised weights for CUDA kernels, temporary tensors
-    /// and the attention cache. Loading without that room can terminate the process inside the
-    /// NVIDIA driver before Candle can return an allocation error.
-    #[cfg(feature = "cuda")]
-    fn require_gpu_memory(&self, weight_bytes: u64) -> Result<(), Error> {
-        let Device::Cuda(device) = &self.device else {
-            return Ok(());
-        };
-        let (free, _) = device
-            .cuda_stream()
-            .context()
-            .mem_get_info()
-            .map_err(|_| Error::NoGpu)?;
-        enough_gpu_memory(weight_bytes, free)
-            .then_some(())
-            .ok_or(Error::InsufficientGpuMemory)
-    }
+/// Leaves room beyond the on-disk quantised weights for CUDA kernels, temporary tensors and the
+/// attention cache. Loading without that room can terminate the process inside the NVIDIA
+/// driver before Candle can return an allocation error.
+#[cfg(feature = "cuda")]
+fn require_gpu_memory(device: &Device, weight_bytes: u64) -> Result<(), Error> {
+    let Device::Cuda(device) = device else {
+        return Ok(());
+    };
+    let (free, _) = device
+        .cuda_stream()
+        .context()
+        .mem_get_info()
+        .map_err(|_| Error::NoGpu)?;
+    enough_gpu_memory(weight_bytes, free)
+        .then_some(())
+        .ok_or(Error::InsufficientGpuMemory)
 }
 
 /// A quantised model needs temporary allocations and an attention cache in addition to its
@@ -337,7 +280,10 @@ fn pick_token(
 }
 
 /// Applies both controls in one host copy; Candle's sampler already reads the whole logits
-/// vector on the host, so keeping these together avoids a second device round-trip.
+/// vector on the host, so keeping these together avoids a second device round-trip. Both look
+/// only at the last 64 tokens, as llama.cpp does for Qwen3's recommended presence penalty: over
+/// the whole answer it would push down the JSON punctuation and evidence IDs that a valid
+/// answer has to repeat, and almost everything after a long reasoning section.
 fn penalise(logits: &Tensor, generated: &[u32], settings: &Settings) -> Result<Tensor, Error> {
     if settings.repeat_penalty <= 1.0 && settings.presence_penalty <= 0.0 {
         return Ok(logits.clone());
@@ -348,8 +294,7 @@ fn penalise(logits: &Tensor, generated: &[u32], settings: &Settings) -> Result<T
         .and_then(|tensor| tensor.to_vec1::<f32>())
         .map_err(|_| Error::Failed)?;
     let recent: HashSet<u32> = generated.iter().rev().take(64).copied().collect();
-    let present: HashSet<u32> = generated.iter().copied().collect();
-    for token in present {
+    for token in recent {
         let Some(value) = usize::try_from(token)
             .ok()
             .and_then(|index| values.get_mut(index))
@@ -359,7 +304,7 @@ fn penalise(logits: &Tensor, generated: &[u32], settings: &Settings) -> Result<T
         if settings.presence_penalty > 0.0 {
             *value -= settings.presence_penalty;
         }
-        if settings.repeat_penalty > 1.0 && recent.contains(&token) {
+        if settings.repeat_penalty > 1.0 {
             if *value >= 0.0 {
                 *value /= settings.repeat_penalty;
             } else {
@@ -385,31 +330,6 @@ fn device(gpu: bool) -> Result<Device, Error> {
     }
 }
 
-fn load_tensors(folder: &Path, device: &Device) -> Result<HashMap<String, Tensor>, Error> {
-    let mut paths = std::fs::read_dir(folder)
-        .map_err(|_| Error::Missing)?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("safetensors"))
-        })
-        .collect::<Vec<_>>();
-    paths.sort();
-    if paths.is_empty() {
-        return Err(Error::Missing);
-    }
-    let mut tensors = HashMap::new();
-    for path in paths {
-        tensors.extend(candle_core::safetensors::load(path, device).map_err(|_| Error::Broken)?);
-    }
-    Ok(tensors)
-}
-
-fn read(path: PathBuf) -> Result<String, Error> {
-    std::fs::read_to_string(path).map_err(|_| Error::Missing)
-}
-
 fn metadata_string(content: &gguf_file::Content, key: &str) -> Result<String, Error> {
     content
         .metadata
@@ -430,7 +350,49 @@ fn metadata_usize(content: &gguf_file::Content, key: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::enough_gpu_memory;
+    use super::*;
+
+    /// With thinking off, the prompt closes Qwen3's reasoning section before the answer; that
+    /// only works if each marker reaches the model as its own token rather than as text.
+    #[test]
+    #[ignore = "reads the local Qwen3-4B fixture's tokenizer (2.5 GB file, metadata only)"]
+    fn local_qwen3_thinking_markers_reach_the_model_as_single_tokens() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tools/a.i.testmodels/Qwen3/Qwen3-4B-Q4_K_M.gguf");
+        let mut file = File::open(path).unwrap();
+        let content = gguf_file::Content::read(&mut file).unwrap();
+        let tokenizer = Tokenizer::from_gguf(&content).unwrap();
+        assert!(chat::is_qwen3(&tokenizer));
+        let (_, turn) = chat::prompt_parts("", "Hi", false);
+        let ids = tokenizer.encode(turn, false).unwrap().get_ids().to_vec();
+        for marker in ["<think>", "</think>"] {
+            let id = tokenizer.token_to_id(marker).unwrap();
+            assert!(ids.contains(&id), "{marker} was split into text: {ids:?}");
+        }
+    }
+
+    #[test]
+    fn presence_penalty_reaches_only_the_last_64_tokens() {
+        let settings = Settings {
+            sampling: Sampling::ArgMax,
+            min_p: 0.0,
+            repeat_penalty: 1.0,
+            presence_penalty: 1.5,
+            max_tokens: 1,
+            context_tokens: 1,
+            think: false,
+            stop_at_json: false,
+        };
+        let logits = Tensor::new(&[2.0_f32, 2.0, 2.0], &Device::Cpu).unwrap();
+        // Token 0 opened the answer; token 1 fills the 64 tokens since.
+        let mut generated = vec![0];
+        generated.extend([1; 64]);
+        let penalised = penalise(&logits, &generated, &settings)
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
+        assert_eq!(penalised, [2.0, 0.5, 2.0]);
+    }
 
     #[test]
     fn gpu_admission_keeps_runtime_headroom_beyond_quantised_weights() {

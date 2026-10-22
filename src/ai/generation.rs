@@ -27,7 +27,7 @@ pub(crate) struct Generation {
     pub(crate) min_p: f32,
     /// Above 1, makes tokens already in the text less likely; 1 for none.
     pub(crate) repeat_penalty: f32,
-    /// Subtracts this from every token already present in the answer; 0 for none.
+    /// Subtracts this from every token among the answer's last 64; 0 for none.
     pub(crate) presence_penalty: f32,
     /// Stops a model that never ends its turn; never more than the context limit.
     pub(crate) max_tokens: usize,
@@ -48,17 +48,23 @@ impl Generation {
     /// Qwen3's documented sampling profile for thinking or direct answers. The run remains
     /// bounded for this app rather than adopting the model card's general-purpose output size.
     pub(crate) fn qwen3(think: bool) -> Self {
-        let (temperature, top_p) = if think { (0.6, 0.95) } else { (0.7, 0.8) };
+        // Enough for the identification answer; reasoning first needs several times more.
+        let (temperature, top_p, max_tokens) = if think {
+            (0.6, 0.95, 4096)
+        } else {
+            (0.7, 0.8, 700)
+        };
         Self {
             temperature,
             top_p,
             top_k: 20,
             min_p: 0.0,
             repeat_penalty: 1.0,
+            // The quantised Qwen3 models' recommendation against endless repetition.
             presence_penalty: 1.5,
-            // Enough for the identification answer.
-            max_tokens: 700,
-            // Enough for the identification prompt and answer, with a modest cache.
+            max_tokens,
+            // Enough for the identification prompt and a reasoned answer, with a cache that
+            // fits beside Qwen3-4B on an 8 GiB GPU.
             context_tokens: 8192,
             think,
         }
@@ -148,6 +154,9 @@ mod tests {
             (f64::from(0.6_f32), Some(20), Some(f64::from(0.95_f32)))
         );
         assert!(thinking.think);
+        // Reasoning comes before the answer, so it gets more room, still within the context.
+        assert_eq!(thinking.max_tokens, 4096);
+        assert_eq!(thinking.bounded(), thinking);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Converts the window's generation settings to [`Generation`] and back. Slint has only
 //! 32-bit signed whole numbers, so counts are converted with their limits.
 
-use crate::ai::{Generation, ModelFormat};
+use crate::ai::Generation;
 use crate::ui::GenerationSettings;
 
 pub(super) fn to_ui(settings: &Generation) -> GenerationSettings {
@@ -34,18 +34,6 @@ pub(super) fn from_ui(settings: &GenerationSettings) -> Generation {
         think: settings.think,
     }
     .bounded()
-}
-
-/// The profile belonging to the loaded model format.
-pub(super) fn for_format(
-    format: ModelFormat,
-    gguf: &GenerationSettings,
-    safetensors: &GenerationSettings,
-) -> Generation {
-    match format {
-        ModelFormat::Gguf => from_ui(gguf),
-        ModelFormat::Safetensors => from_ui(safetensors),
-    }
 }
 
 #[cfg(test)]
@@ -81,21 +69,5 @@ mod tests {
         assert_eq!(settings.top_k, 0);
         // The answer limit is at least one token.
         assert_eq!(settings.max_tokens, 1);
-    }
-
-    #[test]
-    fn each_model_format_keeps_its_own_settings() {
-        let mut gguf = to_ui(&Generation::default());
-        gguf.temperature = 0.25;
-        let mut safetensors = to_ui(&Generation::default());
-        safetensors.temperature = 0.75;
-        assert_eq!(
-            for_format(ModelFormat::Gguf, &gguf, &safetensors).temperature,
-            0.25
-        );
-        assert_eq!(
-            for_format(ModelFormat::Safetensors, &gguf, &safetensors).temperature,
-            0.75
-        );
     }
 }

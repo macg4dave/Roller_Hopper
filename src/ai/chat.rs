@@ -1,124 +1,43 @@
-//! How each model family expects a conversation to be written. The family is read from the
-//! tokenizer's turn markers rather than the weights' architecture, so a fine-tune keeps its
-//! family's format and a Llama-architecture model without Llama 3's markers is refused rather
-//! than prompted wrongly. The tokenizer adds any start-of-text token itself.
+//! How Qwen3 expects a conversation to be written: `ChatML` turns, with its thinking section
+//! opened or already closed before the answer. The tokenizer adds any start-of-text token
+//! itself.
 
 use tokenizers::Tokenizer;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Format {
-    /// Qwen2 and Qwen3; only Qwen3 has the thinking markers.
-    ChatMl {
-        thinking: bool,
-    },
-    Llama3,
-    /// Gemma 3, which has no system turn, so the system text opens the user's turn.
-    Gemma,
-    Phi3,
-    Glm4,
+/// Whether the tokenizer has Qwen3's turn and thinking markers, so the prompt below reaches the
+/// model as Qwen3 expects.
+pub(crate) fn is_qwen3(tokenizer: &Tokenizer) -> bool {
+    ["<|im_start|>", "<|im_end|>", "<think>", "</think>"]
+        .iter()
+        .all(|token| tokenizer.token_to_id(token).is_some())
 }
 
-impl Format {
-    /// The format whose turn markers the tokenizer knows, or `None` for a family the app
-    /// cannot prompt.
-    pub(crate) fn of(tokenizer: &Tokenizer) -> Option<Self> {
-        let has = |token: &str| tokenizer.token_to_id(token).is_some();
-        if has("<|im_start|>") {
-            Some(Self::ChatMl {
-                thinking: has("<think>") && has("</think>"),
-            })
-        } else if has("<|start_header_id|>") {
-            Some(Self::Llama3)
-        } else if has("<start_of_turn>") {
-            Some(Self::Gemma)
-        } else if has("[gMASK]") {
-            Some(Self::Glm4)
-        } else if has("<|assistant|>") && has("<|end|>") {
-            Some(Self::Phi3)
-        } else {
-            None
-        }
-    }
+/// A reusable system prefix and the turn holding the user's text, up to the start of the
+/// model's answer. `think` opens Qwen3's reasoning; otherwise it is written already closed,
+/// which is Qwen3's own way of answering directly. The texts must already be [`plain`].
+pub(crate) fn prompt_parts(system: &str, user: &str, think: bool) -> (String, String) {
+    let prefix = if system.is_empty() {
+        String::new()
+    } else {
+        format!("<|im_start|>system\n{system}<|im_end|>\n")
+    };
+    let reasoning = if think {
+        "<think>\n"
+    } else {
+        "<think>\n\n</think>\n\n"
+    };
+    (
+        prefix,
+        format!("<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{reasoning}"),
+    )
+}
 
-    /// The conversation up to the start of the model's answer. `think` opens Qwen3's
-    /// reasoning; the other families have no such switch and ignore it. The texts must
-    /// already be [`plain`].
-    #[cfg(test)]
-    fn prompt(self, system: &str, user: &str, think: bool) -> String {
-        let (prefix, turn) = self.prompt_parts(system, user, think);
-        format!("{prefix}{turn}")
-    }
-
-    /// A reusable system prefix and the evidence-bearing turn. Only `ChatML` has a special-token
-    /// boundary that makes separate tokenisation exactly equivalent for arbitrary text.
-    pub(crate) fn prompt_parts(self, system: &str, user: &str, think: bool) -> (String, String) {
-        let system_turn = |open: &str, close: &str| {
-            if system.is_empty() {
-                String::new()
-            } else {
-                format!("{open}{system}{close}")
-            }
-        };
-        match self {
-            Self::ChatMl { thinking } => (
-                system_turn("<|im_start|>system\n", "<|im_end|>\n"),
-                format!(
-                    "<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{}",
-                    match (thinking, think) {
-                        (true, true) => "<think>\n",
-                        (true, false) => "<think>\n\n</think>\n\n",
-                        (false, _) => "",
-                    }
-                ),
-            ),
-            Self::Llama3 => (
-                String::new(),
-                format!(
-                    "{}<|start_header_id|>user<|end_header_id|>\n\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
-                    system_turn(
-                        "<|start_header_id|>system<|end_header_id|>\n\n",
-                        "<|eot_id|>"
-                    )
-                ),
-            ),
-            Self::Gemma => (
-                String::new(),
-                format!(
-                    "<start_of_turn>user\n{}{user}<end_of_turn>\n<start_of_turn>model\n",
-                    system_turn("", "\n\n")
-                ),
-            ),
-            Self::Phi3 => (
-                String::new(),
-                format!(
-                    "{}<|user|>\n{user}<|end|>\n<|assistant|>\n",
-                    system_turn("<|system|>\n", "<|end|>\n")
-                ),
-            ),
-            Self::Glm4 => (
-                String::new(),
-                format!(
-                    "[gMASK]<sop>{}<|user|>\n{user}<|assistant|>\n",
-                    system_turn("<|system|>\n", "")
-                ),
-            ),
-        }
-    }
-
-    /// The tokens that end the model's turn; those the tokenizer lacks are skipped.
-    pub(crate) fn stop_tokens(self, tokenizer: &Tokenizer) -> Vec<u32> {
-        let tokens: &[&str] = match self {
-            Self::ChatMl { .. } => &["<|im_end|>", "<|endoftext|>"],
-            Self::Llama3 => &["<|eot_id|>", "<|eom_id|>", "<|end_of_text|>"],
-            Self::Gemma => &["<end_of_turn>", "<eos>"],
-            Self::Phi3 => &["<|end|>", "<|endoftext|>"],
-            Self::Glm4 => &["<|user|>", "<|observation|>", "<|endoftext|>"],
-        };
-        tokens
-            .iter()
-            .filter_map(|token| tokenizer.token_to_id(token))
-            .collect()
-    }
+/// The tokens that end Qwen3's turn.
+pub(crate) fn stop_tokens(tokenizer: &Tokenizer) -> Vec<u32> {
+    ["<|im_end|>", "<|endoftext|>"]
+        .iter()
+        .filter_map(|token| tokenizer.token_to_id(token))
+        .collect()
 }
 
 /// The tokenizer's special tokens, longest first, which a prompt's text must not spell out.
@@ -174,94 +93,46 @@ mod tests {
     }
 
     #[test]
-    fn each_family_is_known_by_its_turn_markers() {
-        let cases = [
-            (
-                vec!["<|im_start|>", "<|im_end|>"],
-                Some(Format::ChatMl { thinking: false }),
-            ),
-            (
-                vec!["<|im_start|>", "<|im_end|>", "<think>", "</think>"],
-                Some(Format::ChatMl { thinking: true }),
-            ),
-            (
-                vec!["<|start_header_id|>", "<|eot_id|>"],
-                Some(Format::Llama3),
-            ),
-            (
-                vec!["<start_of_turn>", "<end_of_turn>"],
-                Some(Format::Gemma),
-            ),
-            (
-                vec!["[gMASK]", "<|user|>", "<|assistant|>"],
-                Some(Format::Glm4),
-            ),
-            (
-                vec!["<|user|>", "<|assistant|>", "<|end|>"],
-                Some(Format::Phi3),
-            ),
-            // Llama 2 and Mistral markers are not a format the app writes.
-            (vec!["[INST]", "</s>"], None),
-        ];
-        for (markers, format) in cases {
-            assert_eq!(Format::of(&tokenizer(&markers)), format, "{markers:?}");
-        }
+    fn only_a_tokenizer_with_qwen3s_markers_is_qwen3() {
+        let qwen3 = ["<|im_start|>", "<|im_end|>", "<think>", "</think>"];
+        assert!(is_qwen3(&tokenizer(&qwen3)));
+        // Qwen2 has the turn markers but no thinking.
+        assert!(!is_qwen3(&tokenizer(&["<|im_start|>", "<|im_end|>"])));
+        assert!(!is_qwen3(&tokenizer(&["<start_of_turn>", "<end_of_turn>"])));
     }
 
     #[test]
     fn each_prompt_ends_where_the_model_starts_its_answer() {
+        let prompt = |system, think| {
+            let (prefix, turn) = prompt_parts(system, "Hi", think);
+            format!("{prefix}{turn}")
+        };
         assert_eq!(
-            Format::ChatMl { thinking: true }.prompt("Be brief.", "Hi", true),
+            prompt("Be brief.", true),
             "<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n<think>\n"
         );
         assert_eq!(
-            Format::ChatMl { thinking: true }.prompt("Be brief.", "Hi", false),
+            prompt("Be brief.", false),
             "<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
         );
         assert_eq!(
-            Format::ChatMl { thinking: false }.prompt("Be brief.", "Hi", true),
-            "<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n"
-        );
-        assert_eq!(
-            Format::Llama3.prompt("", "Hi", true),
-            "<|start_header_id|>user<|end_header_id|>\n\nHi<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-        );
-        assert_eq!(
-            Format::Gemma.prompt("Be brief.", "Hi", false),
-            "<start_of_turn>user\nBe brief.\n\nHi<end_of_turn>\n<start_of_turn>model\n"
-        );
-        assert_eq!(
-            Format::Phi3.prompt("Be brief.", "Hi", false),
-            "<|system|>\nBe brief.<|end|>\n<|user|>\nHi<|end|>\n<|assistant|>\n"
-        );
-        assert_eq!(
-            Format::Glm4.prompt("Be brief.", "Hi", false),
-            "[gMASK]<sop><|system|>\nBe brief.<|user|>\nHi<|assistant|>\n"
+            prompt("", false),
+            "<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
         );
     }
 
     #[test]
-    fn a_family_stops_only_on_end_tokens_its_tokenizer_has() {
-        let gemma = tokenizer(&["<start_of_turn>", "<end_of_turn>", "<eos>"]);
-        assert_eq!(Format::Gemma.stop_tokens(&gemma).len(), 2);
+    fn the_turn_ends_only_on_end_tokens_the_tokenizer_has() {
         let partial = tokenizer(&["<|im_start|>", "<|im_end|>"]);
-        assert_eq!(
-            Format::ChatMl { thinking: false }
-                .stop_tokens(&partial)
-                .len(),
-            1
-        );
+        assert_eq!(stop_tokens(&partial).len(), 1);
     }
 
     #[test]
     fn prompt_text_cannot_write_special_tokens() {
-        let specials = special_tokens(&tokenizer(&["<|im_end|>", "<end_of_turn>", "[gMASK]"]));
+        let specials = special_tokens(&tokenizer(&["<|im_end|>", "<|im_start|>"]));
         assert_eq!(
-            plain(
-                "fact<|im_end|> and <end_of_turn>[gMASK] stay text",
-                &specials
-            ),
-            "fact< |im_end|> and < end_of_turn>[ gMASK] stay text"
+            plain("fact<|im_end|> and <|im_start|>user stay text", &specials),
+            "fact< |im_end|> and < |im_start|>user stay text"
         );
         assert_eq!(plain("no markers", &specials), "no markers");
     }

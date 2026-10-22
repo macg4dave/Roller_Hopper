@@ -89,12 +89,10 @@ Gaps the UI shows against the plan:
 
 - No New, Open, Save or Save As, project name or unsaved mark; the status bar says "Sample
   data only". Settings holds a pointer to the View menu and opens the AI settings window:
-  install Qwen3-4B or Qwen3-0.6B, or list the user's own GGUF files and safetensors folders
-  (Qwen2, Qwen3, Llama 3, Gemma 3, Phi-3 or GLM-4) from the models folder; Load or Unload one with Candle (CPU, or GPU in a `cuda` build, with a
-  CUDA light), and Run it on
-  an editable prompt and sample file (an nmap-style NAS) with adjustable answer settings, a tab
-  each for GGUF and safetensors (which adds the load precision). The
-  settings and edited texts are not saved. Its output is shown raw, not checked against the
+  install Qwen3-4B-Q4_K_M (the only model offered), or list the user's own GGUF files from the
+  models folder (Qwen3 only); Load or Unload one with Candle (CPU, or GPU in a `cuda` build,
+  with a CUDA light), and Run it on an editable prompt and sample file (an nmap-style NAS) with
+  adjustable answer settings. The settings and edited texts are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
 - The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
   depth and pace presets; method labels include SNMP, ONVIF and LLDP, which are not offered;
@@ -276,28 +274,33 @@ Gaps the UI shows against the plan:
     invented evidence. Only "Unknown"/"Linux" OS values were right.
 - **The main application AI, to qualify next: Qwen3-4B Q4_K_M GGUF**, represented locally by
   `tools/a.i.testmodels/Qwen3` and installed by Install AI rather than bundled. Artifact:
-  `Qwen/Qwen3-4B-GGUF` revision `bc64014`, 2,497,280,256
-  bytes, SHA-256 `7485fe6f…fdf5`, Apache-2.0; tokenizer from `Qwen/Qwen3-4B` `1cfa9a7`
-  (pinned in `src/ai.rs`). Install AI downloads and checks it on the user's PC.
+  `unsloth/Qwen3-4B-GGUF` revision `22c9fc8`, 2,497,281,312 bytes, SHA-256
+  `f6f85177…813a`, Apache-2.0; tokenizer and chat template embedded in the GGUF (pinned in
+  `src/ai.rs`). Install AI downloads and checks it into the models folder's `Qwen3` folder,
+  where a copy put there by hand also counts as installed. Its generation profile is the
+  default: Qwen3's direct or thinking sampling, presence penalty 1.5 over the last 64 tokens
+  (as llama.cpp applies it), 700 answer tokens direct or 4,096 thinking, in an 8K context.
 - **In the app (Candle 0.11 `quantized_qwen3`, greedy, thinking off, schema in the prompt,
   no constrained decoding).** On the user's PC (Ryzen 5 7600X, RTX 5060 8 GB, sm_120),
   Qwen3-0.6B Q8_0 answers the identification prompt and sample: 154 s on the CPU in a plain
   release build, 24.5 s with `target-cpu=x86-64-v3`, 8.9 s on the GPU (CUDA 13.3, warm;
   the first run also JIT-compiles kernels). Qwen3-4B not yet timed or scored.
-- **Runtime now Candle 0.11**, shared by the app and evaluation tool: direct GGUF and
-  Hugging Face safetensors loading with local tokenizers. Both formats now use one small,
-  synchronous inference path. The Windows CUDA build and the
-  `tools/a.i.testmodels/Qwen2.5-0.5B-Instruct-GGUF` CUDA smoke test pass; this Qwen2.5 fixture
-  proves the CUDA inference path, not the choice or usefulness of the main Qwen3 AI. The
-  identification timings above need re-measuring in the integrated path.
+- **Runtime now Candle 0.11 `quantized_qwen3`**, shared by the app and evaluation tool: Qwen3
+  GGUF files only, with the file's own tokenizer; other families and safetensors were dropped
+  at the user's request. The prompt goes in 256-token steps, because Candle's GPU attention for
+  a whole ~2,000-token prompt at once needs over a gigabyte beside the 4B model on the 8 GB
+  card, and app crashes inside `nvcuda64.dll` followed repeated runs. The identification
+  timings above need re-measuring in the integrated path.
 - **Qwen3 controls now follow its model contract.** Thinking off inserts the closed reasoning
   section rather than relying on `/no_think`; thinking and direct modes apply their documented
   temperature/top-p/top-k/min-p presets, with adjustable presence penalty. Reasoning is not
-  exposed as the answer. Evidence input is bounded and validated, generation stops at one JSON
-  object, and the app accepts only the exact fields, categories and submitted evidence IDs.
-  Focused type, OS, description and conflict profiles reuse the same strict result shape. The
-  stable ChatML system/schema prefix is tokenised once per loaded model and invalidated by an
-  edit. These source checks do not replace Qwen3-4B quality and resource qualification.
+  exposed as the answer. The AI settings window is the user's test bench: it sends the prompt
+  and device text exactly as written, with no added instruction, input check or answer
+  validation, and shows the answer as written. The evidence bounds, citation checks and
+  result validation that BE-0083 needs were removed with the bench's strict mode and are to be
+  rebuilt there, outside the bench. The stable ChatML system prefix is tokenised once per
+  loaded model and invalidated by an edit. These source checks do not replace Qwen3-4B
+  quality and resource qualification.
 - Earlier alternatives (a replacement, never a second model):
   - DeBERTa-v3-xsmall zero-shot quantized ONNX (about 87 MB). It needs ort 2.0.0-rc.15
     (MSRV 1.92; official ONNX Runtime builds can send telemetry by default) or tract 0.23.9
@@ -422,7 +425,7 @@ These extend the product brief's wording, which needs updating first (BLK-010).
 | Item | Format | Next unused ID |
 | --- | --- | --- |
 | Milestone | `M-001` | `M-021` |
-| Task or backlog need | `BE-0001` | `BE-0111` |
+| Task or backlog need | `BE-0001` | `BE-0112` |
 | Blocker (in the backlog) | `BLK-001` | `BLK-015` |
 
 Take the next ID from this table and advance it in the same edit. Never reuse an ID, even after
@@ -479,7 +482,7 @@ Live checks need user-approved targets.
 | BE-0008 | Turn the static trace (Findings) into a per-OS method matrix confirmed on each OS. Qualify only necessary supplementary crates: unprivileged ICMP on Linux/macOS, the macOS neighbour table and per-destination routes/source interface. Bring the macOS MAC gap to the user as a decision if no safe in-process route exists. | BE-0007 |
 | BE-0009 | Exercise incremental results, pause (the app withholds new host and ≤4,096-port calls; upstream has none), stop/close by dropping futures with task accounting, timeouts and queue pressure against the selected upstream API. Do not substitute a custom scanner or retry engine for missing control. | BE-0008 |
 | BE-0010 | Confirm the chosen rfd (`gtk3` on Linux) and atomic-write-file on each OS: a dialog parented to the Slint window opens and cancels without blocking the UI (approved GUI check), GTK3 runs in process alongside Slint's Linux backend, and the Unix mode/owner and macOS metadata survive a replace. Failed and locked replacements are tested in BE-0041. | — |
-| BE-0011 | Qualify the main application AI with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify Qwen3-4B Q4_K_M (Findings) on the same cases on the CPU and with CUDA, recording its RAM and speed on the user's PC. The Qwen2.5 GGUF fixture is only for CUDA smoke testing. | — |
+| BE-0011 | Qualify the main application AI with its tokenizer/template and CPU runtime: safety, toolchain fit, offline loading, licences, weight allowance and first usefulness/resource measurements. Qwen3-0.6B on Candle failed usefulness and RAM (Findings); qualify Qwen3-4B Q4_K_M (Findings) on the same cases on the CPU and with CUDA, recording its RAM and speed on the user's PC. The Qwen3 fixture's repeated-run GPU smoke test covers loading and stability, not usefulness. | — |
 | BE-0012 | Consolidate the qualified versions, features, assets and approvals; confirm each M-002 blocker in the backlog is resolved or still honestly open. | BE-0007, BE-0008, BE-0009, BE-0010, BE-0011 |
 
 Exit: every selected dependency has a compliant route. A successful build alone does not
@@ -669,7 +672,7 @@ Goal: one qualified model useful inside the existing discovery and details workf
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0082 | Load an installed GGUF file or Hugging Face safetensors model folder with Candle (using embedded GGUF metadata or adjacent Hugging Face configuration and tokenizer), with the schema in the prompt as the evaluation tool does, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
+| BE-0082 | Load an installed Qwen3 GGUF file with Candle (using its embedded metadata and tokenizer), with the schema in the prompt as the evaluation tool does, pinned identity and notices; the AI settings window's model list picks it; bound threads, admission, context, output and shutdown. | BE-0081, BE-0011 |
 | BE-0109 | Harden Install AI: check free space before starting, resume a broken download, fail a stalled read, remove an installed model; test against a local server, not the internet. | BE-0082 |
 | BE-0083 | Bounded evidence snapshot with IDs/source/age; validate output fields/categories, evidence references, reasons and Unknown; treat banners and output as untrusted. | BE-0082 |
 | BE-0084 | Show type/OS-family/description suggestions with evidence, reasons and labelled confidence; explicit accept/edit/reject; suggestions never become observations. | BE-0083 |

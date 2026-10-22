@@ -1,8 +1,7 @@
-//! The AI models the user can install, where they go, and running the loaded one. Each offered
-//! model is one GGUF file or a safetensors folder's files, each pinned by revision, size and
-//! SHA-256, so an install is either exactly those files or not installed. GGUF files and Hugging Face safetensors folders the user puts in the
-//! models folder themselves can be loaded too; every model supplies its own tokenizer in its GGUF
-//! metadata or beside its safetensors.
+//! The AI model the user can install, where it goes, and running the loaded one. The app runs
+//! Qwen3 GGUF files only. The offered model is pinned by revision, size and SHA-256, so an
+//! install is either exactly that file or not installed. Qwen3 GGUF files the user puts in the
+//! models folder themselves can be loaded too; each carries its own tokenizer in its metadata.
 
 mod chat;
 mod engine;
@@ -11,13 +10,10 @@ mod install;
 mod response;
 mod run;
 mod samples;
-mod weights;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
 pub(crate) use install::{InstallError, install};
-pub(crate) use run::{
-    Answered, End, Job, ModelFormat, Precision, RunError, TaskProfile, Worker, WorkerEvent,
-};
+pub(crate) use run::{Answered, End, Job, RunError, Worker, WorkerEvent};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,8 +27,7 @@ pub(crate) struct ModelFile {
     sha256: &'static str,
 }
 
-/// A model the user can install, in a folder of its own: one GGUF file, or the files of a
-/// Hugging Face safetensors folder.
+/// A model the user can install: its GGUF file, in a folder of its own.
 #[derive(Debug)]
 pub(crate) struct Model {
     /// The model's own name, shown as given.
@@ -43,8 +38,8 @@ pub(crate) struct Model {
     files: &'static [ModelFile],
 }
 
-/// A model ready to load: an offered one that is installed, or a GGUF file or safetensors
-/// folder the user put in the models folder.
+/// A model ready to load: an offered one that is installed, or a GGUF file the user put in the
+/// models folder.
 #[derive(Debug, Clone)]
 pub(crate) enum Choice {
     Offered(&'static Model),
@@ -52,8 +47,8 @@ pub(crate) enum Choice {
 }
 
 impl Choice {
-    /// The name the model list shows: an offered model's own name, or the file's or folder's
-    /// name, so the two never clash.
+    /// The name the model list shows: an offered model's own name, or the file's name, so the
+    /// two never clash.
     pub(crate) fn name(&self) -> String {
         match self {
             Self::Offered(model) => model.name.to_owned(),
@@ -64,7 +59,7 @@ impl Choice {
         }
     }
 
-    /// The GGUF file or safetensors folder to load, for a models folder `dir`.
+    /// The GGUF file to load, for a models folder `dir`.
     pub(crate) fn file(&self, dir: &Path) -> PathBuf {
         match self {
             Self::Offered(model) => model.load_path(dir),
@@ -85,28 +80,19 @@ pub(crate) const PROMPT: &str = concat!(
 
 pub(crate) use samples::evidence_sample;
 
-/// The models offered for install, recommended first.
+/// The models offered for install: only the main application AI.
 pub(crate) const MODELS: &[Model] = &[
-    // 4-bit Q4_K_M keeps 4B parameters to 2.5 GB.
+    // 4-bit Q4_K_M keeps 4B parameters to 2.5 GB. The same file as
+    // `tools/a.i.testmodels/Qwen3`, in a folder of the same name, so a copy placed there by
+    // hand counts as installed.
     Model {
-        name: "Qwen3-4B",
-        folder: "qwen3-4b-q4_k_m",
-        source: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/",
+        name: "Qwen3-4B-Q4_K_M",
+        folder: "Qwen3",
+        source: "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/22c9fc8a8c7700b76a1789366280a6a5a1ad1120/",
         files: &[ModelFile {
             name: "Qwen3-4B-Q4_K_M.gguf",
-            size: 2_497_280_256,
-            sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
-        }],
-    },
-    // Smaller and faster, but weaker at identification (roadmap Findings).
-    Model {
-        name: "Qwen3-0.6B",
-        folder: "qwen3-0.6b-q8_0",
-        source: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/",
-        files: &[ModelFile {
-            name: "Qwen3-0.6B-Q8_0.gguf",
-            size: 639_446_688,
-            sha256: "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+            size: 2_497_281_312,
+            sha256: "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a",
         }],
     },
 ];
@@ -128,7 +114,8 @@ impl Model {
         dir.join(self.folder)
     }
 
-    /// Its GGUF file, or else its folder of safetensors.
+    /// Its GGUF file; a model without one has nothing to load, so its folder is reported
+    /// missing.
     fn load_path(&self, dir: &Path) -> PathBuf {
         let folder = self.path(dir);
         match self
@@ -164,9 +151,9 @@ pub(crate) fn gpu_built() -> bool {
 }
 
 /// The models ready to load from `dir`: the offered ones fully installed, in offer order, then
-/// the user's GGUF files and safetensors folders, by path: those at the top of the folder and
-/// those one folder down, apart from the offered models' own folders. Whether one is a model
-/// the app can run is only known once it loads.
+/// the user's GGUF files, by path: those at the top of the folder and those one folder down,
+/// apart from the offered models' own folders. Whether one is a Qwen3 model the app can run is
+/// only known once it loads.
 pub(crate) fn installed(dir: &Path) -> Vec<Choice> {
     let offered = MODELS.iter().filter(|m| m.is_installed(dir));
     let offered_folders: Vec<PathBuf> = MODELS.iter().map(|m| m.path(dir)).collect();
@@ -174,34 +161,18 @@ pub(crate) fn installed(dir: &Path) -> Vec<Choice> {
         .filter(|path| !offered_folders.contains(path))
         .flat_map(|path| {
             if path.is_dir() {
-                // The folder itself may be a safetensors model.
-                let mut inside: Vec<PathBuf> = entries(&path).collect();
-                inside.push(path);
-                inside
+                entries(&path).collect()
             } else {
                 vec![path]
             }
         })
-        .filter(|path| {
-            if path.is_dir() {
-                is_safetensors_folder(path)
-            } else {
-                has_extension(path, "gguf")
-            }
-        })
+        .filter(|path| path.is_file() && has_extension(path, "gguf"))
         .collect();
     own.sort();
     offered
         .map(Choice::Offered)
         .chain(own.into_iter().map(Choice::Own))
         .collect()
-}
-
-/// Whether `folder` is laid out as a Hugging Face model: its `config.json` beside its
-/// safetensors weights. The tokenizer and chat template it also needs are checked on load.
-fn is_safetensors_folder(folder: &Path) -> bool {
-    folder.join("config.json").is_file()
-        && entries(folder).any(|p| p.is_file() && has_extension(&p, "safetensors"))
 }
 
 fn has_extension(path: &Path, extension: &str) -> bool {
@@ -254,52 +225,12 @@ mod tests {
     }
 
     #[test]
-    fn safetensors_folders_at_the_top_and_one_folder_down_are_listed_by_name() {
-        let dir = std::env::temp_dir().join(format!("network-mapper-hf-{}", std::process::id()));
-        fs::remove_dir_all(&dir).ok();
-        for folder in ["Tiny", "hf/Small", "hf/no-weights", "hf/no-config"] {
-            fs::create_dir_all(dir.join(folder)).unwrap();
-        }
-        for name in [
-            "Tiny/config.json",
-            "Tiny/model.safetensors",
-            "hf/Small/config.json",
-            "hf/Small/model-00001-of-00002.SAFETENSORS",
-            "hf/no-weights/config.json",
-            "hf/no-config/model.safetensors",
-            "z.gguf",
-        ] {
-            fs::write(dir.join(name), "").unwrap();
-        }
-        let listed = installed(&dir);
-        let names: Vec<String> = listed.iter().map(Choice::name).collect();
-        // By path, so the top folder's "Tiny" comes before "hf/Small".
-        assert_eq!(names, ["Tiny", "Small", "z.gguf"]);
-        assert_eq!(listed.first().map(|c| c.file(&dir)), Some(dir.join("Tiny")));
-        fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
     fn an_offered_model_loads_from_its_own_folder() {
         let dir = Path::new("models");
         let model = MODELS.first().unwrap();
         assert_eq!(
             Choice::Offered(model).file(dir),
-            dir.join("qwen3-4b-q4_k_m").join("Qwen3-4B-Q4_K_M.gguf")
+            dir.join("Qwen3").join("Qwen3-4B-Q4_K_M.gguf")
         );
-    }
-
-    #[test]
-    fn an_offered_models_folder_is_not_listed_as_the_users_own_safetensors() {
-        let dir =
-            std::env::temp_dir().join(format!("network-mapper-offered-{}", std::process::id()));
-        fs::remove_dir_all(&dir).ok();
-        let folder = MODELS.first().unwrap().path(&dir);
-        fs::create_dir_all(&folder).unwrap();
-        // Laid out like a safetensors model, but it is the offered model's own folder.
-        fs::write(folder.join("config.json"), "{}").unwrap();
-        fs::write(folder.join("model.safetensors"), "").unwrap();
-        assert!(installed(&dir).is_empty());
-        fs::remove_dir_all(&dir).ok();
     }
 }

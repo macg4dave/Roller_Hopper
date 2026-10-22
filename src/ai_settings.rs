@@ -10,10 +10,7 @@ use std::rc::Rc;
 
 use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
-use crate::ai::{
-    self, Answered, End, Generation, Job, MODELS, ModelFormat, Precision, RunError, TaskProfile,
-    Worker, WorkerEvent,
-};
+use crate::ai::{self, Answered, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent};
 use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
 /// Opens the window from Settings, bringing back the same window each time.
@@ -40,15 +37,15 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
         }
     });
     let resetting = window.as_weak();
-    window.on_restore_generation(move |index| {
+    window.on_restore_generation(move || {
         if let Some(open) = resetting.upgrade() {
-            restore_generation_profile(&open, index);
+            restore_generation(&open);
         }
     });
     let thinking = window.as_weak();
-    window.on_select_thinking(move |index, enabled| {
+    window.on_select_thinking(move |enabled| {
         if let Some(open) = thinking.upgrade() {
-            set_generation_profile(&open, index, Generation::qwen3(enabled));
+            open.set_generation(generation::to_ui(&Generation::qwen3(enabled)));
         }
     });
     let refreshing = window.as_weak();
@@ -106,7 +103,6 @@ fn connect_worker(window: &AiSettingsWindow) {
             send(&open, &unloader, Job::Unload);
         }
     });
-    connect_precision(window, Rc::clone(&worker));
     // The loaded model, if any, reloads on the other device.
     let (moving, mover) = (window.as_weak(), Rc::clone(&worker));
     window.on_set_gpu(move |gpu| {
@@ -120,41 +116,16 @@ fn connect_worker(window: &AiSettingsWindow) {
     let stopper = Rc::clone(&worker);
     window.on_stop(move || stopper.stop());
     let running = window.as_weak();
-    window.on_run(move |profile, prompt, input| {
+    window.on_run(move |prompt, input| {
         if let Some(open) = running.upgrade() {
             let (system, user) = (prompt.into(), input.into());
-            let settings = generation_for_loaded_model(&open);
+            let settings = generation::from_ui(&open.get_generation());
             let job = Job::Run {
                 system,
                 user,
                 settings,
-                profile: TaskProfile::from_index(profile),
             };
             send(&open, &worker, job);
-        }
-    });
-}
-
-/// A loaded safetensors model reloads when another precision is picked; a GGUF file keeps its
-/// own, and picking the same one again does nothing.
-fn connect_precision(window: &AiSettingsWindow, worker: Rc<Worker>) {
-    let choosing = window.as_weak();
-    let mut chosen = Precision::default();
-    window.on_select_precision(move || {
-        let Some(open) = choosing.upgrade() else {
-            return;
-        };
-        let precision = precision(&open);
-        if precision == chosen {
-            return;
-        }
-        chosen = precision;
-        let name = open.get_loaded_name();
-        let safetensors = !name.is_empty()
-            && file_named(&name)
-                .is_some_and(|model| ModelFormat::from_path(&model) == ModelFormat::Safetensors);
-        if safetensors {
-            load(&open, &worker, &name, open.get_use_gpu());
         }
     });
 }
@@ -169,23 +140,7 @@ fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
         return;
     };
     window.set_loaded_name(name.into());
-    send(
-        window,
-        worker,
-        Job::Load {
-            model,
-            gpu,
-            precision: precision(window),
-        },
-    );
-}
-
-fn precision(window: &AiSettingsWindow) -> Precision {
-    match window.get_safetensors_precision() {
-        1 => Precision::F16,
-        2 => Precision::Bf16,
-        _ => Precision::F32,
-    }
+    send(window, worker, Job::Load { model, gpu });
 }
 
 fn restore_texts(window: &AiSettingsWindow) {
@@ -202,33 +157,7 @@ fn show_evidence(window: &AiSettingsWindow, index: i32) {
 }
 
 fn restore_generation(window: &AiSettingsWindow) {
-    restore_generation_profile(window, 0);
-    restore_generation_profile(window, 1);
-}
-
-fn restore_generation_profile(window: &AiSettingsWindow, index: i32) {
-    set_generation_profile(window, index, Generation::default());
-}
-
-fn set_generation_profile(window: &AiSettingsWindow, index: i32, profile: Generation) {
-    let defaults = generation::to_ui(&profile);
-    match index {
-        0 => window.set_gguf_generation(defaults),
-        1 => window.set_safetensors_generation(defaults),
-        _ => {}
-    }
-}
-
-fn generation_for_loaded_model(window: &AiSettingsWindow) -> Generation {
-    let format = match window.get_loaded_format_index() {
-        1 => ModelFormat::Safetensors,
-        _ => ModelFormat::Gguf,
-    };
-    generation::for_format(
-        format,
-        &window.get_gguf_generation(),
-        &window.get_safetensors_generation(),
-    )
+    window.set_generation(generation::to_ui(&Generation::default()));
 }
 
 fn show_answered(window: &AiSettingsWindow, answered: Answered) {
@@ -262,19 +191,10 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
     match event {
         WorkerEvent::Unloaded => {
             window.set_loaded_name(SharedString::new());
-            window.set_loaded_format_index(-1);
             window.set_state(ModelState::None);
         }
         WorkerEvent::Loading => window.set_state(ModelState::Loading),
-        WorkerEvent::Ready(format) => {
-            let index = match format {
-                ModelFormat::Gguf => 0,
-                ModelFormat::Safetensors => 1,
-            };
-            window.set_loaded_format_index(index);
-            window.set_generation_tab_index(index);
-            window.set_state(ModelState::Ready);
-        }
+        WorkerEvent::Ready => window.set_state(ModelState::Ready),
         WorkerEvent::Finished(Ok(answered)) => {
             show_answered(window, answered);
             window.set_state(ModelState::Ready);
@@ -282,12 +202,10 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
         // When CUDA is unavailable or lacks room, the model stays chosen so switching it off
         // loads the model on the processor.
         WorkerEvent::LoadFailed(error @ (RunError::NoGpu | RunError::InsufficientGpuMemory)) => {
-            window.set_loaded_format_index(-1);
             window.set_state(state(error));
         }
         WorkerEvent::LoadFailed(e) => {
             window.set_loaded_name(SharedString::new());
-            window.set_loaded_format_index(-1);
             window.set_state(state(e));
         }
         WorkerEvent::Running => {
@@ -305,12 +223,9 @@ fn state(error: RunError) -> ModelState {
         RunError::NoModel => ModelState::NoModel,
         RunError::Missing => ModelState::Missing,
         RunError::Unsupported => ModelState::Unsupported,
-        RunError::NoTokenizer => ModelState::NoTokenizer,
         RunError::Broken => ModelState::Broken,
         RunError::NoGpu => ModelState::NoGpu,
         RunError::InsufficientGpuMemory => ModelState::InsufficientGpuMemory,
-        RunError::InvalidInput => ModelState::InvalidInput,
-        RunError::InvalidOutput => ModelState::InvalidOutput,
         RunError::TooLong { .. } => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,
     }

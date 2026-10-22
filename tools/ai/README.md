@@ -1,6 +1,6 @@
 # Device-identification model evaluation
 
-Run a local GGUF model or safetensors folder over held-out device cases, then score its
+Run a local Qwen3 GGUF model over held-out device cases, then score its
 answers. A model that will not load reports the engine's own reason, which the app's AI
 settings window does not show:
 
@@ -15,8 +15,7 @@ RUSTFLAGS="-C target-cpu=native" CARGO_TARGET_DIR=target-ai \
 cargo tool ai score --answers answers.jsonl
 ```
 
-For the repository's main Qwen3 model on CUDA, preserving the app's bounded cases and strict
-result contract:
+For the repository's main Qwen3 model on CUDA:
 
 ```sh
 cargo run --release --target-dir target --features ai,cuda --manifest-path tools/Cargo.toml -- ai run \
@@ -31,13 +30,13 @@ default because the command hook builds this crate before every shell command. U
 recompile. Without `target-cpu=native` (or `x86-64-v3`), CPU inference runs without AVX and is
 several times slower.
 
-`ai run` loads the model from local files only (a GGUF file's embedded tokenizer and chat
-template, or a Hugging Face safetensors folder's own, as the app does), sends no network
+`ai run` loads the model from local files only (the GGUF file's embedded tokenizer, as the app
+does), sends no network
 traffic, and writes one JSON line per case: `id`, `model`, `answer`, `raw`, cold-load and case
 timings, and prompt/output token counts. Each request uses the system prompt in `prompt.md`,
-the case's evidence as JSON, Qwen3's recommended sampling for the selected thinking mode, and
-output held to `schema.json`. The schema's evidence IDs are narrowed to the case's own, so the
-model cannot cite evidence that does not exist.
+the case's evidence as JSON with `schema.json` in the question, and Qwen3's recommended
+sampling for the selected thinking mode; the answer ends at its first complete JSON object.
+The schema's evidence IDs are narrowed to the case's own; `ai score` flags any other ID cited.
 
 `ai score` needs no model. Per field, an answer is right (listed in the case's `expect`),
 unsure (`Unknown` when not listed) or wrong. It also flags invented evidence IDs in the review

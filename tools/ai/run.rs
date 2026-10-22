@@ -5,7 +5,6 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use candle_core::DType;
 use candle_transformers::generation::Sampling;
 use serde_json::{Value, json};
 
@@ -54,7 +53,7 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
             .unwrap_or_else(|| folder.join("cases.json")),
     )?;
     let started = Instant::now();
-    let mut model = Model::load(&args.model, args.gpu, DType::F32).map_err(engine_error)?;
+    let mut model = Model::load(&args.model, args.gpu).map_err(engine_error)?;
     let load_seconds = started.elapsed().as_secs_f64();
     writeln!(io::stderr().lock(), "model loaded in {load_seconds:.1}s")?;
     let mut output = BufWriter::new(File::create(&args.output)?);
@@ -98,14 +97,6 @@ struct Request<'a> {
 
 fn ask(model: &mut Model, case: &Case, request: Request<'_>) -> io::Result<Value> {
     let evidence_text = serde_json::to_string_pretty(&case.evidence).map_err(io::Error::other)?;
-    let evidence_ids = super::response::evidence_ids(&evidence_text)
-        .ok_or_else(|| io::Error::other(format!("case {} has invalid evidence", case.id)))?;
-    if evidence_ids != case.evidence_ids {
-        return Err(io::Error::other(format!(
-            "case {} evidence IDs do not match its recorded IDs",
-            case.id
-        )));
-    }
     let question = format!(
         "Evidence about one device:\n{}\nAnswer with JSON matching this schema:\n{}",
         evidence_text,
@@ -128,8 +119,7 @@ fn ask(model: &mut Model, case: &Case, request: Request<'_>) -> io::Result<Value
         max_tokens: request.max_tokens,
         context_tokens: 32_768,
         think: request.think,
-        evidence_ids: case.evidence_ids.clone(),
-        enforce_schema: false,
+        stop_at_json: true,
     };
     let started = Instant::now();
     let answer = model
