@@ -1240,6 +1240,30 @@ msgstr "Install the AI first, in Settings › AI settings"
 msgid "discovery.ai-import.failed"
 msgstr "The AI could not load or answer; see AI settings"
 
+# Asked when Import with AI is chosen and no AI model is installed.
+msgid "ai-download.title"
+msgstr "Download AI support?"
+
+# {0} is the download size in GB.
+msgid "ai-download.question"
+msgstr "Import with AI needs AI support, which is not installed yet. It is a one-off download of {0} GB from Hugging Face. You can keep using the app while it downloads."
+
+msgid "ai-download.download"
+msgstr "Download"
+
+# On the status bar while AI support downloads. {0} is how far it has got, as a whole percentage.
+msgid "ai-download.status"
+msgstr "Downloading AI support: {0}%"
+
+msgid "ai-download.done-title"
+msgstr "AI support is installed"
+
+msgid "ai-download.done"
+msgstr "AI support has been downloaded and checked. Choose Import with AI to use it."
+
+msgid "ai-download.failed-title"
+msgstr "AI support was not installed"
+
 msgid "discovery.show-on-map"
 msgstr "Show on map"
 

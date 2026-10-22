@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { AiImportPhase, DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, TargetError } from "bridge.slint";
+import { AiImportPhase, DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -190,6 +190,23 @@ export global Labels {
         if view.ai-import == AiImportPhase.no-model { return @tr("discovery.ai-import.no-model"); }
         if view.ai-import == AiImportPhase.failed { return @tr("discovery.ai-import.failed"); }
         return "";
+    }
+
+    // How an AI model install ended; empty for none.
+    public pure function install-outcome(outcome: InstallOutcome) -> string {
+        if outcome == InstallOutcome.done { return @tr("ai-settings.outcome-done"); }
+        if outcome == InstallOutcome.cancelled { return @tr("ai-settings.outcome-cancelled"); }
+        if outcome == InstallOutcome.no-folder { return @tr("ai-settings.outcome-no-folder"); }
+        if outcome == InstallOutcome.network { return @tr("ai-settings.outcome-network"); }
+        if outcome == InstallOutcome.disk { return @tr("ai-settings.outcome-disk"); }
+        if outcome == InstallOutcome.corrupt { return @tr("ai-settings.outcome-corrupt"); }
+        return "";
+    }
+
+    // A download size in GB to one decimal place, or two below 1 GB so a small model does not
+    // show as 0.1.
+    public pure function gb(value: float) -> string {
+        return value < 1 ? Math.round(value * 100) / 100 : Math.round(value * 10) / 10;
     }
 
     // An operating system as guessed, with its detail (such as Ubuntu) when a clue gave one.

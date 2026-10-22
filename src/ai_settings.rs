@@ -28,7 +28,7 @@ pub(crate) fn connect(
     import: Sender<WorkerEvent>,
 ) -> Result<Rc<Worker>, slint::PlatformError> {
     let window = AiSettingsWindow::new()?;
-    install::connect(&window);
+    install::connect(&window, ui);
     show_installed(&window);
     scan::connect(&window);
     window.set_max_context_tokens(i32::try_from(ai::MAX_CONTEXT_TOKENS).unwrap_or(i32::MAX));

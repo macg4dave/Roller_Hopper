@@ -1,48 +1,74 @@
-# Running Network Mapper: system requirements
+# Installing Network Mapper
 
-What a computer needs to run Network Mapper. There is no installer or download yet: the app is
-built from source (see [building.md](building.md)), and these are the requirements for the
-computer that runs that build.
+This guide is for anyone running Network Mapper on their own PC. You don't need any
+programming tools.
 
-Network Mapper is still a prototype. Its map shows a sample network, and its discovery page
-scans your network for real: it pings every address of the subnet you pick and probes common
-TCP ports. Only scan networks you are allowed to.
+Network Mapper is still a prototype. It scans the network you choose for real: it pings each
+address and checks common ports on the devices that answer. Only scan networks you own or
+have permission to scan.
 
-## The computer
+## What you need
 
-| | Requirement |
+| | |
 | --- | --- |
-| Operating system | Windows 11, 64-bit. Linux and macOS are planned but not yet confirmed. |
-| Processor | 64-bit x86. A build optimised for AVX2 (most processors from 2015 on) runs only on processors with AVX2. |
-| Disk | Space for the app and its `icons` folder, plus the AI model you install (see below). |
-| Internet | Only to install an AI model. Nothing else is downloaded and nothing is sent to the internet; a scan stays on the subnet you pick, apart from reverse DNS lookups to your usual DNS server. |
+| Windows | Windows 11, 64-bit |
+| Graphics card | An NVIDIA graphics card with driver version 580 or newer |
+| Disk space | About 700 MB for the app, plus 2.5 GB if you install the AI |
+| Internet | Only to install the AI. Nothing else is downloaded, and nothing about your network is sent anywhere. |
 
-Keep the `icons` folder beside `network-mapper.exe`: the app reads device icons from there.
+There's nothing else to install: the files the app needs come in its folder.
 
-## The AI model (optional)
+### Checking your graphics driver
 
-Everything works without AI. To use it, open Settings → AI settings and choose Install AI. The
-model goes into `%APPDATA%\Network Mapper\models\`.
+Open the **NVIDIA app** (or NVIDIA Control Panel → Help → System Information) and look at
+the driver version. If it's older than 580, update it from the NVIDIA app or from
+[nvidia.com/drivers](https://www.nvidia.com/drivers).
 
-| Model | Download and disk space |
+If your PC has no NVIDIA card, this copy of the app won't start. Ask for the CPU-only version
+instead, which works on any PC but runs the AI more slowly.
+
+## Installing
+
+1. Copy the `network-mapper` folder anywhere you like, for example `Documents` or a USB stick.
+   Keep everything in it together.
+2. Open the folder and double-click `network-mapper.exe`.
+
+The app has no installer and changes nothing on your PC outside its own data folder. A black
+console window opens alongside the app; leave it open, because closing it closes the app.
+
+The first time you scan, Windows may ask whether to allow Network Mapper on your network.
+Allow it on **private** networks so scans can find devices and their names.
+
+### If it doesn't start
+
+| What you see | What to do |
 | --- | --- |
-| Qwen3-4B-Q4_K_M (the application AI) | 2.5 GB |
+| A message that a `.dll` file is missing | A file was left out when the folder was copied. Copy the whole folder again. |
+| Nothing happens, or an error about the graphics card | Check the [graphics driver](#checking-your-graphics-driver). Without an NVIDIA card, use the CPU-only version. |
+| Device icons are blank | Make sure the `icons` folder is still next to `network-mapper.exe`. |
 
-Memory needs are still being measured.
+## The AI (optional)
 
-## Running the AI on an NVIDIA graphics card
+Everything works without the AI. It suggests names and types for the devices a scan finds.
 
-The standard build includes CUDA, so it can run the AI on an NVIDIA graphics card. That build
-needs all of the following, even if you only use the processor:
+The first time you choose **Import with AI**, the app offers to download AI support. Choose
+**Download** and carry on using the app: the status bar at the bottom shows how far it has got,
+and a message tells you when it's ready. **Cancel** beside the progress stops the download and
+removes what was partly downloaded. You can also install it from **Settings → AI settings →
+Install AI**.
 
-- **An NVIDIA graphics card**
-- **A recent NVIDIA graphics driver**, version 580 or later.
-- **NVIDIA's CUDA 13 and cuDNN 9 runtime files**, either from a CUDA Toolkit installation (as
-  set up for building) or copied beside `network-mapper.exe`:
-  `cudart64_13.dll`, `cublas64_13.dll`, `cublasLt64_13.dll`, `curand64_10.dll`,
-  `nvrtc64_130_0.dll`, `nvrtc-builtins64_132.dll` and the `cudnn*64_9.dll` files.
-  Without `cudart64_13.dll`, Windows will not start the app.
-- **Graphics memory:** earlier tests used about 6.4 GB for Qwen3-4B. This is being
-  re-measured.
+The download is 2.5 GB and is checked before it's used. You only need the internet for this
+download.
 
-On a computer without these, use a CPU-only build: it needs none of them.
+## Your files
+
+- **Maps** are saved wherever you choose, as `.rhopper.json` files.
+- **The AI and your AI settings** are kept in `%APPDATA%\Network Mapper\`. To open it, paste
+  that path into the File Explorer address bar.
+
+## Removing the app
+
+1. Delete the `network-mapper` folder.
+2. To also remove the AI and its settings, delete `%APPDATA%\Network Mapper\`.
+
+Your saved maps stay where you saved them.

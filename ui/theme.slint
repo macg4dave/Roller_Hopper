@@ -82,7 +82,10 @@ export global Theme {
 
     // Panels and map
     out property <length> header-height: 52px;
-    out property <length> status-height: 30px;
+    // Room for a standard button, such as Cancel beside a download.
+    out property <length> status-height: 36px;
+    // The status bar's download progress bar.
+    out property <length> status-progress-width: 120px;
     // Starting widths of the resizable panels, and the least each may be dragged to.
     out property <length> list-width: 290px;
     out property <length> details-width: 340px;

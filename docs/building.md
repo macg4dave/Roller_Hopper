@@ -1,80 +1,105 @@
 # Building Network Mapper
 
-What a machine needs to build, test and run Network Mapper from source. Only Windows 11 with an
-NVIDIA GPU has been checked; the Linux and macOS notes come from upstream documentation and are
-unconfirmed (backlog BLK-009). What a machine needs only to *run* a built copy is in
-[installing.md](installing.md).
+How to build, check and package Network Mapper from source. What each build needs installed,
+and what a built copy needs to run, is in [dependencies.md](dependencies.md).
 
-## Every build
+Only Windows 11 with an NVIDIA graphics card has been checked. Linux and macOS notes come from
+upstream documentation and are unconfirmed.
 
-| Need | Version | Why |
+## Builds at a glance
+
+| Build | Command | Runs on |
 | --- | --- | --- |
-| Rust, through [rustup](https://rustup.rs) | 1.99.1, with `rustfmt` and `clippy` | Pinned in `rust-toolchain.toml`; rustup installs it on the first `cargo` command. |
-| Internet access on the first build | — | Cargo downloads crates and Git dependencies, and `skia-bindings` downloads prebuilt Skia binaries with `curl` (part of Windows 10 and 11). |
-| Windows: Visual Studio or its Build Tools, "Desktop development with C++" | 2022 or later (checked with Visual Studio 18) | MSVC and the Windows SDK, which Rust's `x86_64-pc-windows-msvc` target uses to link, and which `nvcc` uses as its host compiler. |
+| Development (CUDA) | `cargo build` | A PC with an NVIDIA card and the files in [dependencies.md](dependencies.md#running-a-built-copy) |
+| Release (CUDA) | `cargo build --release --locked` | The same |
+| CPU-only release | `cargo build --release --locked --no-default-features` | Any 64-bit Windows 11 PC |
+| CPU-only, AVX2 | `RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --release --locked --no-default-features` | Processors with AVX2 (most from 2015 on); the AI runs much faster |
 
-Without prebuilt Skia binaries for the platform, `skia-bindings` builds Skia itself and then
-also needs LLVM (clang), Python 3 and Ninja.
+CUDA is the default feature, so a plain `cargo build`, `cargo run` or `cargo test` makes the
+GPU-capable app. The executable lands in `target/debug/` or `target/release/` as
+`network-mapper.exe`.
 
-## The default CUDA build
+The first build needs internet access: Cargo downloads crates, and Slint's Skia renderer
+downloads prebuilt Skia binaries with `curl`. Later builds work offline.
 
-CUDA is a default feature. Plain `cargo build`, `cargo test` and the quality gate produce and
-validate the GPU-capable app. Use the maintained command when you only need a CUDA build:
-
-```sh
-cargo tool cuda build
-```
-
-Candle's CUDA dependencies are cached in Cargo's normal target directory. The Windows CUDA build
-and local inference smoke tests are qualified. They use `tools/a.i.testmodels/Qwen3_0.6B`, a
-small Qwen3 for quick checks, and `tools/a.i.testmodels/Qwen3`, a copy of the application AI.
-
-| Need | Version | Notes |
-| --- | --- | --- |
-| NVIDIA CUDA Toolkit, normal system install | 13.2 in use | `winget install --id Nvidia.CUDA --version 13.2` sets `CUDA_PATH` and puts its `bin` and `bin\x64` folders on `PATH`. |
-| `NVCC_CCBIN` user environment variable | — | The folder holding MSVC's `cl.exe`, for example `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\<version>\bin\Hostx64\x64`. Update it when Visual Studio updates MSVC to a new version folder. |
-| NVIDIA GPU and driver | driver 580 or later | `nvidia-smi` tells the build which GPU to compile for. Without a GPU, set `CUDA_COMPUTE_CAP` (for example `120`). |
-
-Restart the terminal or editor after installing so it sees the new environment variables.
-
-- **CUDA is covered by local smoke tests.** The ignored release tests load each Qwen3 fixture on
-  device 0 and run the identification prompt several times in a row, requiring the same answer
-  each time; `local_cuda_small` runs only the quick 0.6B one. Close the app or unload its model
-  first, or the card has no room. Usefulness has separate qualification work. AI tests run
-  only on the GPU.
-
-## The CPU-only build
+## Running from source
 
 ```sh
-cargo build --release --no-default-features
+cargo run
 ```
 
-For the complete portable source gate on a machine without CUDA:
+Under `cargo run` the app reads device icons from the repository's `icons/` folder. UI text is
+compiled into the program from `translations/`.
+
+## Checking a change
+
+Every change passes the quality gate, in this order:
 
 ```sh
-cargo tool checks gate --scope app --cpu
+cargo fmt --all --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets
+cargo build
 ```
 
-This portable CPU-only gate does not replace the required default CUDA gate. Add `--offline` after
-dependencies have been fetched to prove the build uses only the lockfile and local Cargo cache.
+`cargo tool checks gate` runs the same steps for the tools crate and then the app, stopping at
+the first failure. On a machine without CUDA, `cargo tool checks gate --scope app --cpu` checks
+the CPU-only app; it is useful, but it does not replace the CUDA gate. Add `--offline` once
+dependencies are fetched to prove the build uses only `Cargo.lock` and the local Cargo cache.
 
-It needs nothing from the CUDA section. On the CPU the model is far faster with AVX2:
+### AI smoke tests
+
+The ignored AI tests load the models under `tools/a.i.testmodels/` on the GPU and check that
+each answers the same way over repeated runs. They do not measure accuracy or speed. Close the
+app (or unload its model) first so the card has room, then run them in release mode:
 
 ```sh
-RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run --release --no-default-features
+cargo test --release -- --ignored local_
 ```
 
-A build made with that flag runs only on processors with AVX2.
+`local_cuda_small` runs only the quick Qwen3-0.6B test. AI tests always run on the GPU, never
+through `--no-default-features`.
+
+## Making a portable folder
+
+There is no installer. A portable copy is a folder you can move to another PC and run from
+anywhere:
+
+```text
+network-mapper/
+  network-mapper.exe     from target/release/
+  icons/                 the repository's icons/ folder, copied whole
+  msvcp140.dll           Visual C++ runtime
+  vcruntime140.dll
+  vcruntime140_1.dll
+  cublas64_13.dll        CUDA build only
+  cublasLt64_13.dll      CUDA build only
+  curand64_10.dll        CUDA build only
+```
+
+1. Build the release: `cargo build --release --locked` (add `--no-default-features` for the
+   CPU-only folder).
+2. Create the folder and copy in `target/release/network-mapper.exe` and the `icons/` folder.
+3. Copy the Visual C++ runtime from Visual Studio's redistributable folder,
+   `VC\Redist\MSVC\<version>\x64\Microsoft.VC145.CRT\`.
+4. For the CUDA build only, copy the three CUDA files from `%CUDA_PATH%\bin\x64\`.
+
+The CUDA folder is about 650 MB, mostly `cublasLt64_13.dll`. The CPU-only folder is small and
+needs no NVIDIA files.
+
+To confirm which libraries the program loads, list its imports with `dumpbin /dependents
+network-mapper.exe` (from a Visual Studio developer prompt). The release build links only
+`cublas64_13.dll` and `curand64_10.dll` from CUDA, and `cublas64_13.dll` loads
+`cublasLt64_13.dll`. Don't copy cuDNN, `cudart` or NVRTC: the app never loads them.
+
+Keep the folder outside `target/`, since `cargo clean` deletes everything there.
+
+The program opens a console window beside its main window, as it is not yet marked as a
+Windows GUI program.
 
 ## Development tools
 
-The `tools/` crate (`cargo tool …`) uses the same toolchain and needs nothing more. Its `ai`
-feature, used by `cargo tool ai run`, builds Candle on the CPU.
-
-## Linux and macOS (unconfirmed)
-
-- **Linux:** Slint's build guide lists fontconfig, xkbcommon and xcb development packages
-  (Debian: `libfontconfig-dev`, `libxkbcommon-dev`, `libxcb-shape0-dev`,
-  `libxcb-xfixes0-dev`). A CUDA build would need the Linux CUDA Toolkit and cuDNN, without
-  `NVCC_CCBIN` or the MSVC flags.
-- **macOS:** CUDA is not available, so build with `--no-default-features`.
+The `tools/` crate holds the project's own commands, run with `cargo tool` (an alias in
+`.cargo/config.toml`). `cargo tool --help` lists them; [tools/README.md](../tools/README.md)
+describes each area. It uses the same toolchain and needs nothing more. Its `ai` feature, used
+by `cargo tool ai run`, builds Candle on the CPU.

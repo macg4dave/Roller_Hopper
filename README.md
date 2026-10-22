@@ -19,9 +19,11 @@ listed beside it.
 cargo run
 ```
 
-The default build includes CUDA for running the AI on an NVIDIA graphics card. What to install
-first, and the CPU-only build, are in [docs/building.md](docs/building.md); what a computer
-needs to run a built copy is in [docs/installing.md](docs/installing.md).
+The default build includes CUDA for running the AI on an NVIDIA graphics card. How to build,
+including the CPU-only build and a portable folder, is in [docs/building.md](docs/building.md);
+what to install first and the crates used are in
+[docs/dependencies.md](docs/dependencies.md). Installing and running a built copy, for end
+users, is in [docs/installing.md](docs/installing.md).
 
 The models under `tools/a.i.testmodels/` are development assets for the GPU smoke tests:
 `Qwen3/` is a copy of the application AI and `Qwen3_0.6B/` a small Qwen3 for quick checks.

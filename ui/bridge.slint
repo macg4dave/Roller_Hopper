@@ -339,6 +339,9 @@ export enum UnsavedAnswer { save, discard, cancel }
 // Why a project could not be opened, or (save-failed) saved; none when nothing went wrong.
 export enum FileProblemKind { none, unreadable, too-large, not-project, newer, damaged, save-failed }
 
+// How the last AI model install ended, if one ended since it was last shown.
+export enum InstallOutcome { none, done, cancelled, no-folder, network, disk, corrupt }
+
 /// A file operation that failed, shown until dismissed. `detail` is the system's own message,
 /// for unreadable and save-failed.
 export struct FileProblem {
@@ -367,6 +370,15 @@ export global Bridge {
     // New, Open or closing waits on the answer to "save changes first?" while this is set.
     in property <bool> unsaved-question;
     in property <FileProblem> file-problem;
+    // Import with AI found no model, so asks whether to download AI support while this is set;
+    // the download's size in GB.
+    in-out property <bool> ai-download-question;
+    in property <float> ai-download-gb;
+    // AI support is downloading, from either window, and how far it has got, from 0 to 1.
+    in property <bool> ai-downloading;
+    in property <float> ai-download-progress;
+    // How the download asked for from the question ended, shown until dismissed.
+    in-out property <InstallOutcome> ai-download-outcome;
     // What the file dialogs call project files.
     out property <string> project-file-type: @tr("project.file-type");
 
@@ -573,6 +585,10 @@ export global Bridge {
     // before it is added; and stopping it, which leaves the rest waiting.
     callback import-found-with-ai();
     callback stop-ai-import();
+    // Downloads AI support in the background, as agreed to in the question; and cancels the
+    // download running, from either window, removing anything partly downloaded.
+    callback download-ai();
+    callback cancel-ai-download();
     // A card of a found host not on the map, by the host's index and the card's card-index: as
     // a drag payload, dropped on a found host's group (by its index) to become a child there,
     // or given the parent at an index in found-parent-choices.

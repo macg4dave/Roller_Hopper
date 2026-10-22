@@ -84,7 +84,8 @@ export component DiscoveryResults inherits VerticalLayout {
             text: root.ai-busy ? @tr("discovery.ai-import.stop") : @tr("discovery.ai-import");
             icon: root.ai-busy ? @image-url("icons/stop.svg") : @image-url("icons/plus.svg");
             colorize-icon: true;
-            enabled: root.ai-busy || (Bridge.discovery.importable > 0 && Bridge.discovery.phase != DiscoveryPhase.running);
+            // Not while AI support is downloading: the status bar shows it on its way.
+            enabled: root.ai-busy || (Bridge.discovery.importable > 0 && Bridge.discovery.phase != DiscoveryPhase.running && !Bridge.ai-downloading);
             clicked => {
                 if root.ai-busy {
                     Bridge.stop-ai-import();

@@ -61,20 +61,29 @@ pub(super) fn connect(
 
 impl Importing {
     /// Begins importing the run's new hosts with the saved AI settings, loading their model
-    /// first; the model already loaded on the same device stays.
+    /// first; the model already loaded on the same device stays. With no model installed, asks
+    /// whether to download AI support instead; only a system with no folder to put it in says
+    /// there is no model.
     fn begin(self: &Rc<Self>, ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>) {
         let settings = Saved::in_data_dir();
-        let mut model = None;
+        let model = ai::import_model(settings.model.as_deref());
+        if model.is_none()
+            && ai::models_dir().is_some()
+            && let Some(window) = ui.upgrade()
+        {
+            window.global::<Bridge<'_>>().set_ai_download_question(true);
+            return;
+        }
+        let mut begun = false;
         update(ui, state, |st| {
-            if !st.discovery.begin_ai_import() {
-                return;
-            }
-            model = ai::import_model(settings.model.as_deref());
-            if model.is_none() {
+            begun = st.discovery.begin_ai_import();
+            if begun && model.is_none() {
                 st.discovery.end_ai_import(AiImportPhase::NoModel);
             }
         });
-        let Some(model) = model else { return };
+        let Some(model) = model.filter(|_| begun) else {
+            return;
+        };
         // Loading and unloading before now say nothing about this import.
         while self.events.try_recv().is_ok() {}
         let gpu = settings.gpu;

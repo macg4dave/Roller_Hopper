@@ -1,5 +1,7 @@
 //! Install AI: lists the offered models and downloads the one picked in the background, so the
-//! window stays responsive through downloads of gigabytes.
+//! windows stay responsive through downloads of gigabytes. The download asked for when Import
+//! with AI found no model is the same one: there is only ever one, shown in the AI settings
+//! window and on the main window's status bar.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,62 +9,127 @@ use std::thread;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
-use crate::ai::{self, InstallError, MODELS};
-use crate::ui::{AiSettingsWindow, InstallOutcome};
+use crate::ai::{self, InstallError, MODELS, Model};
+use crate::ui::{AiSettingsWindow, AppWindow, Bridge, InstallOutcome};
 
-pub(super) fn connect(window: &AiSettingsWindow) {
+pub(super) fn connect(window: &AiSettingsWindow, ui: &AppWindow) {
     let names: Vec<SharedString> = MODELS.iter().map(|m| m.name.into()).collect();
     let sizes: Vec<f32> = MODELS.iter().map(|m| gigabytes(m.size())).collect();
+    let bridge = ui.global::<Bridge<'_>>();
+    // Import with AI offers the main application AI, the first offered.
+    bridge.set_ai_download_gb(sizes.first().copied().unwrap_or_default());
     window.set_offered_names(ModelRc::new(VecModel::from(names)));
     window.set_offered_gb(ModelRc::new(VecModel::from(sizes)));
     // An empty folder disables Install AI.
     let folder = ai::models_dir().map(|d| d.display().to_string());
     window.set_folder(folder.unwrap_or_default().into());
 
-    let cancel = Arc::new(AtomicBool::new(false));
-    let (weak, flag) = (window.as_weak(), Arc::clone(&cancel));
-    window.on_install(move |index| start_install(&weak, &flag, index));
-    window.on_cancel_install(move || cancel.store(true, Ordering::Relaxed));
+    let installer = Installer {
+        window: window.as_weak(),
+        ui: ui.as_weak(),
+        cancel: Arc::new(AtomicBool::new(false)),
+    };
+    // Either window cancels the one download.
+    let cancel_in_settings = Arc::clone(&installer.cancel);
+    window.on_cancel_install(move || cancel_in_settings.store(true, Ordering::Relaxed));
+    let cancel_in_status = Arc::clone(&installer.cancel);
+    bridge.on_cancel_ai_download(move || cancel_in_status.store(true, Ordering::Relaxed));
+    let from_settings = installer.clone();
+    window.on_install(move |index| {
+        let model = usize::try_from(index).ok().and_then(|i| MODELS.get(i));
+        from_settings.start(model, false);
+    });
+    bridge.on_download_ai(move || installer.start(MODELS.first(), true));
 }
 
-fn start_install(weak: &Weak<AiSettingsWindow>, cancel: &Arc<AtomicBool>, index: i32) {
-    let model = usize::try_from(index).ok().and_then(|i| MODELS.get(i));
-    let (Some(window), Some(model)) = (weak.upgrade(), model) else {
-        return;
-    };
-    let Some(dir) = ai::models_dir() else {
-        window.set_outcome(InstallOutcome::NoFolder);
-        return;
-    };
-    cancel.store(false, Ordering::Relaxed);
-    window.set_installing(true);
-    window.set_progress(0.0);
-    window.set_outcome(InstallOutcome::None);
+/// Starts downloads, reporting to both windows.
+#[derive(Clone)]
+struct Installer {
+    window: Weak<AiSettingsWindow>,
+    ui: Weak<AppWindow>,
+    cancel: Arc<AtomicBool>,
+}
 
-    let (weak, cancel) = (weak.clone(), Arc::clone(cancel));
-    // Detached: the app's close ends it, and nothing waits for it.
-    thread::spawn(move || {
-        let total = model.size().max(1);
-        let mut shown = 0;
-        let result = ai::install(model, &dir, &cancel, &mut |done| {
-            // Thousandths, so the window is not flooded with one update per read.
-            let step = done.saturating_mul(1000) / total;
-            if step != shown {
-                shown = step;
-                let fraction = thousandths(step);
-                // An error only means the app is closing, so there is no window to update.
-                weak.upgrade_in_event_loop(move |w| w.set_progress(fraction))
-                    .ok();
+impl Installer {
+    /// Downloads `model` unless a download is already running; `announce` tells the main
+    /// window how it ended, unless the user cancelled it.
+    fn start(&self, model: Option<&'static Model>, announce: bool) {
+        let (Some(window), Some(model)) = (self.window.upgrade(), model) else {
+            return;
+        };
+        // Both windows ask for the same files, so a second download would write over the first.
+        if window.get_installing() {
+            return;
+        }
+        let Some(dir) = ai::models_dir() else {
+            window.set_outcome(InstallOutcome::NoFolder);
+            if announce {
+                self.announce(InstallOutcome::NoFolder);
             }
+            return;
+        };
+        self.cancel.store(false, Ordering::Relaxed);
+        window.set_installing(true);
+        window.set_progress(0.0);
+        window.set_outcome(InstallOutcome::None);
+        self.show_progress(true, 0.0);
+
+        let installer = self.clone();
+        // Detached: the app's close ends it, and nothing waits for it.
+        thread::spawn(move || {
+            let total = model.size().max(1);
+            let mut shown = 0;
+            let result = ai::install(model, &dir, &installer.cancel, &mut |done| {
+                // Thousandths, so the windows are not flooded with one update per read.
+                let step = done.saturating_mul(1000) / total;
+                if step != shown {
+                    shown = step;
+                    installer.show_progress(true, thousandths(step));
+                }
+            });
+            installer.finish(outcome(result), announce);
         });
+    }
+
+    /// Shows how far the download has got in both windows. From any thread; an error only
+    /// means the app is closing, so there is no window to update.
+    fn show_progress(&self, downloading: bool, fraction: f32) {
+        self.window
+            .upgrade_in_event_loop(move |w| w.set_progress(fraction))
+            .ok();
+        self.ui
+            .upgrade_in_event_loop(move |ui| {
+                let bridge = ui.global::<Bridge<'_>>();
+                bridge.set_ai_downloading(downloading);
+                bridge.set_ai_download_progress(fraction);
+            })
+            .ok();
+    }
+
+    fn finish(&self, outcome: InstallOutcome, announce: bool) {
+        self.show_progress(false, 0.0);
         // As above: if the app is closing, nobody needs the outcome.
-        weak.upgrade_in_event_loop(move |w| {
-            w.set_installing(false);
-            w.set_outcome(outcome(result));
-            super::show_installed(&w);
-        })
-        .ok();
-    });
+        self.window
+            .upgrade_in_event_loop(move |w| {
+                w.set_installing(false);
+                w.set_outcome(outcome);
+                super::show_installed(&w);
+            })
+            .ok();
+        if announce && outcome != InstallOutcome::Cancelled {
+            self.announce(outcome);
+        }
+    }
+
+    /// Tells the main window how the download asked for from Import with AI ended.
+    fn announce(&self, outcome: InstallOutcome) {
+        // As above.
+        self.ui
+            .upgrade_in_event_loop(move |ui| {
+                ui.global::<Bridge<'_>>().set_ai_download_outcome(outcome);
+            })
+            .ok();
+    }
 }
 
 fn outcome(result: Result<(), InstallError>) -> InstallOutcome {

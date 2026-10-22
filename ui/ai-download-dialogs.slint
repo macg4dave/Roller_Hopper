@@ -1,0 +1,38 @@
+import { Button } from "std-widgets.slint";
+import { Bridge, InstallOutcome } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Dialog } from "components/dialog.slint";
+
+// Import with AI found no model: asks whether to download AI support. The download runs in the
+// background, shown on the status bar, so the app stays usable.
+export component AiDownloadQuestion inherits Dialog {
+    title: @tr("ai-download.title");
+    message: @tr("ai-download.question", Labels.gb(Bridge.ai-download-gb));
+
+    Button {
+        text: @tr("edit.cancel");
+        clicked => { Bridge.ai-download-question = false; }
+    }
+    Button {
+        text: @tr("ai-download.download");
+        primary: true;
+        clicked => {
+            Bridge.ai-download-question = false;
+            Bridge.download-ai();
+        }
+    }
+}
+
+// Says how the download asked for from the question ended.
+export component AiDownloadOutcomeDialog inherits Dialog {
+    property <bool> done: Bridge.ai-download-outcome == InstallOutcome.done;
+
+    title: done ? @tr("ai-download.done-title") : @tr("ai-download.failed-title");
+    message: done ? @tr("ai-download.done") : Labels.install-outcome(Bridge.ai-download-outcome);
+
+    Button {
+        text: @tr("file-problem.ok");
+        primary: true;
+        clicked => { Bridge.ai-download-outcome = InstallOutcome.none; }
+    }
+}
