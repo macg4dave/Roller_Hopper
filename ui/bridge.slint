@@ -370,6 +370,8 @@ export global Bridge {
     // New, Open or closing waits on the answer to "save changes first?" while this is set.
     in property <bool> unsaved-question;
     in property <FileProblem> file-problem;
+    // Import with AI was refused because this GPU cannot run the AI, which is said while set.
+    in-out property <bool> gpu-unsupported;
     // Import with AI found no model, so asks whether to download AI support while this is set;
     // the download's size in GB.
     in-out property <bool> ai-download-question;

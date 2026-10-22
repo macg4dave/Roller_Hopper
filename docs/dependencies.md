@@ -31,9 +31,10 @@ needs only the few files listed under [running a built copy](#running-a-built-co
 cuDNN is not needed: the project does not turn on Candle's `cudnn` feature. Restart the
 terminal or editor after installing so it sees the new environment variables.
 
-### The CPU-only build
+### The build without CUDA
 
-Needs nothing beyond [every build](#every-build).
+Needs nothing beyond [every build](#every-build). It has no AI: the AI runs only on an NVIDIA
+GPU with 8 GB or more, never on the processor.
 
 ### Linux and macOS (unconfirmed)
 
@@ -50,12 +51,14 @@ needs:
 
 - **Every build:** the `icons` folder beside `network-mapper.exe` (device icons are read from
   there at run time) and the Visual C++ runtime (`msvcp140.dll`, `vcruntime140.dll`), installed
-  or beside the program. An AVX2 build runs only on processors with AVX2.
-- **The CUDA build:** an NVIDIA driver 580 or later (it supplies `nvcuda.dll`) and three CUDA
-  13 files, from a CUDA Toolkit installation or beside the program: `cublas64_13.dll`,
-  `cublasLt64_13.dll` and `curand64_10.dll`. Without them Windows will not start the program,
-  even if you only use the processor. [building.md](building.md#making-a-portable-folder)
-  shows how to package them.
+  or beside the program.
+- **The CUDA build:** three CUDA 13 files, from a CUDA Toolkit installation or beside the
+  program: `cublas64_13.dll`, `cublasLt64_13.dll` and `curand64_10.dll`. Without them Windows
+  will not start the program, even on a PC whose GPU cannot run the AI.
+  [building.md](building.md#making-a-portable-folder) shows how to package them. For the AI, an
+  NVIDIA GPU with 8 GB or more (7.5 GiB reported in all) and driver 580 or later, which
+  supplies `nvcuda.dll`; the app loads it only when it checks the GPU, at start. Elsewhere,
+  everything but the AI works.
 - **The AI model (optional):** Install AI downloads Qwen3-4B-Q4_K_M (2.5 GB) from Hugging Face,
   pinned to a revision and checked by size and SHA-256, into
   `%APPDATA%\Network Mapper\models\`. Other Qwen3 GGUF files in that folder (or one folder down)
@@ -72,7 +75,7 @@ wherever they aren't needed. `Cargo.lock` fixes the full tree.
 | [slint-build](https://crates.io/crates/slint-build) | 1.18.1 | Build time: compiles the `.slint` files and bundles the translations. |
 | [netscli-core](https://crates.io/crates/netscli-core) | 0.3.4 | The scanner: ping sweep, neighbour table, mDNS names, TCP connect probes. Only the `mdns` feature; never `pcap` (needs a capture driver) or `db`. |
 | [tokio](https://crates.io/crates/tokio) | 1.54.0 | The runtime a scan runs on, off the UI thread. |
-| [candle-core, candle-nn, candle-transformers](https://github.com/huggingface/candle) | 0.11.0 | Runs the AI model, on the CPU or with CUDA (the `cuda` feature). |
+| [candle-core, candle-nn, candle-transformers](https://github.com/huggingface/candle) | 0.11.0 | Runs the AI model with CUDA (the `cuda` feature), only on the GPU. |
 | [tokenizers](https://crates.io/crates/tokenizers) | 0.22.2 | Turns prompt text into the model's tokens. |
 | [ureq](https://crates.io/crates/ureq) | 3.4.2 | Downloads the AI model over HTTPS (rustls). |
 | [sha2](https://crates.io/crates/sha2) | 0.11.1 | Checks the downloaded model files. |

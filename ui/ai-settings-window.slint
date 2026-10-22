@@ -4,12 +4,12 @@ import { Card, Note } from "ai-text.slint";
 import { GenerationPanel, GenerationSettings } from "ai-generation.slint";
 import { AiTrial, AnswerEnd } from "ai-trial.slint";
 import { AiInstallPanel } from "ai-install-panel.slint";
-import { AiModelPanel, ModelState } from "ai-model-panel.slint";
+import { AiModelPanel, GpuCheck, ModelState } from "ai-model-panel.slint";
 import { AiScanHost, AiScanPanel } from "ai-scan-panel.slint";
 import { Light } from "components/light.slint";
 import { InstallOutcome, TargetError } from "bridge.slint";
 
-export { AiScanHost, GenerationSettings, AnswerEnd, InstallOutcome, ModelState }
+export { AiScanHost, GenerationSettings, AnswerEnd, GpuCheck, InstallOutcome, ModelState }
 
 // Whether Save kept the AI settings: nothing to say until it is pressed, and again once a
 // setting changes after it.
@@ -48,8 +48,7 @@ export component AiSettingsWindow inherits Window {
     in-out property <int> model-index: -1;
     in property <string> loaded-name;
     in property <ModelState> state;
-    in property <bool> gpu-built;
-    in-out property <bool> use-gpu;
+    in property <GpuCheck> gpu;
 
     in-out property <string> prompt;
     in-out property <SaveOutcome> save-outcome;
@@ -82,7 +81,6 @@ export component AiSettingsWindow inherits Window {
     callback load(int);
     callback unload();
     callback refresh();
-    callback set-gpu(bool);
     // Sends the prompt and device text exactly as written.
     callback run(string, string);
     // Ends the answer being written, keeping what it has so far.
@@ -91,8 +89,7 @@ export component AiSettingsWindow inherits Window {
     callback select-thinking(bool);
     // Puts back the default prompt; Save keeps it.
     callback restore-prompt();
-    // Keeps the prompt, answer settings, GPU choice and loaded model for next time and for
-    // Import with AI.
+    // Keeps the prompt, answer settings and loaded model for next time and for Import with AI.
     callback save();
     callback set-scan-target(string);
     callback scan();
@@ -114,14 +111,13 @@ export component AiSettingsWindow inherits Window {
     // A change after Save is not saved yet.
     changed prompt => { save-outcome = SaveOutcome.none; }
     changed generation => { save-outcome = SaveOutcome.none; }
-    changed use-gpu => { save-outcome = SaveOutcome.none; }
     changed loaded-name => { save-outcome = SaveOutcome.none; }
 
     property <bool> busy: state == ModelState.loading || state == ModelState.running;
     // Loaded and usable; a model that failed only on the GPU is not.
     property <bool> loaded: loaded-name != "" && state != ModelState.no-gpu
         && state != ModelState.insufficient-gpu-memory;
-    property <bool> cuda-on: gpu-built && use-gpu && state != ModelState.no-gpu
+    property <bool> cuda-on: gpu == GpuCheck.supported && state != ModelState.no-gpu
         && state != ModelState.insufficient-gpu-memory;
 
     pure function model-light-text() -> string {
@@ -140,9 +136,8 @@ export component AiSettingsWindow inherits Window {
     }
 
     pure function cuda-light-text() -> string {
-        if !gpu-built { return @tr("ai-settings.light-cuda-not-built"); }
-        if !use-gpu { return @tr("ai-settings.light-cuda-off"); }
-        if state == ModelState.no-gpu { return @tr("ai-settings.light-cuda-no-gpu"); }
+        if gpu == GpuCheck.checking { return @tr("ai-settings.light-cuda-checking"); }
+        if gpu == GpuCheck.unsupported || state == ModelState.no-gpu { return @tr("ai-settings.light-cuda-no-gpu"); }
         return @tr("ai-settings.light-cuda-on");
     }
 
@@ -236,12 +231,10 @@ export component AiSettingsWindow inherits Window {
                         loaded-name: root.loaded-name;
                         state: root.state;
                         folder: root.folder;
-                        gpu-built: root.gpu-built;
-                        use-gpu <=> root.use-gpu;
+                        gpu: root.gpu;
                         load(index) => { root.load(index); }
                         unload => { root.unload(); }
                         refresh => { root.refresh(); }
-                        set-gpu(gpu) => { root.set-gpu(gpu); }
                     }
 
                     AiInstallPanel {

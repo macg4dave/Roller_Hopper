@@ -11,10 +11,10 @@ import { DiscoveryPage } from "discovery-page.slint";
 import { Splitter } from "components/splitter.slint";
 import { MoveDialog } from "move-dialog.slint";
 import { FileProblemDialog, UnsavedDialog } from "project-dialogs.slint";
-import { AiDownloadOutcomeDialog, AiDownloadQuestion } from "ai-download-dialogs.slint";
-import { AiSettingsWindow, AnswerEnd, GenerationSettings, ModelState } from "ai-settings-window.slint";
+import { AiDownloadOutcomeDialog, AiDownloadQuestion, GpuUnsupportedDialog } from "ai-dialogs.slint";
+import { AiSettingsWindow, AnswerEnd, GenerationSettings, GpuCheck, ModelState } from "ai-settings-window.slint";
 
-export { Bridge, Labels, AiSettingsWindow, AnswerEnd, GenerationSettings, InstallOutcome, ModelState }
+export { Bridge, Labels, AiSettingsWindow, AnswerEnd, GenerationSettings, GpuCheck, InstallOutcome, ModelState }
 
 // What the window shows under the header: the map view, or a page over it.
 enum Page { map, edit, discovery }
@@ -181,6 +181,10 @@ export component AppWindow inherits Window {
         height: root.height;
     }
     if Bridge.file-problem.kind != FileProblemKind.none: FileProblemDialog {
+        width: root.width;
+        height: root.height;
+    }
+    if Bridge.gpu-unsupported: GpuUnsupportedDialog {
         width: root.width;
         height: root.height;
     }

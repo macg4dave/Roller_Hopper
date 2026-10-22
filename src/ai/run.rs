@@ -17,11 +17,10 @@ pub(crate) const IDLE_UNLOAD: Duration = Duration::from_mins(5);
 
 #[derive(Debug)]
 pub(crate) enum Job {
-    /// Loads the model, unless that file is already loaded on that device.
-    Load {
-        model: PathBuf,
-        gpu: bool,
-    },
+    /// Finds out whether this GPU can run the AI ([`engine::gpu_supported`]).
+    CheckGpu,
+    /// Loads the model onto the GPU, unless that file is already loaded.
+    Load(PathBuf),
     Unload,
     /// Sends the texts exactly as given and reports the answer as written, with no rules beyond
     /// what the texts and settings say.
@@ -44,6 +43,8 @@ pub(crate) enum Asker {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WorkerEvent {
+    /// Whether this GPU can run the AI; with no CUDA, or too little memory, it cannot.
+    GpuChecked(bool),
     Unloaded,
     Loading,
     /// The model file now loaded.
@@ -111,10 +112,9 @@ impl Worker {
     }
 }
 
-/// The model loaded, with the file and device it was loaded from.
+/// The model loaded, with the file it was loaded from.
 struct Loaded {
     path: PathBuf,
-    gpu: bool,
     model: Model,
 }
 
@@ -151,17 +151,18 @@ fn work(inbox: &Receiver<Job>, idle: Duration, stop: &AtomicBool, report: &dyn F
                 loaded = None;
                 report(WorkerEvent::Unloaded);
             }
-            Next::Do(Job::Load { model: path, gpu }) => {
-                if let Some(same) = loaded.as_ref().filter(|l| l.path == path && l.gpu == gpu) {
+            Next::Do(Job::CheckGpu) => report(WorkerEvent::GpuChecked(engine::gpu_supported())),
+            Next::Do(Job::Load(path)) => {
+                if let Some(same) = loaded.as_ref().filter(|l| l.path == path) {
                     report(WorkerEvent::Ready(same.path.clone()));
                     continue;
                 }
                 loaded = None;
                 report(WorkerEvent::Loading);
-                match Model::load(&path, gpu).map_err(RunError::from) {
+                match Model::load(&path).map_err(RunError::from) {
                     Ok(model) => {
                         report(WorkerEvent::Ready(path.clone()));
-                        loaded = Some(Loaded { path, gpu, model });
+                        loaded = Some(Loaded { path, model });
                     }
                     Err(error) => report(WorkerEvent::LoadFailed(error)),
                 }
@@ -266,7 +267,6 @@ impl From<engine::Error> for RunError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use std::sync::mpsc::RecvTimeoutError;
 
     fn events(jobs: Vec<Job>, mut last: impl FnMut(&WorkerEvent) -> bool) -> Vec<WorkerEvent> {
@@ -301,21 +301,18 @@ mod tests {
             },
         }
     }
-    fn load(model: PathBuf) -> Job {
-        Job::Load { model, gpu: false }
-    }
-
     #[test]
     fn missing_and_broken_models_are_reported_without_stopping_the_worker() {
         let dir = std::env::temp_dir().join(format!("network-mapper-bad-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let text = dir.join("text.gguf");
         std::fs::write(&text, "not a model").unwrap();
+        // Both are refused before the GPU is touched.
         let seen = events(
             vec![
                 run(),
-                load(dir.join("absent.gguf")),
-                load(text),
+                Job::Load(dir.join("absent.gguf")),
+                Job::Load(text),
                 Job::Unload,
             ],
             |event| *event == WorkerEvent::Unloaded,
@@ -390,10 +387,7 @@ mod tests {
         let model = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tools/a.i.testmodels")
             .join(relative);
-        let load = || Job::Load {
-            model: model.clone(),
-            gpu: true,
-        };
+        let load = || Job::Load(model.clone());
         // Loading the loaded file again keeps it.
         let jobs = [load(), load()]
             .into_iter()

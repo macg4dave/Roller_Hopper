@@ -9,11 +9,11 @@ use candle_transformers::generation::Sampling;
 use serde_json::{Value, json};
 
 use super::cases::{self, Case};
-use super::engine::{Model, Settings};
+use super::engine::{self, Model, Settings};
 
 #[derive(Debug, clap::Args)]
 #[command(
-    after_help = "Examples:\n  cargo run --release --features ai --manifest-path tools/Cargo.toml -- ai run --model models/Qwen3-4B-Q4_K_M.gguf --output answers.jsonl\n  cargo tool ai score --answers answers.jsonl\n\nLoads the model through Candle from local files only and sends no network traffic."
+    after_help = "Examples:\n  cargo run --release --features cuda --manifest-path tools/Cargo.toml -- ai run --model models/Qwen3-4B-Q4_K_M.gguf --output answers.jsonl\n  cargo tool ai score --answers answers.jsonl\n\nLoads the model through Candle onto CUDA device 0, as the app does, from local files only, and sends no network traffic."
 )]
 pub(crate) struct Args {
     #[arg(long)]
@@ -28,9 +28,6 @@ pub(crate) struct Args {
     schema: Option<PathBuf>,
     #[arg(long, default_value_t = 700)]
     max_tokens: usize,
-    /// Load the model on CUDA device 0 (requires the `cuda` feature).
-    #[arg(long)]
-    gpu: bool,
     /// Use Qwen3's thinking prompt and recommended thinking sampling profile.
     #[arg(long)]
     think: bool,
@@ -52,8 +49,14 @@ pub(super) fn run(args: &Args, root: &Path) -> io::Result<()> {
             .clone()
             .unwrap_or_else(|| folder.join("cases.json")),
     )?;
+    // The AI runs only on a GPU the app supports, so the evaluation does too.
+    if !engine::gpu_supported() {
+        return Err(io::Error::other(
+            "this GPU cannot run the AI: it needs CUDA (the `cuda` feature) and an NVIDIA GPU with 8 GB",
+        ));
+    }
     let started = Instant::now();
-    let mut model = Model::load(&args.model, args.gpu).map_err(engine_error)?;
+    let mut model = Model::load(&args.model).map_err(engine_error)?;
     let load_seconds = started.elapsed().as_secs_f64();
     writeln!(io::stderr().lock(), "model loaded in {load_seconds:.1}s")?;
     let mut output = BufWriter::new(File::create(&args.output)?);

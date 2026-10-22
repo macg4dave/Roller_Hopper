@@ -12,7 +12,7 @@ have permission to scan.
 | | |
 | --- | --- |
 | Windows | Windows 11, 64-bit |
-| Graphics card | An NVIDIA graphics card with driver version 580 or newer |
+| Graphics card | Any, for mapping and scanning. The AI needs an NVIDIA graphics card with at least 8 GB of memory and driver version 580 or newer. |
 | Disk space | About 700 MB for the app, plus 2.5 GB if you install the AI |
 | Internet | Only to install the AI. Nothing else is downloaded, and nothing about your network is sent anywhere. |
 
@@ -24,8 +24,8 @@ Open the **NVIDIA app** (or NVIDIA Control Panel → Help → System Information
 the driver version. If it's older than 580, update it from the NVIDIA app or from
 [nvidia.com/drivers](https://www.nvidia.com/drivers).
 
-If your PC has no NVIDIA card, this copy of the app won't start. Ask for the CPU-only version
-instead, which works on any PC but runs the AI more slowly.
+On a PC without a suitable NVIDIA card, everything works except the AI: choosing Import with
+AI says "Sorry, this GPU is not supported". The AI doesn't run on the processor.
 
 ## Installing
 
@@ -44,7 +44,7 @@ Allow it on **private** networks so scans can find devices and their names.
 | What you see | What to do |
 | --- | --- |
 | A message that a `.dll` file is missing | A file was left out when the folder was copied. Copy the whole folder again. |
-| Nothing happens, or an error about the graphics card | Check the [graphics driver](#checking-your-graphics-driver). Without an NVIDIA card, use the CPU-only version. |
+| "Sorry, this GPU is not supported" | The AI needs an NVIDIA card with at least 8 GB. With one, check the [graphics driver](#checking-your-graphics-driver). |
 | Device icons are blank | Make sure the `icons` folder is still next to `network-mapper.exe`. |
 
 ## The AI (optional)

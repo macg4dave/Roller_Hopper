@@ -31,6 +31,8 @@ struct Importing {
     asking: Cell<bool>,
     /// The AI settings saved when the import began.
     settings: RefCell<Saved>,
+    /// Whether this GPU can run the AI, once the worker has found out.
+    gpu: Cell<Option<bool>>,
 }
 
 pub(super) fn connect(
@@ -46,6 +48,7 @@ pub(super) fn connect(
         answer: RefCell::default(),
         asking: Cell::new(false),
         settings: RefCell::default(),
+        gpu: Cell::new(None),
     });
     let bridge = ui.global::<Bridge<'_>>();
     let (begin_ui, begin_state, begin) = (ui.as_weak(), Rc::clone(state), Rc::clone(&importing));
@@ -61,17 +64,21 @@ pub(super) fn connect(
 
 impl Importing {
     /// Begins importing the run's new hosts with the saved AI settings, loading their model
-    /// first; the model already loaded on the same device stays. With no model installed, asks
-    /// whether to download AI support instead; only a system with no folder to put it in says
-    /// there is no model.
+    /// first; the model already loaded stays. On a GPU that cannot run the AI, says so instead.
+    /// With no model installed, asks whether to download AI support; only a system with no
+    /// folder to put it in says there is no model.
     fn begin(self: &Rc<Self>, ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>) {
+        self.catch_up();
+        let Some(window) = ui.upgrade() else { return };
+        let bridge = window.global::<Bridge<'_>>();
+        if self.gpu.get() == Some(false) {
+            bridge.set_gpu_unsupported(true);
+            return;
+        }
         let settings = Saved::in_data_dir();
         let model = ai::import_model(settings.model.as_deref());
-        if model.is_none()
-            && ai::models_dir().is_some()
-            && let Some(window) = ui.upgrade()
-        {
-            window.global::<Bridge<'_>>().set_ai_download_question(true);
+        if model.is_none() && ai::models_dir().is_some() {
+            bridge.set_ai_download_question(true);
             return;
         }
         let mut begun = false;
@@ -84,11 +91,8 @@ impl Importing {
         let Some(model) = model.filter(|_| begun) else {
             return;
         };
-        // Loading and unloading before now say nothing about this import.
-        while self.events.try_recv().is_ok() {}
-        let gpu = settings.gpu;
         self.settings.replace(settings);
-        if !self.worker.send(Job::Load { model, gpu }) {
+        if !self.worker.send(Job::Load(model)) {
             update(ui, state, |st| {
                 st.discovery.end_ai_import(AiImportPhase::Failed);
             });
@@ -100,6 +104,16 @@ impl Importing {
                 importing.take(&ui, &state);
             }
         });
+    }
+
+    /// Takes in the events since the last import. Loading and unloading meanwhile say nothing
+    /// about the next one; only whether the GPU can run the AI is kept.
+    fn catch_up(&self) {
+        for event in self.events.try_iter() {
+            if let WorkerEvent::GpuChecked(supported) = event {
+                self.gpu.set(Some(supported));
+            }
+        }
     }
 
     /// Takes in the worker's events, ending once the import has ended, however it ended.
@@ -120,6 +134,7 @@ impl Importing {
     fn event(&self, st: &mut AppState, event: WorkerEvent) {
         let phase = st.discovery.ai_import().map(|i| i.phase);
         match event {
+            WorkerEvent::GpuChecked(supported) => self.gpu.set(Some(supported)),
             WorkerEvent::Ready(_) if phase == Some(AiImportPhase::Loading) => self.ask(st),
             WorkerEvent::LoadFailed(_) if phase == Some(AiImportPhase::Loading) => {
                 st.discovery.end_ai_import(AiImportPhase::Failed);

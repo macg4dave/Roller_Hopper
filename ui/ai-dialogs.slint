@@ -23,6 +23,19 @@ export component AiDownloadQuestion inherits Dialog {
     }
 }
 
+// Import with AI was chosen on a computer whose GPU cannot run the AI: no NVIDIA GPU with CUDA,
+// or one with less than 8 GB. The AI never runs on the processor.
+export component GpuUnsupportedDialog inherits Dialog {
+    title: @tr("gpu-unsupported.title");
+    message: @tr("gpu-unsupported.message");
+
+    Button {
+        text: @tr("file-problem.ok");
+        primary: true;
+        clicked => { Bridge.gpu-unsupported = false; }
+    }
+}
+
 // Says how the download asked for from the question ended.
 export component AiDownloadOutcomeDialog inherits Dialog {
     property <bool> done: Bridge.ai-download-outcome == InstallOutcome.done;

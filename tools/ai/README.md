@@ -7,28 +7,20 @@ settings window does not show:
 ```sh
 cargo tool ai --help
 cargo tool ai score --help
-cargo run --release --features ai --manifest-path tools/Cargo.toml -- ai run --help
+cargo run --release --target-dir target --features cuda --manifest-path tools/Cargo.toml -- ai run --help
 
-RUSTFLAGS="-C target-cpu=native" CARGO_TARGET_DIR=target-ai \
-  cargo run --release --features ai --manifest-path tools/Cargo.toml -- \
-  ai run --model path/to/Qwen3-8B-Q4_K_M.gguf --output answers.jsonl
+cargo run --release --target-dir target --features cuda --manifest-path tools/Cargo.toml -- ai run \
+  --model tools/a.i.testmodels/Qwen3/Qwen3-4B-Q4_K_M.gguf --output answers.jsonl
 cargo tool ai score --answers answers.jsonl
-```
-
-For the repository's main Qwen3 model on CUDA:
-
-```sh
-cargo run --release --target-dir target --features ai,cuda --manifest-path tools/Cargo.toml -- ai run \
-  --gpu --model tools/a.i.testmodels/Qwen3/Qwen3-4B-Q4_K_M.gguf --output answers.jsonl
 ```
 
 Add `--think` to use Qwen3's thinking prompt and recommended thinking sampling profile.
 
-`ai run` needs the `ai` feature, which adds the in-process Candle engine. It is off by
-default because the command hook builds this crate before every shell command. Use a separate
-`CARGO_TARGET_DIR` for AI builds so their `RUSTFLAGS` do not force the hook's build to
-recompile. Without `target-cpu=native` (or `x86-64-v3`), CPU inference runs without AVX and is
-several times slower.
+`ai run` needs the `cuda` feature, which adds the in-process Candle engine with CUDA. Like the
+app, it runs the model only on an NVIDIA GPU with 8 GB or more, and refuses to start on any
+other; there is no processor inference. The feature is off by default because the command hook
+builds this crate before every shell command. `--target-dir target` shares the app's compiled
+CUDA dependencies.
 
 `ai run` loads the model from local files only (the GGUF file's embedded tokenizer, as the app
 does), sends no network

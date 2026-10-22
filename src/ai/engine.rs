@@ -72,9 +72,10 @@ struct PromptPrefix {
 }
 
 impl Model {
-    /// Loads a Qwen3 GGUF file. Its architecture and tokenizer are checked first, so another
-    /// model is refused before gigabytes are read.
-    pub(crate) fn load(path: &Path, gpu: bool) -> Result<Self, Error> {
+    /// Loads a Qwen3 GGUF file onto the GPU; the AI never runs on the processor. Its
+    /// architecture and tokenizer are checked first, so another model is refused before
+    /// gigabytes are read.
+    pub(crate) fn load(path: &Path) -> Result<Self, Error> {
         if !path.is_file() {
             return Err(Error::Missing);
         }
@@ -90,7 +91,7 @@ impl Model {
             return Err(Error::Unsupported);
         }
         let context_limit = metadata_usize(&content, "qwen3.context_length").unwrap_or(32_768);
-        let device = device(gpu)?;
+        let device = gpu()?;
         #[cfg(feature = "cuda")]
         require_gpu_memory(&device, file_bytes)?;
         let weights =
@@ -316,10 +317,8 @@ fn penalise(logits: &Tensor, generated: &[u32], settings: &Settings) -> Result<T
     Tensor::from_vec(values, len, device).map_err(|_| Error::Failed)
 }
 
-fn device(gpu: bool) -> Result<Device, Error> {
-    if !gpu {
-        return Ok(Device::Cpu);
-    }
+/// The first NVIDIA GPU; there is none in a build without CUDA.
+fn gpu() -> Result<Device, Error> {
     #[cfg(feature = "cuda")]
     {
         Device::new_cuda(0).map_err(|_| Error::NoGpu)
@@ -328,6 +327,25 @@ fn device(gpu: bool) -> Result<Device, Error> {
     {
         Err(Error::NoGpu)
     }
+}
+
+/// Whether the AI can run here: CUDA starts and the GPU has enough memory in all. Its free
+/// memory is checked again at each load ([`require_gpu_memory`]).
+pub(crate) fn gpu_supported() -> bool {
+    #[cfg(feature = "cuda")]
+    if let Ok(Device::Cuda(cuda)) = gpu() {
+        let info = cuda.cuda_stream().context().mem_get_info();
+        return info.is_ok_and(|(_, total)| enough_total_gpu_memory(total));
+    }
+    false
+}
+
+/// At least an 8 GB card, which reports a little under 8 GiB in all (an RTX 5060: 8,151 MiB),
+/// so the line is drawn at 7.5 GiB; a 6 GB card is refused.
+#[cfg(any(feature = "cuda", test))]
+fn enough_total_gpu_memory(total_bytes: usize) -> bool {
+    const MIN: u64 = 7_680 * 1024 * 1024;
+    total_bytes as u64 >= MIN
 }
 
 fn metadata_string(content: &gguf_file::Content, key: &str) -> Result<String, Error> {
@@ -400,5 +418,13 @@ mod tests {
         const GIB_USIZE: usize = 1024 * 1024 * 1024;
         assert!(!enough_gpu_memory(3 * GIB_U64, 4 * GIB_USIZE));
         assert!(enough_gpu_memory(3 * GIB_U64, 5 * GIB_USIZE));
+    }
+
+    #[test]
+    fn an_8_gb_card_is_enough_and_a_6_gb_one_is_not() {
+        const MIB: usize = 1024 * 1024;
+        assert!(enough_total_gpu_memory(8_151 * MIB), "an RTX 5060's 8 GB");
+        assert!(enough_total_gpu_memory(12_288 * MIB));
+        assert!(!enough_total_gpu_memory(6_144 * MIB));
     }
 }

@@ -9,7 +9,9 @@ and devices can be added by hand. New, Open, Save and Save as keep the map in a
 `.rhopper.json` project file. Settings → AI settings installs an AI
 model (Qwen3-4B-Q4_K_M, 2.5 GB) into the user's application data folder,
 loads one with [Candle](https://github.com/huggingface/candle), and runs it on an editable
-prompt and sample device file. The app runs Qwen3 GGUF files only; another one placed in that
+prompt and sample device file. The AI runs only on an NVIDIA GPU with 8 GB or more, never on
+the processor; elsewhere the app says the GPU is not supported. The app runs Qwen3 GGUF files
+only; another one placed in that
 `models` folder (`%APPDATA%\Network Mapper\models\` on Windows) or one folder down there is
 listed beside it.
 
@@ -20,7 +22,8 @@ cargo run
 ```
 
 The default build includes CUDA for running the AI on an NVIDIA graphics card. How to build,
-including the CPU-only build and a portable folder, is in [docs/building.md](docs/building.md);
+including a build without CUDA (and so without AI) and a portable folder, is in
+[docs/building.md](docs/building.md);
 what to install first and the crates used are in
 [docs/dependencies.md](docs/dependencies.md). Installing and running a built copy, for end
 users, is in [docs/installing.md](docs/installing.md).
@@ -57,7 +60,7 @@ src/scan.rs        the real scan on its own Tokio threads, and in scan/ this com
                    host answers into model data — no Slint imports
 src/ai.rs          the AI models offered, pinned by revision and hash, where they are
                    installed, the user's own GGUF files, the prompt and sample; ai/ downloads
-                   and checks them and runs the loaded one with mistral.rs (CPU or CUDA) — no
+                   and checks them and runs the loaded one with Candle, on the GPU only (CUDA) — no
                    Slint imports
 src/ai_settings.rs the AI settings window: install, load/unload, GPU switch and Run in the
                    background

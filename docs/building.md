@@ -12,8 +12,10 @@ upstream documentation and are unconfirmed.
 | --- | --- | --- |
 | Development (CUDA) | `cargo build` | A PC with an NVIDIA card and the files in [dependencies.md](dependencies.md#running-a-built-copy) |
 | Release (CUDA) | `cargo build --release --locked` | The same |
-| CPU-only release | `cargo build --release --locked --no-default-features` | Any 64-bit Windows 11 PC |
-| CPU-only, AVX2 | `RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --release --locked --no-default-features` | Processors with AVX2 (most from 2015 on); the AI runs much faster |
+| Without CUDA | `cargo build --release --locked --no-default-features` | Any 64-bit Windows 11 PC, with no AI |
+
+The AI runs only on an NVIDIA GPU with 8 GB or more, never on the processor. A build without
+CUDA has everything else, and says the GPU is not supported when the AI is asked for.
 
 CUDA is the default feature, so a plain `cargo build`, `cargo run` or `cargo test` makes the
 GPU-capable app. The executable lands in `target/debug/` or `target/release/` as
@@ -44,7 +46,7 @@ cargo build
 
 `cargo tool checks gate` runs the same steps for the tools crate and then the app, stopping at
 the first failure. On a machine without CUDA, `cargo tool checks gate --scope app --cpu` checks
-the CPU-only app; it is useful, but it does not replace the CUDA gate. Add `--offline` once
+the app built without CUDA; it is useful, but it does not replace the CUDA gate. Add `--offline` once
 dependencies are fetched to prove the build uses only `Cargo.lock` and the local Cargo cache.
 
 ### AI smoke tests
@@ -77,15 +79,15 @@ network-mapper/
   curand64_10.dll        CUDA build only
 ```
 
-1. Build the release: `cargo build --release --locked` (add `--no-default-features` for the
-   CPU-only folder).
+1. Build the release: `cargo build --release --locked` (add `--no-default-features` for a
+   folder without CUDA or AI).
 2. Create the folder and copy in `target/release/network-mapper.exe` and the `icons/` folder.
 3. Copy the Visual C++ runtime from Visual Studio's redistributable folder,
    `VC\Redist\MSVC\<version>\x64\Microsoft.VC145.CRT\`.
 4. For the CUDA build only, copy the three CUDA files from `%CUDA_PATH%\bin\x64\`.
 
-The CUDA folder is about 650 MB, mostly `cublasLt64_13.dll`. The CPU-only folder is small and
-needs no NVIDIA files.
+The CUDA folder is about 650 MB, mostly `cublasLt64_13.dll`. The folder without CUDA is small
+and needs no NVIDIA files.
 
 To confirm which libraries the program loads, list its imports with `dumpbin /dependents
 network-mapper.exe` (from a Visual Studio developer prompt). The release build links only
@@ -101,5 +103,6 @@ Windows GUI program.
 
 The `tools/` crate holds the project's own commands, run with `cargo tool` (an alias in
 `.cargo/config.toml`). `cargo tool --help` lists them; [tools/README.md](../tools/README.md)
-describes each area. It uses the same toolchain and needs nothing more. Its `ai` feature, used
-by `cargo tool ai run`, builds Candle on the CPU.
+describes each area. It uses the same toolchain and needs nothing more. Its `cuda` feature,
+used by `cargo tool ai run`, builds Candle with CUDA; like the app, it runs models only on a
+supported GPU.

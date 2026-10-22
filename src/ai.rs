@@ -159,11 +159,6 @@ pub(crate) fn import_model(saved: Option<&str>) -> Option<PathBuf> {
     Some(named.or_else(offered)?.file(&dir))
 }
 
-/// Whether this build can run models on an NVIDIA GPU (built with the `cuda` feature).
-pub(crate) fn gpu_built() -> bool {
-    cfg!(feature = "cuda")
-}
-
 /// The models ready to load from `dir`: the offered ones fully installed, in offer order, then
 /// the user's GGUF files, by path: those at the top of the folder and those one folder down,
 /// apart from the offered models' own folders. Whether one is a Qwen3 model the app can run is

@@ -155,14 +155,11 @@ msgstr "Model not loaded"
 msgid "ai-settings.light-cuda-on"
 msgstr "CUDA on"
 
-msgid "ai-settings.light-cuda-off"
-msgstr "CUDA off"
+msgid "ai-settings.light-cuda-checking"
+msgstr "Checking the GPU…"
 
 msgid "ai-settings.light-cuda-no-gpu"
-msgstr "CUDA: no graphics card"
-
-msgid "ai-settings.light-cuda-not-built"
-msgstr "CUDA not built in"
+msgstr "GPU not supported"
 
 msgid "ai-settings.state-none"
 msgstr "No model loaded. Choose one and select Load."
@@ -170,20 +167,17 @@ msgstr "No model loaded. Choose one and select Load."
 msgid "ai-settings.state-loading"
 msgstr "Loading the model…"
 
-msgid "ai-settings.state-ready-gpu"
+msgid "ai-settings.state-ready"
 msgstr "Loaded on the graphics card and ready."
 
-msgid "ai-settings.state-ready-cpu"
-msgstr "Loaded on the processor and ready."
-
 msgid "ai-settings.state-no-gpu"
-msgstr "No usable NVIDIA graphics card was found. Switch off CUDA to load the model on the processor."
+msgstr "No usable NVIDIA graphics card was found, so the model cannot load."
 
 msgid "ai-settings.state-insufficient-gpu-memory"
-msgstr "This model is too large for the graphics card's available memory. Switch off CUDA to load it on the processor, or choose a smaller model."
+msgstr "This model is too large for the graphics card's free memory. Close other programs using the graphics card, or choose a smaller model."
 
 msgid "ai-settings.state-running"
-msgstr "Answering… this can take a minute or more on the processor."
+msgstr "Answering…"
 
 msgid "ai-settings.state-no-model"
 msgstr "Load a model before running it."
@@ -374,14 +368,12 @@ msgstr "What was downloaded is not the expected model, so it was removed. Try ag
 msgid "ai-settings.behaviour"
 msgstr "Behaviour"
 
-msgid "ai-settings.cuda"
-msgstr "Use the graphics card (CUDA)"
+# Shown when Import with AI is chosen, and in AI settings, when the GPU cannot run the AI.
+msgid "gpu-unsupported.title"
+msgstr "Sorry, this GPU is not supported"
 
-msgid "ai-settings.cuda-explained"
-msgstr "Runs the model on the NVIDIA graphics card, much faster than on the processor. Changing it reloads the model."
-
-msgid "ai-settings.cuda-not-built"
-msgstr "This copy of the app was built without CUDA, so the model runs on the processor."
+msgid "gpu-unsupported.message"
+msgstr "The AI needs an NVIDIA graphics card with at least 8 GB of memory."
 
 msgid "ai-settings.fill-missing"
 msgstr "Fill missing inferred fields"

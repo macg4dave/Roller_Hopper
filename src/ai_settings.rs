@@ -19,7 +19,7 @@ use slint::{ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 use crate::ai::{
     self, Answered, Asker, End, Generation, Job, MODELS, RunError, Saved, Worker, WorkerEvent,
 };
-use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState, SaveOutcome};
+use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, GpuCheck, ModelState, SaveOutcome};
 
 /// Opens the window from Settings, bringing back the same window each time. Returns the shared
 /// worker; the events of Import with AI's runs, and of loading and unloading, go to `import`.
@@ -32,7 +32,6 @@ pub(crate) fn connect(
     show_installed(&window);
     scan::connect(&window);
     window.set_max_context_tokens(i32::try_from(ai::MAX_CONTEXT_TOKENS).unwrap_or(i32::MAX));
-    window.set_gpu_built(ai::gpu_built());
     show_saved(&window);
     let restoring = window.as_weak();
     window.on_restore_prompt(move || {
@@ -82,7 +81,8 @@ fn asker(event: &WorkerEvent) -> Option<Asker> {
         WorkerEvent::Running(asker)
         | WorkerEvent::Output(asker, _)
         | WorkerEvent::Finished(asker, _) => Some(*asker),
-        WorkerEvent::Unloaded
+        WorkerEvent::GpuChecked(_)
+        | WorkerEvent::Unloaded
         | WorkerEvent::Loading
         | WorkerEvent::Ready(_)
         | WorkerEvent::LoadFailed(_) => None,
@@ -90,7 +90,8 @@ fn asker(event: &WorkerEvent) -> Option<Asker> {
 }
 
 /// Loading and running go to one worker, which keeps the loaded model between runs until it
-/// has been idle for [`ai::IDLE_UNLOAD`].
+/// has been idle for [`ai::IDLE_UNLOAD`]. It first finds out whether this GPU can run the AI,
+/// for both windows.
 fn connect_worker(window: &AiSettingsWindow, import: Sender<WorkerEvent>) -> Rc<Worker> {
     let reporting = window.as_weak();
     let worker = Rc::new(Worker::start(ai::IDLE_UNLOAD, move |event| {
@@ -106,6 +107,7 @@ fn connect_worker(window: &AiSettingsWindow, import: Sender<WorkerEvent>) -> Rc<
                 .ok();
         }
     }));
+    send(window, &worker, Job::CheckGpu);
 
     let (loading, loader) = (window.as_weak(), Rc::clone(&worker));
     window.on_load(move |index| {
@@ -114,23 +116,13 @@ fn connect_worker(window: &AiSettingsWindow, import: Sender<WorkerEvent>) -> Rc<
                 .ok()
                 .and_then(|i| open.get_models().row_data(i))
                 .unwrap_or_default();
-            load(&open, &loader, &name, open.get_use_gpu());
+            load(&open, &loader, &name);
         }
     });
     let (unloading, unloader) = (window.as_weak(), Rc::clone(&worker));
     window.on_unload(move || {
         if let Some(open) = unloading.upgrade() {
             send(&open, &unloader, Job::Unload);
-        }
-    });
-    // The loaded model, if any, reloads on the other device.
-    let (moving, mover) = (window.as_weak(), Rc::clone(&worker));
-    window.on_set_gpu(move |gpu| {
-        if let Some(open) = moving.upgrade() {
-            let name = open.get_loaded_name();
-            if !name.is_empty() {
-                load(&open, &mover, &name, gpu);
-            }
         }
     });
     let stopper = Rc::clone(&worker);
@@ -152,8 +144,8 @@ fn connect_worker(window: &AiSettingsWindow, import: Sender<WorkerEvent>) -> Rc<
     worker
 }
 
-/// Asks the worker to load the model listed as `name`, on the GPU or the CPU.
-fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
+/// Asks the worker to load the model listed as `name` onto the GPU.
+fn load(window: &AiSettingsWindow, worker: &Worker, name: &str) {
     let Some(model) = file_named(name) else {
         // The file left the folder after the list was read.
         window.set_loaded_name(SharedString::new());
@@ -162,16 +154,15 @@ fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
         return;
     };
     window.set_loaded_name(name.into());
-    send(window, worker, Job::Load { model, gpu });
+    send(window, worker, Job::Load(model));
 }
 
-/// Shows the saved AI settings: the prompt, answer settings, GPU choice and, picked in the
-/// model list, the model last loaded. Nothing loads until the user asks.
+/// Shows the saved AI settings: the prompt, answer settings and, picked in the model list, the
+/// model last loaded. Nothing loads until the user asks.
 fn show_saved(window: &AiSettingsWindow) {
     let saved = Saved::in_data_dir();
     window.set_prompt(saved.prompt().into());
     window.set_generation(generation::to_ui(&saved.generation));
-    window.set_use_gpu(saved.gpu);
     let models = window.get_models();
     let at = saved
         .model
@@ -194,7 +185,7 @@ fn save(window: &AiSettingsWindow) {
         .or(picked)
         .map(String::from);
     let settings = generation::from_ui(&window.get_generation());
-    let saved = Saved::new(&window.get_prompt(), settings, window.get_use_gpu(), model);
+    let saved = Saved::new(&window.get_prompt(), settings, model);
     let done = ai::data_dir().is_some_and(|dir| saved.save(&dir).is_ok());
     window.set_save_outcome(if done {
         SaveOutcome::Saved
@@ -246,6 +237,11 @@ fn name_of(path: &Path) -> Option<String> {
 
 fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
     match event {
+        WorkerEvent::GpuChecked(supported) => window.set_gpu(if supported {
+            GpuCheck::Supported
+        } else {
+            GpuCheck::Unsupported
+        }),
         WorkerEvent::Unloaded => {
             window.set_loaded_name(SharedString::new());
             window.set_state(ModelState::None);
@@ -260,11 +256,6 @@ fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
         WorkerEvent::Finished(_, Ok(answered)) => {
             show_answered(window, answered);
             window.set_state(ModelState::Ready);
-        }
-        // When CUDA is unavailable or lacks room, the model stays chosen so switching it off
-        // loads the model on the processor.
-        WorkerEvent::LoadFailed(error @ (RunError::NoGpu | RunError::InsufficientGpuMemory)) => {
-            window.set_state(state(error));
         }
         WorkerEvent::LoadFailed(e) => {
             window.set_loaded_name(SharedString::new());
