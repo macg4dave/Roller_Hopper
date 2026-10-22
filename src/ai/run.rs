@@ -377,7 +377,7 @@ mod tests {
         // The evidence Import with AI sends for the sample network's first found host.
         let network = crate::mock_data::network();
         let host = crate::mock_data::answers(&network).swap_remove(0);
-        let evidence = super::super::evidence(&host.device, &host.methods);
+        let evidence = super::super::evidence(&host.device);
         let identify = || Job::Run {
             asker: Asker::Trial,
             system: super::super::PROMPT.into(),

@@ -60,7 +60,7 @@ pub(super) fn connect(window: &AiSettingsWindow) {
             .ok()
             .and_then(|i| discovery.found().get(i));
         if let Some(found) = found {
-            open.set_input(ai::evidence(&found.device, &found.methods).into());
+            open.set_input(ai::evidence(&found.device).into());
             open.set_scan_host_index(index);
         }
     });

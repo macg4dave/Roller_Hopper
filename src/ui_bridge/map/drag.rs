@@ -89,7 +89,7 @@ pub(in crate::ui_bridge) fn payload_child(text: &str) -> Option<i32> {
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::{Arrangement, tree_layout, trunk};
+    use crate::model::{tree_layout, trunk};
 
     /// The router's LAN card, which the home network hangs from.
     const ROUTER_LAN: CardId = CardId(1);
@@ -172,9 +172,9 @@ mod tests {
     }
 
     #[test]
-    fn a_device_dropped_on_a_trunk_below_a_row_hangs_below_it_until_reset() {
+    fn a_device_dropped_on_a_trunk_below_a_row_hangs_below_it() {
         let mut state = AppState::new(mock_data::network());
-        let (router, switch, nas) = (ROUTER_LAN, CardId(2), CardId(4));
+        let (switch, nas) = (CardId(2), CardId(4));
         let lowest_of_switch_row = |shown: &AppState| {
             let behind = shown.network.behind(switch).filter(|&d| d != nas);
             behind
@@ -197,10 +197,6 @@ mod tests {
             state.trunks().iter().any(|(id, _)| *id == nas),
             "with a trunk of its own"
         );
-
-        state.reset_layout();
-        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(router));
-        assert_eq!(state.arrangement, Arrangement::default());
     }
 
     #[test]

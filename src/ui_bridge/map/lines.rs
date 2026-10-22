@@ -329,6 +329,10 @@ mod tests {
         let mut network = crate::mock_data::network();
         let (positions, links) = routed(&network);
         // A colour of its own, so other groups' lines cannot be mistaken for the router's.
+        let others: Vec<_> = network.groups().iter().map(|(id, _)| id).collect();
+        for other in others {
+            network.set_group_colour(other, None);
+        }
         let group = network.add_group("Gateway").unwrap();
         network.set_group_colour(group, Some(GroupColour::Red));
         network.set_group_line_style(group, LineStyle::Thick);

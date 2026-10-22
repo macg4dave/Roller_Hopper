@@ -1,5 +1,5 @@
-//! Editing a device's network cards: adding a blank one, filling in its IPv4 settings, plugging
-//! it into a card of another device, making it a child of another device, and removing it.
+//! Editing a device's network cards: adding a blank one, filling in its IPv4 settings, making
+//! it a child of another device, and removing it. Plugging cards in is in [`super::tree`].
 
 use std::net::Ipv4Addr;
 
@@ -56,12 +56,6 @@ impl Network {
         true
     }
 
-    /// Plugs `card` into the card `upstream`, or into none, as a link that is kept when the
-    /// layout is reset. Refused (false) into a card of its own device or one behind it.
-    pub(crate) fn plug_card(&mut self, card: CardId, upstream: Option<CardId>) -> bool {
-        self.plug(card, upstream, true)
-    }
-
     /// The device `card` is the only card of, which moving the card to another device removes.
     pub(crate) fn only_card_of(&self, card: CardId) -> Option<DeviceId> {
         let owner = self.card_owner(card)?;
@@ -102,9 +96,7 @@ impl Network {
             (l.card == card && siblings.contains(&l.upstream))
                 || (l.upstream == card && siblings.contains(&l.card))
         };
-        for links in [&mut self.links, &mut self.detected] {
-            links.retain(|l| !between(l));
-        }
+        self.links.retain(|l| !between(l));
         if let Some(gone) = emptied {
             let guests = self.devices.iter_mut().filter_map(|d| d.guest.as_mut());
             guests.filter(|g| g.host == gone).for_each(|g| g.host = to);
@@ -147,9 +139,7 @@ impl Network {
             return false;
         };
         owner.cards.retain(|c| c.id != card);
-        for links in [&mut self.links, &mut self.detected] {
-            links.retain(|l| l.card != card && l.upstream != card);
-        }
+        self.links.retain(|l| l.card != card && l.upstream != card);
         true
     }
 }
@@ -206,14 +196,12 @@ mod tests {
     }
 
     #[test]
-    fn a_card_plugged_in_hangs_there_and_is_kept_on_reset() {
+    fn a_card_plugged_in_hangs_there() {
         let mut network = mock_data::network();
         let card = network.add_card(PC).unwrap();
         assert!(network.plug_card(card, Some(LAB_ROUTER_CARD)));
         let uplink = network.uplink(card);
         assert_eq!(uplink.map(|c| c.upstream), Some(LAB_ROUTER_CARD));
-        network.restore_connections();
-        assert_eq!(network.uplink(card), uplink, "kept on reset");
 
         assert!(!network.plug_card(card, Some(PC_CARD)), "its own device");
         assert!(!network.plug_card(SWITCH_CARD, Some(PC_CARD)), "loop");
@@ -250,8 +238,6 @@ mod tests {
         assert!(network.move_card(DOCKER_LAB, DeviceId(22)));
         assert_eq!(network.device(docker).unwrap().cards.len(), 1, "kept");
         assert!(network.uplink(DOCKER_LAB).is_none(), "was the lab router's");
-        network.restore_connections();
-        assert!(network.uplink(DOCKER_LAB).is_none(), "for good");
     }
 
     #[test]
@@ -303,8 +289,6 @@ mod tests {
         assert!(!network.remove_card(PC_CARD), "last");
         assert!(network.remove_card(DOCKER_LAB));
         assert!(network.uplink(PC_CARD).is_none(), "unplugged");
-        network.restore_connections();
-        assert!(network.uplink(PC_CARD).is_none(), "gone for good");
         assert!(!network.remove_card(DOCKER_HOME), "now the last");
     }
 }

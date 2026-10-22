@@ -1,4 +1,4 @@
-import { Palette, ScrollView, Switch } from "std-widgets.slint";
+import { Button, Palette, ScrollView, Switch } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Card, Note } from "ai-text.slint";
 import { GenerationPanel, GenerationSettings } from "ai-generation.slint";
@@ -10,6 +10,10 @@ import { Light } from "components/light.slint";
 import { TargetError } from "bridge.slint";
 
 export { AiScanHost, GenerationSettings, AnswerEnd, InstallOutcome, ModelState }
+
+// Whether Save kept the AI settings: nothing to say until it is pressed, and again once a
+// setting changes after it.
+export enum SaveOutcome { none, saved, failed }
 
 // An automation switch that nothing can act on yet, so it stays off and disabled, with what it
 // will do.
@@ -48,8 +52,7 @@ export component AiSettingsWindow inherits Window {
     in-out property <bool> use-gpu;
 
     in-out property <string> prompt;
-    // The edited prompt could not be saved in the app's data folder.
-    in property <bool> prompt-not-saved;
+    in-out property <SaveOutcome> save-outcome;
     in-out property <string> input;
     in property <string> output;
 
@@ -86,10 +89,11 @@ export component AiSettingsWindow inherits Window {
     callback stop();
     callback restore-generation();
     callback select-thinking(bool);
-    // Puts back the default prompt, forgetting the saved one.
+    // Puts back the default prompt; Save keeps it.
     callback restore-prompt();
-    // The user changed the prompt; it is saved for next time.
-    callback prompt-edited(string);
+    // Keeps the prompt, answer settings, GPU choice and loaded model for next time and for
+    // Import with AI.
+    callback save();
     callback set-scan-target(string);
     callback scan();
     callback stop-scan();
@@ -106,6 +110,12 @@ export component AiSettingsWindow inherits Window {
 
     // Each window has its own globals, so this one also stays light like the main window.
     init => { Palette.color-scheme = ColorScheme.light; }
+
+    // A change after Save is not saved yet.
+    changed prompt => { save-outcome = SaveOutcome.none; }
+    changed generation => { save-outcome = SaveOutcome.none; }
+    changed use-gpu => { save-outcome = SaveOutcome.none; }
+    changed loaded-name => { save-outcome = SaveOutcome.none; }
 
     property <bool> busy: state == ModelState.loading || state == ModelState.running;
     // Loaded and usable; a model that failed only on the GPU is not.
@@ -167,6 +177,20 @@ export component AiSettingsWindow inherits Window {
                     Light {
                         colour: cuda-on ? Theme.online : Theme.light-off;
                         text: cuda-light-text();
+                    }
+                }
+                if save-outcome != SaveOutcome.none: Text {
+                    text: save-outcome == SaveOutcome.saved ? @tr("ai-settings.saved") : @tr("ai-settings.save-failed");
+                    color: save-outcome == SaveOutcome.saved ? Theme.text-muted : Theme.warning;
+                    font-size: Theme.font-small;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: @tr("ai-settings.save");
+                        primary: true;
+                        clicked => { root.save(); }
                     }
                 }
             }
@@ -277,8 +301,6 @@ export component AiSettingsWindow inherits Window {
                     run(prompt, input) => { root.run(prompt, input); }
                     stop => { root.stop(); }
                     restore-prompt => { root.restore-prompt(); }
-                    prompt-not-saved: root.prompt-not-saved;
-                    prompt-edited(text) => { root.prompt-edited(text); }
                 }
             }
         }

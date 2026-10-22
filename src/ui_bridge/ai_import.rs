@@ -1,5 +1,6 @@
-//! Import with AI on the discovery page: loads the main application AI, asks it about each new
-//! host in turn, puts what it is confident about in place of what the scan made of the host
+//! Import with AI on the discovery page: loads the model with the prompt and answer settings
+//! saved from the AI settings window ([`crate::ai::Saved`]), asks it about each new host in
+//! turn, puts its answer in place of what the scan made of the host
 //! ([`crate::ai::Identity::fill`]), and adds the host to the map.
 //! The worker is the one the AI settings window started; the model unloads itself once idle
 //! ([`crate::ai::IDLE_UNLOAD`]). The queue of hosts is the run's
@@ -13,7 +14,7 @@ use std::time::Duration;
 use slint::{ComponentHandle, Timer, TimerMode, Weak};
 
 use super::{AppState, update};
-use crate::ai::{self, Asker, End, Generation, Identity, Job, RunError, Worker, WorkerEvent};
+use crate::ai::{self, Asker, End, Identity, Job, RunError, Saved, Worker, WorkerEvent};
 use crate::model::AiImportPhase;
 use crate::ui::{AppWindow, Bridge};
 
@@ -28,6 +29,8 @@ struct Importing {
     /// The answer so far to the run in flight, if one is.
     answer: RefCell<String>,
     asking: Cell<bool>,
+    /// The AI settings saved when the import began.
+    settings: RefCell<Saved>,
 }
 
 pub(super) fn connect(
@@ -42,6 +45,7 @@ pub(super) fn connect(
         timer: Timer::default(),
         answer: RefCell::default(),
         asking: Cell::new(false),
+        settings: RefCell::default(),
     });
     let bridge = ui.global::<Bridge<'_>>();
     let (begin_ui, begin_state, begin) = (ui.as_weak(), Rc::clone(state), Rc::clone(&importing));
@@ -56,15 +60,16 @@ pub(super) fn connect(
 }
 
 impl Importing {
-    /// Begins importing the run's new hosts, loading the model first; the model already
-    /// loaded on the same device stays.
+    /// Begins importing the run's new hosts with the saved AI settings, loading their model
+    /// first; the model already loaded on the same device stays.
     fn begin(self: &Rc<Self>, ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>) {
+        let settings = Saved::in_data_dir();
         let mut model = None;
         update(ui, state, |st| {
             if !st.discovery.begin_ai_import() {
                 return;
             }
-            model = ai::import_model();
+            model = ai::import_model(settings.model.as_deref());
             if model.is_none() {
                 st.discovery.end_ai_import(AiImportPhase::NoModel);
             }
@@ -72,7 +77,8 @@ impl Importing {
         let Some(model) = model else { return };
         // Loading and unloading before now say nothing about this import.
         while self.events.try_recv().is_ok() {}
-        let gpu = ai::gpu_built();
+        let gpu = settings.gpu;
+        self.settings.replace(settings);
         if !self.worker.send(Job::Load { model, gpu }) {
             update(ui, state, |st| {
                 st.discovery.end_ai_import(AiImportPhase::Failed);
@@ -158,15 +164,14 @@ impl Importing {
             return;
         };
         let found = st.discovery.found().get(index);
-        let user = found
-            .map(|f| ai::evidence(&f.device, &f.methods))
-            .unwrap_or_default();
+        let user = found.map(|f| ai::evidence(&f.device)).unwrap_or_default();
         self.answer.take();
+        let settings = self.settings.borrow();
         let job = Job::Run {
             asker: Asker::Import,
-            system: ai::PROMPT.to_owned(),
+            system: settings.prompt().to_owned(),
             user,
-            settings: Generation::default(),
+            settings: settings.generation,
         };
         if self.worker.send(job) {
             self.asking.set(true);

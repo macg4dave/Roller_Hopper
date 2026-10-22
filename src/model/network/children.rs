@@ -80,7 +80,7 @@ impl Network {
 
     /// Adds `device` under a fresh id, its cards under fresh ids, and returns its id. A guest
     /// comes after its host's other guests, any other device last. Its first card is plugged
-    /// into `uplink`'s card, as a link of that kind kept when the layout is reset.
+    /// into `uplink`'s card, as a link of that kind.
     pub(crate) fn insert_device(
         &mut self,
         mut device: Device,
@@ -108,13 +108,13 @@ impl Network {
         id
     }
 
-    /// Plugs a card just added into `uplink`'s card, as a link of that kind kept when the
-    /// layout is reset; where that is not allowed, it is plugged in nowhere.
+    /// Plugs a card just added into `uplink`'s card, as a link of that kind; where that is not
+    /// allowed, it is plugged in nowhere.
     pub(super) fn plug_found(&mut self, card: CardId, uplink: Option<(CardId, ConnectionKind)>) {
         if let Some((upstream, kind)) = uplink
-            && self.plug(card, Some(upstream), true)
+            && self.plug_card(card, Some(upstream))
         {
-            let links = self.links.iter_mut().chain(&mut self.detected);
+            let links = self.links.iter_mut();
             links.filter(|l| l.card == card).for_each(|l| l.kind = kind);
         }
     }
@@ -129,9 +129,8 @@ impl Network {
             .unzip();
         let cards = cards.concat();
         self.devices.retain(|d| !ids.contains(&d.id));
-        for links in [&mut self.links, &mut self.detected] {
-            links.retain(|l| !cards.contains(&l.upstream) && !cards.contains(&l.card));
-        }
+        self.links
+            .retain(|l| !cards.contains(&l.upstream) && !cards.contains(&l.card));
         ids
     }
 }

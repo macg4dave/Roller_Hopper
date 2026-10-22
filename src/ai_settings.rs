@@ -17,10 +17,9 @@ use std::sync::mpsc::Sender;
 use slint::{ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
 use crate::ai::{
-    self, Answered, Asker, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent,
-    saved_prompt,
+    self, Answered, Asker, End, Generation, Job, MODELS, RunError, Saved, Worker, WorkerEvent,
 };
-use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
+use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState, SaveOutcome};
 
 /// Opens the window from Settings, bringing back the same window each time. Returns the shared
 /// worker; the events of Import with AI's runs, and of loading and unloading, go to `import`.
@@ -31,24 +30,20 @@ pub(crate) fn connect(
     let window = AiSettingsWindow::new()?;
     install::connect(&window);
     show_installed(&window);
-    let prompt = ai::data_dir().map_or_else(|| ai::PROMPT.to_owned(), |d| saved_prompt::load(&d));
-    window.set_prompt(prompt.into());
     scan::connect(&window);
-    restore_generation(&window);
     window.set_max_context_tokens(i32::try_from(ai::MAX_CONTEXT_TOKENS).unwrap_or(i32::MAX));
-    // A CUDA build uses the GPU unless the user switches it off.
     window.set_gpu_built(ai::gpu_built());
-    window.set_use_gpu(ai::gpu_built());
+    show_saved(&window);
     let restoring = window.as_weak();
     window.on_restore_prompt(move || {
         if let Some(open) = restoring.upgrade() {
-            restore_prompt(&open);
+            open.set_prompt(ai::PROMPT.into());
         }
     });
-    let editing = window.as_weak();
-    window.on_prompt_edited(move |text| {
-        if let Some(open) = editing.upgrade() {
-            save_prompt(&open, &text);
+    let saving = window.as_weak();
+    window.on_save(move || {
+        if let Some(open) = saving.upgrade() {
+            save(&open);
         }
     });
     let resetting = window.as_weak();
@@ -170,16 +165,42 @@ fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
     send(window, worker, Job::Load { model, gpu });
 }
 
-/// Puts back the default prompt, forgetting the user's saved one.
-fn restore_prompt(window: &AiSettingsWindow) {
-    window.set_prompt(ai::PROMPT.into());
-    save_prompt(window, ai::PROMPT);
+/// Shows the saved AI settings: the prompt, answer settings, GPU choice and, picked in the
+/// model list, the model last loaded. Nothing loads until the user asks.
+fn show_saved(window: &AiSettingsWindow) {
+    let saved = Saved::in_data_dir();
+    window.set_prompt(saved.prompt().into());
+    window.set_generation(generation::to_ui(&saved.generation));
+    window.set_use_gpu(saved.gpu);
+    let models = window.get_models();
+    let at = saved
+        .model
+        .and_then(|name| models.iter().position(|m| m == name.as_str()));
+    if let Some(at) = at.and_then(|i| i32::try_from(i).ok()) {
+        window.set_model_index(at);
+    }
+    window.set_save_outcome(SaveOutcome::None);
 }
 
-/// Keeps the user's prompt for next time, saying so in the window when it cannot be saved.
-fn save_prompt(window: &AiSettingsWindow, text: &str) {
-    let saved = ai::data_dir().is_some_and(|dir| saved_prompt::save(&dir, text).is_ok());
-    window.set_prompt_not_saved(!saved);
+/// Saves the window's AI settings for next time and for Import with AI, with the model loaded
+/// (or else the one picked in the list), saying whether that worked.
+fn save(window: &AiSettingsWindow) {
+    let loaded = window.get_loaded_name();
+    let picked = usize::try_from(window.get_model_index())
+        .ok()
+        .and_then(|i| window.get_models().row_data(i));
+    let model = Some(loaded)
+        .filter(|name| !name.is_empty())
+        .or(picked)
+        .map(String::from);
+    let settings = generation::from_ui(&window.get_generation());
+    let saved = Saved::new(&window.get_prompt(), settings, window.get_use_gpu(), model);
+    let done = ai::data_dir().is_some_and(|dir| saved.save(&dir).is_ok());
+    window.set_save_outcome(if done {
+        SaveOutcome::Saved
+    } else {
+        SaveOutcome::Failed
+    });
 }
 
 fn restore_generation(window: &AiSettingsWindow) {

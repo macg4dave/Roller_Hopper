@@ -30,9 +30,7 @@ impl Network {
     pub(crate) fn checked(mut self) -> Result<Self, Invalid> {
         let owners = self.card_owners()?;
         self.check_guests()?;
-        for links in [&self.links, &self.detected] {
-            check_links(links, &owners)?;
-        }
+        check_links(&self.links, &owners)?;
         self.check_roles()?;
         self.devices = children::hosts_first(self.devices);
         Ok(self)

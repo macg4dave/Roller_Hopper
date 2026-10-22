@@ -2,6 +2,7 @@
 //! settings window, kept within limits that keep a run bounded.
 
 use candle_transformers::generation::Sampling;
+use serde::{Deserialize, Serialize};
 
 /// The most tokens a prompt and its answer may hold together, whatever the user sets (Qwen3's
 /// own context). The limit bounds the attention cache as well as the run: the engine cannot cap
@@ -13,8 +14,9 @@ pub(crate) const MAX_CONTEXT_TOKENS: usize = 32_768;
 const MIN_CONTEXT_TOKENS: usize = 512;
 
 /// The model's bounded generation controls. The default is Qwen3's recommended non-thinking
-/// profile; switching thinking mode applies its corresponding recommended profile.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// profile; switching thinking mode applies its corresponding recommended profile. Saved with
+/// the AI settings ([`super::Saved`]).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Generation {
     /// 0 picks the likeliest token every time; higher values let less likely ones through.
     pub(crate) temperature: f32,

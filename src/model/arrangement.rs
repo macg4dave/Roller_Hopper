@@ -68,7 +68,7 @@ pub(crate) struct Slot {
     pub(crate) before: Option<CardId>,
 }
 
-/// The tiers the user arranged under each device, until the layout is reset. Ordered by card,
+/// The tiers the user arranged under each device. Ordered by card,
 /// so a saved project lists them the same way each time. Cards no longer connected there are
 /// passed over (see [`Self::tiers`]), so any card IDs read from a file are safe.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -177,10 +177,6 @@ impl Arrangement {
         for tier in self.tiers.values_mut().flatten() {
             tier.remove(id);
         }
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.tiers.clear();
     }
 }
 

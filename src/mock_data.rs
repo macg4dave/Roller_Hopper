@@ -589,46 +589,37 @@ pub(crate) fn network() -> Network {
     network
 }
 
-/// Example groups, as if the user had made them. They follow how devices connect, so the lines
-/// from the router, the switch and the access point each show in their own colour; Wi-Fi lines
-/// wave.
+/// Example groups, as if the user had made them: one for each kind of role, so the edit page
+/// shows many, each with its own pairing of colour and line style. The router, the switch and
+/// the access point each show in their own colour; what hangs off Wi-Fi waves or is dotted,
+/// guests' lines are dashed, and Other is left in no group.
 fn add_groups(network: &mut Network) {
-    let tv = Role::Custom("TV".into());
-    let console = Role::Custom("Games console".into());
-    let virtual_machine = Role::Custom(VIRTUAL_MACHINE.into());
-    let container = Role::Custom(CONTAINER.into());
+    use GroupColour::{Blue, Green, Orange, Purple, Red, Yellow};
+    use LineStyle::{DashDot, Dashed, Dotted, LongDashes, Solid, Thick, Wavy, Zigzag};
+    let custom = |name: &str| Role::Custom(name.into());
     let groups = [
+        ("Network core", Purple, Thick, vec![Role::Router]),
+        ("Switching", Blue, Solid, vec![Role::Switch]),
+        ("Wi-Fi", Green, Wavy, vec![Role::AccessPoint]),
+        ("Mobile", Green, Dotted, vec![Role::Laptop, Role::Phone]),
+        ("Workstations", Yellow, Solid, vec![Role::Desktop]),
+        ("Printing", Yellow, DashDot, vec![Role::Printer]),
+        ("Servers", Red, Thick, vec![Role::Server]),
         (
-            "Network core",
-            GroupColour::Purple,
-            LineStyle::Solid,
-            vec![Role::Router],
+            "Virtual machines",
+            Red,
+            Dashed,
+            vec![custom(VIRTUAL_MACHINE)],
         ),
+        ("Containers", Purple, Dotted, vec![custom(CONTAINER)]),
+        ("Storage", Orange, LongDashes, vec![Role::Nas]),
+        ("Security", Red, Zigzag, vec![Role::Camera]),
+        ("Smart home", Orange, Zigzag, vec![Role::Iot]),
         (
-            "Wired",
-            GroupColour::Blue,
-            LineStyle::Solid,
-            vec![
-                Role::Switch,
-                Role::Desktop,
-                Role::Server,
-                Role::Nas,
-                Role::Printer,
-                virtual_machine,
-                container,
-            ],
-        ),
-        (
-            "Wi-Fi",
-            GroupColour::Green,
-            LineStyle::Wavy,
-            vec![Role::AccessPoint, Role::Laptop, Role::Phone],
-        ),
-        (
-            "Smart home",
-            GroupColour::Orange,
-            LineStyle::Solid,
-            vec![Role::Camera, Role::Iot, tv, console],
+            "Entertainment",
+            Blue,
+            Wavy,
+            vec![custom("TV"), custom("Games console")],
         ),
     ];
     for (name, colour, style, roles) in groups {
@@ -746,6 +737,22 @@ mod tests {
         assert!(parents.iter().all(Option::is_some), "{parents:?}");
         let distinct: HashSet<_> = parents.iter().collect();
         assert_eq!(distinct.len(), 3, "{parents:?}");
+    }
+
+    #[test]
+    fn every_role_but_other_is_grouped_and_each_group_looks_different() {
+        let network = network();
+        for role in network.roles() {
+            let grouped = network.role_group(&role).is_some();
+            assert_eq!(grouped, role != Role::Other, "{role:?}");
+        }
+        let groups = network.groups();
+        let looks: Vec<_> = groups
+            .iter()
+            .map(|(id, _)| (groups.colour(id), groups.line_style(id)))
+            .collect();
+        assert!(looks.len() > 10, "many groups");
+        assert!(all_unique(&looks), "{looks:?}");
     }
 
     #[test]

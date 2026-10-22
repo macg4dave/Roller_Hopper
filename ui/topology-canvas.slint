@@ -271,15 +271,6 @@ export component TopologyCanvas inherits Rectangle {
                 accessible-label: @tr("map.fit");
                 clicked => { fit(true); }
             }
-            Button {
-                icon: @image-url("icons/reset-layout.svg");
-                colorize-icon: true;
-                accessible-label: @tr("map.reset-layout");
-                clicked => {
-                    Bridge.reset-layout();
-                    fit(true);
-                }
-            }
         }
     }
 }

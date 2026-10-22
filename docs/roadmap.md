@@ -74,8 +74,8 @@ The mock GUI is the interaction specification: real data flows through its pages
 controls, changed only where the brief or an agreed decision says. It already defines:
 
 - Main view: search by name, IP or MAC; All / Online / Offline filters with counts; a device
-  list with collapsible network cards; Add device. The map has zoom, a percentage, Fit, Reset
-  layout and a View menu (names, roles, IP addresses, MAC addresses, hostnames, status dots).
+  list with collapsible network cards; Add device. The map has zoom, a percentage, Fit and a
+  View menu (names, roles, IP addresses, MAC addresses, hostnames, status dots).
   Details show what a guest runs on, each card with the link it is plugged into (known or
   inferred), type, manufacturer, model, hostname, last seen, open ports and notes.
 - Edit page ("Devices, roles and groups"): device name, role, icon and notes; network cards
@@ -454,7 +454,7 @@ These extend the product brief's wording, which needs updating first (BLK-010).
   link plus a name is Strong; an IP alone is Weak), with the evidence shown on hover. No
   percentage until one is measured.
 - Restrained choices, not asked: the AI automation controls live in the AI settings window, per
-  network context; Arrange and the Automatic/Free toggle replace Reset layout beside Fit.
+  network context; Arrange and the Automatic/Free toggle sit beside Fit.
 
 ## IDs and maintenance
 
@@ -577,7 +577,7 @@ Goal: keep the user's map across edits, scans and file operations.
 | --- | --- | --- |
 | BE-0029 | Store committed icon centres, arrangement, placement mode and layout parameters in Rust; keep pointer previews and spring state transient. | BE-0028 |
 | BE-0030 | Free positioning with simple derived connectors; one committed move for a displayed parent and all descendants; Cancel restores the branch. | BE-0029 |
-| BE-0031 | Keep automatic tree/snap/order/animation; add the agreed Automatic/Free toggle and an Arrange action beside zoom and Fit, replacing Reset layout. | BE-0030 |
+| BE-0031 | Keep automatic tree/snap/order/animation; add the agreed Automatic/Free toggle and an Arrange action beside zoom and Fit. | BE-0030 |
 | BE-0032 | Place new cards in a clear area without moving established positions; refresh and ordinary edits keep placement and display parentage. | BE-0031 |
 | BE-0033 | Capture view centre, zoom, panel widths, list filter and search, collapsed card groups, selection and the View menu's display options into the document; restore after the viewport exists without the initial fit overriding them. | BE-0032 |
 

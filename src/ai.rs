@@ -10,12 +10,13 @@ mod identify;
 mod install;
 mod response;
 mod run;
-pub(crate) mod saved_prompt;
+mod saved;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
 pub(crate) use identify::{Identity, evidence};
 pub(crate) use install::{InstallError, install};
 pub(crate) use run::{Answered, Asker, End, IDLE_UNLOAD, Job, RunError, Worker, WorkerEvent};
+pub(crate) use saved::Saved;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -70,8 +71,9 @@ impl Choice {
     }
 }
 
-/// The default identification prompt, which the AI settings window starts from until the user
-/// changes it ([`saved_prompt`]). It names its own answer fields, so no schema is added. The
+/// The default identification prompt, which the AI settings window and Import with AI use
+/// until the user saves another ([`Saved`]). It names its own answer fields, so no schema is
+/// added. The
 /// evaluation tool reads its own `tools/ai/prompt.md` and schema. It is the model's
 /// instruction, not UI text, so it is not translated.
 pub(crate) const PROMPT: &str = include_str!("ai/default-prompt.txt");
@@ -146,11 +148,15 @@ pub(crate) fn models_dir() -> Option<PathBuf> {
     data_dir().map(|d| d.join("models"))
 }
 
-/// The file Import with AI loads: the offered main application AI (Qwen3-4B), if installed.
-pub(crate) fn import_model() -> Option<PathBuf> {
+/// The file Import with AI loads: the model saved as last loaded (`saved`, by its name in the
+/// model list) while it is still in the folder, or else the offered main application AI
+/// (Qwen3-4B), if installed.
+pub(crate) fn import_model(saved: Option<&str>) -> Option<PathBuf> {
     let dir = models_dir()?;
-    let model = MODELS.first().filter(|m| m.is_installed(&dir))?;
-    Some(model.load_path(&dir))
+    let models = installed(&dir);
+    let named = saved.and_then(|name| models.iter().find(|m| m.name() == name));
+    let offered = || models.iter().find(|m| matches!(m, Choice::Offered(_)));
+    Some(named.or_else(offered)?.file(&dir))
 }
 
 /// Whether this build can run models on an NVIDIA GPU (built with the `cuda` feature).

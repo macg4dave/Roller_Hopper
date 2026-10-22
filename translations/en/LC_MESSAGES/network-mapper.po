@@ -206,8 +206,16 @@ msgstr "The model stopped with an error part-way through its answer."
 msgid "ai-settings.prompt"
 msgstr "Prompt"
 
-msgid "ai-settings.prompt-not-saved"
-msgstr "Your changes to the prompt could not be saved, so they will be lost when the app closes."
+# Keeps the prompt, answer settings, GPU choice and loaded model for next time and for Import
+# with AI.
+msgid "ai-settings.save"
+msgstr "Save"
+
+msgid "ai-settings.saved"
+msgstr "Saved: Import with AI uses these settings"
+
+msgid "ai-settings.save-failed"
+msgstr "These settings could not be saved, so they will be lost when the app closes"
 
 msgid "ai-settings.input"
 msgstr "Device text (sent exactly as written)"
@@ -447,9 +455,6 @@ msgstr "{}%"
 
 msgid "map.fit"
 msgstr "Fit to view"
-
-msgid "map.reset-layout"
-msgstr "Reset layout"
 
 # The View button at the top right of the map, and the switches it opens.
 msgid "view.button"

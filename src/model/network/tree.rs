@@ -92,14 +92,13 @@ impl Network {
     /// keeps the link it had.
     pub(crate) fn connect(&mut self, card: CardId, upstream: Option<CardId>) {
         if self.link(card).map(|l| l.upstream) != upstream {
-            self.plug(card, upstream, false);
+            self.plug_card(card, upstream);
         }
     }
 
-    /// Plugs `card` into `target`, or unplugs it on `None`, as a known link. A link `kept` is
-    /// also kept when the layout is reset. Refused (false) where [`Self::can_plug`] does not
-    /// allow it.
-    pub(super) fn plug(&mut self, card: CardId, target: Option<CardId>, kept: bool) -> bool {
+    /// Plugs `card` into `target`, or unplugs it on `None`, as a known link. Refused (false)
+    /// where [`Self::can_plug`] does not allow it.
+    pub(crate) fn plug_card(&mut self, card: CardId, target: Option<CardId>) -> bool {
         let refused = match target {
             Some(target) => !self.can_plug(card, target),
             None => self.card_owner(card).is_none(),
@@ -107,19 +106,13 @@ impl Network {
         if refused {
             return false;
         }
-        let relink = |links: &mut Vec<CardLink>| {
-            links.retain(|l| l.card != card);
-            if let Some(upstream) = target {
-                links.push(CardLink {
-                    upstream,
-                    card,
-                    kind: ConnectionKind::Known,
-                });
-            }
-        };
-        relink(&mut self.links);
-        if kept {
-            relink(&mut self.detected);
+        self.links.retain(|l| l.card != card);
+        if let Some(upstream) = target {
+            self.links.push(CardLink {
+                upstream,
+                card,
+                kind: ConnectionKind::Known,
+            });
         }
         true
     }
@@ -214,14 +207,11 @@ mod tests {
     }
 
     #[test]
-    fn a_card_unplugged_heads_its_own_tree_until_restored() {
+    fn a_card_unplugged_heads_its_own_tree_with_its_branch() {
         let mut network = mock_data::network();
-        let before = network.connections();
         network.connect(SWITCH, None);
         assert!(network.uplink(SWITCH).is_none());
         assert!(network.is_within(PC, SWITCH));
-        network.restore_connections();
-        assert_eq!(network.connections(), before);
     }
 
     #[test]

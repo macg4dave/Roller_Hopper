@@ -56,8 +56,6 @@ pub(crate) struct Network {
     /// guests under their host.
     devices: Vec<Device>,
     links: Vec<CardLink>,
-    /// The links as first found or added, which [`Self::restore_connections`] brings back.
-    detected: Vec<CardLink>,
     roles: Roles,
     groups: Groups,
 }
@@ -68,7 +66,6 @@ impl Network {
     pub(crate) fn new(devices: Vec<Device>, links: Vec<CardLink>) -> Self {
         Self {
             devices: children::hosts_first(devices),
-            detected: links.clone(),
             links,
             roles: Roles::default(),
             groups: Groups::default(),
@@ -85,11 +82,6 @@ impl Network {
 
     pub(crate) fn device_mut(&mut self, id: DeviceId) -> Option<&mut Device> {
         self.devices.iter_mut().find(|d| d.id == id)
-    }
-
-    /// Undoes [`Self::connect`]: back to the links as found, less any forgotten devices.
-    pub(crate) fn restore_connections(&mut self) {
-        self.links.clone_from(&self.detected);
     }
 
     pub(crate) fn filtered<'a>(

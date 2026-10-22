@@ -93,13 +93,6 @@ impl AppState {
         self.motion = Motion::new(self.positions.clone());
     }
 
-    /// Back to the connections as found, laid out afresh with nothing the user arranged.
-    fn reset_layout(&mut self) {
-        self.network.restore_connections();
-        self.arrangement.clear();
-        self.lay_out();
-    }
-
     /// Moves the map one frame on; true once everything has settled.
     fn step_motion(&mut self) -> bool {
         let dt = FRAME.as_secs_f32();
@@ -151,7 +144,7 @@ impl AppState {
     }
 }
 
-/// Dragging (on the map or from the lists), dropping, cancelling and resetting, each followed
+/// Dragging (on the map or from the lists), dropping and cancelling, each followed
 /// by the motion that settles it.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
@@ -164,12 +157,6 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         Rc::new(move || animate(&ui, &state, &timer))
     };
 
-    let reset = handler(ui, state, |st, ()| st.reset_layout());
-    let reset_settle = Rc::clone(&settle);
-    bridge.on_reset_layout(move || {
-        reset(());
-        reset_settle();
-    });
     // A card is dragged the same way on the map and from the lists. While dragging, the strand
     // swings after the pointer.
     let move_card = handler(ui, state, |st, (id, x, y)| {
