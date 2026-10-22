@@ -3,7 +3,7 @@ name = "network-mapper"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
-description = "UI prototype of a local network mapper (mock data only)"
+description = "UI prototype of a local network mapper (sample map, real discovery scan)"
 license = "MIT"
 publish = false
 
@@ -13,11 +13,16 @@ candle-nn = "0.11.0"
 candle-transformers = "0.11.0"
 dirs = "7.0.0"
 ipnet = { version = "2.12.2", default-features = false, features = ["std"] }
+# The scanner: ping sweep, neighbour table, mDNS names and TCP connect probes. Never `pcap`
+# (needs a capture driver) or `db`.
+netscli-core = { version = "0.3.4", default-features = false, features = ["mdns"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 sha2 = { version = "0.11.1", default-features = false }
 # Skia draws the scaled map (text, lines, icons) more cleanly than the default FemtoVG renderer.
 slint = { version = "1.18.1", features = ["renderer-skia"] }
 tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"] }
+# The runtime a scan runs on, off the UI thread; netscli-core is async on Tokio.
+tokio = { version = "1.54.0", default-features = false, features = ["rt-multi-thread"] }
 ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 
 [build-dependencies]

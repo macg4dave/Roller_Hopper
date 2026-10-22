@@ -4,7 +4,7 @@
 //!
 //! This module owns the state, the selection and the list's search, filter and folding. The
 //! rest is split by area: [`edit`] handles editing, [`map`] the topology map, [`discovery`] the
-//! discovery page's simulated scan, [`view`] sends
+//! discovery page's scan, [`view`] sends
 //! the state to the UI, [`convert`] translates between model and UI types, and [`icons`] reads
 //! the icon folder.
 
@@ -58,7 +58,7 @@ pub(crate) struct AppState {
     collapsed: HashSet<DeviceId>,
     filter: StatusFilter,
     query: String,
-    /// The discovery page's simulated scan; its finishing runs count as scans.
+    /// The discovery page's run; runs that finish or are stopped count as scans.
     discovery: Discovery,
     scans: u32,
     /// Read from the icon folder by [`connect`], and again when the icon picker opens.

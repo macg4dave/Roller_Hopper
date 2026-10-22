@@ -1,5 +1,6 @@
-//! Who answers a simulated discovery run: the sample devices that are not offline, and a few
-//! hosts that are not on the map yet, one of them with a MAC already on it.
+//! Test fixture: who answers a discovery run of the sample network, as the scanner would report
+//! it. The sample devices that are not offline answer, and a few hosts that are not on the map
+//! yet, one of them with a MAC already on it.
 
 use super::{LAB, Spec, spec};
 use crate::model::{Answer, Device, DeviceKind, Method, Network, Status};
@@ -10,35 +11,30 @@ pub(crate) fn answers(network: &Network) -> Vec<Answer> {
         .devices()
         .iter()
         .filter(|d| d.status != Status::Offline)
-        .map(|device| {
-            let (methods, confidence) = evidence(device.kind);
-            answer(device.clone(), methods, confidence)
-        });
+        .map(|device| answer(device.clone(), evidence(device.kind)));
     known.chain(newcomers()).collect()
 }
 
-fn answer(device: Device, methods: &[Method], confidence: u8) -> Answer {
+fn answer(device: Device, methods: &[Method]) -> Answer {
     Answer {
         device,
         methods: methods.to_vec(),
-        confidence,
     }
 }
 
-/// How a device of each kind is typically found, and how sure that makes the identification.
-fn evidence(kind: DeviceKind) -> (&'static [Method], u8) {
-    use Method::{Arp, Lldp, Mdns, Onvif, Ping, Snmp, Upnp};
+/// How a device of each kind is typically found.
+fn evidence(kind: DeviceKind) -> &'static [Method] {
+    use Method::{Arp, Mdns, Ping};
     match kind {
-        DeviceKind::Router => (&[Arp, Ping, Snmp, Upnp], 98),
-        DeviceKind::Switch | DeviceKind::AccessPoint => (&[Arp, Snmp, Lldp], 97),
-        DeviceKind::Nas => (&[Arp, Ping, Snmp, Mdns], 97),
-        DeviceKind::Server => (&[Arp, Ping, Snmp], 94),
-        DeviceKind::Desktop => (&[Arp, Ping], 90),
-        DeviceKind::Laptop | DeviceKind::Phone => (&[Arp, Mdns], 92),
-        DeviceKind::Printer => (&[Arp, Snmp, Mdns], 96),
-        DeviceKind::Tv | DeviceKind::Console | DeviceKind::Smart => (&[Arp, Upnp], 88),
-        DeviceKind::Camera => (&[Arp, Onvif], 90),
-        DeviceKind::Unknown => (&[Arp, Ping], 55),
+        DeviceKind::Nas | DeviceKind::Printer => &[Arp, Ping, Mdns],
+        DeviceKind::Laptop | DeviceKind::Phone => &[Arp, Mdns],
+        DeviceKind::Tv | DeviceKind::Console | DeviceKind::Smart | DeviceKind::Camera => &[Arp],
+        DeviceKind::Router
+        | DeviceKind::Switch
+        | DeviceKind::AccessPoint
+        | DeviceKind::Server
+        | DeviceKind::Desktop
+        | DeviceKind::Unknown => &[Arp, Ping],
     }
 }
 
@@ -49,7 +45,7 @@ fn evidence(kind: DeviceKind) -> (&'static [Method], u8) {
 )]
 fn newcomers() -> Vec<Answer> {
     use DeviceKind as K;
-    use Method::{Arp, Lldp, Mdns, Onvif, Ping, Snmp, Upnp};
+    use Method::{Arp, Mdns, Ping};
     let hosts = [
         (
             Spec {
@@ -65,7 +61,6 @@ fn newcomers() -> Vec<Answer> {
                 )
             },
             &[Arp, Ping, Mdns][..],
-            88,
         ),
         (
             Spec {
@@ -81,8 +76,7 @@ fn newcomers() -> Vec<Answer> {
                     [0x48, 0xA6, 0xB8, 0x2C, 0x91, 0x0E],
                 )
             },
-            &[Arp, Mdns, Upnp],
-            93,
+            &[Arp, Mdns],
         ),
         // Same MAC as the IP Camera Front at .70: a copied MAC, or the camera moved address.
         (
@@ -98,8 +92,7 @@ fn newcomers() -> Vec<Answer> {
                     [0xEC, 0x71, 0xDB, 0x2E, 0x40, 0x9D],
                 )
             },
-            &[Arp, Onvif],
-            85,
+            &[Arp],
         ),
         (
             Spec {
@@ -107,7 +100,6 @@ fn newcomers() -> Vec<Answer> {
                 ..spec(0, "", K::Unknown, 91, [0x6A, 0x0F, 0x3E, 0x92, 0x5B, 0x17])
             },
             &[Arp, Ping],
-            40,
         ),
         (
             Spec {
@@ -123,13 +115,12 @@ fn newcomers() -> Vec<Answer> {
                     [0x48, 0xA9, 0x8A, 0x21, 0x5C, 0x91],
                 )
             },
-            &[Arp, Snmp, Lldp],
-            96,
+            &[Arp],
         ),
     ];
     hosts
         .into_iter()
-        .map(|(spec, methods, confidence)| answer(spec.build(), methods, confidence))
+        .map(|(spec, methods)| answer(spec.build(), methods))
         .collect()
 }
 
@@ -150,7 +141,10 @@ mod tests {
             .map(|a| a.addr())
             .collect();
         let macs: HashSet<_> = cards.iter().filter_map(|c| c.mac).collect();
-        let subnets = network.subnets();
+        let subnets: HashSet<_> = cards
+            .iter()
+            .filter_map(|c| c.address.map(|a| a.trunc()))
+            .collect();
         let mut copied = 0;
         for answer in newcomers() {
             let card = &answer.device.cards[0];

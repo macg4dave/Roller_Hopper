@@ -28,10 +28,14 @@ impl Discovery {
     /// Every parent a card of a found host can have, in the order the "Child of" dropdown lists
     /// them: the found hosts not on the map, in address order, then the devices on the map.
     pub(crate) fn parents(&self, network: &Network) -> Vec<Parent> {
-        let found = self.found().iter().enumerate();
-        let hosts = found
+        let mut hosts: Vec<(usize, &Found)> = self
+            .found()
+            .iter()
+            .enumerate()
             .filter(|(_, f)| f.addable())
-            .map(|(at, _)| Parent::Found(at));
+            .collect();
+        hosts.sort_by_key(|(_, f)| f.ip);
+        let hosts = hosts.into_iter().map(|(at, _)| Parent::Found(at));
         let devices = network.devices().iter().map(|d| Parent::Device(d.id));
         hosts.chain(devices).collect()
     }
@@ -112,11 +116,10 @@ impl Discovery {
 
     /// Takes the host at `index` out of the results, keeping the selection on the same host.
     fn drop_host(&mut self, index: usize) {
-        if index >= self.revealed {
+        if index >= self.hosts.len() {
             return;
         }
         self.hosts.remove(index);
-        self.revealed -= 1;
         self.selected = match self.selected {
             Some(at) if at == index => None,
             Some(at) if at > index => Some(at - 1),
@@ -133,16 +136,15 @@ mod tests {
     use super::*;
     use crate::mock_data;
     use crate::model::card::CardId;
-    use crate::model::discovery::STEPS_PER_RUN;
 
     fn finished() -> (Discovery, Network) {
         let network = mock_data::network();
         let mut discovery = Discovery::default();
-        let home = "192.168.1.0/24".parse().unwrap();
-        discovery.start(home, mock_data::answers(&network), &network);
-        for _ in 0..STEPS_PER_RUN {
-            discovery.step();
+        discovery.start("192.168.1.0/24".parse().unwrap());
+        for answer in mock_data::answers(&network) {
+            discovery.answer(answer, &network);
         }
+        discovery.finish();
         (discovery, network)
     }
 

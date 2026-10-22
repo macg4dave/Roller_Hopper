@@ -25,7 +25,6 @@ export component FoundFacts inherits VerticalLayout {
             for method in found.methods: Chip { text: Labels.method(method); }
         }
     }
-    DetailField { label: @tr("discovery.confidence"); value: @tr("discovery.percent", found.confidence); }
     if found.duplicate-of != "": DetailField {
         label: @tr("discovery.same-mac-as");
         value: Labels.device-name(found.duplicate-of);

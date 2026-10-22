@@ -193,7 +193,7 @@ pub(super) fn device_view(
         name: device.name.trim().into(),
         ip: primary.map(ip).unwrap_or_default(),
         mac: primary.map(mac).unwrap_or_default(),
-        hostname: device.hostname.unwrap_or_default().into(),
+        hostname: device.hostname.as_deref().unwrap_or_default().into(),
         role,
         icon: icons.image(&network.icon(device)),
         colour: colour(network.colour(device)),
@@ -266,9 +266,9 @@ pub(super) fn details(
         guest: guest_kind(device.guest.map(|guest| guest.kind)),
         host_id: host.map_or(-1, |d| ui_id(d.id)),
         host_name: text(host.map(|d| d.name.trim())),
-        manufacturer: text(device.manufacturer),
-        model: text(device.model),
-        hostname: text(device.hostname),
+        manufacturer: text(device.manufacturer.as_deref()),
+        model: text(device.model.as_deref()),
+        hostname: text(device.hostname.as_deref()),
         last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
     }
 }

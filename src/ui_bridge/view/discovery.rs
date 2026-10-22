@@ -1,6 +1,8 @@
 //! Sends the discovery run to the UI: its progress and options, the found hosts the filter lets
 //! through, each with its network cards, the selected one's details, and the log.
 
+use std::time::Duration;
+
 use slint::{ModelRc, SharedString, VecModel};
 
 use super::sync;
@@ -8,17 +10,21 @@ use crate::model::{
     Decision, Finding, Found, FoundFilter, LogEntry, LogEvent, Method, Parent, Phase,
 };
 use crate::ui::{self, Bridge, Labels};
-use crate::ui_bridge::discovery::STEP;
 use crate::ui_bridge::{AppState, convert};
 
 pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let discovery = &state.discovery;
-    let subnets = state.network.subnets();
+    let subnets = &discovery.targets;
     let names = subnets.iter().map(|s| SharedString::from(s.to_string()));
     if let Some(model) = sync(&bridge.get_discovery_targets(), names.collect()) {
         bridge.set_discovery_targets(model);
     }
-    let target = state.discovery_target();
+    // While a run is busy, the subnet it scans, which the picker cannot change meanwhile.
+    let target = if discovery.busy() {
+        discovery.target
+    } else {
+        discovery.next_target()
+    };
     let target_index = target.and_then(|t| subnets.iter().position(|&s| s == t));
     let (swept, addresses) = discovery.progress();
     let count = |filter| int(discovery.count(filter));
@@ -26,12 +32,11 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         phase: phase(discovery.phase()),
         target: target.map(|t| t.to_string()).unwrap_or_default().into(),
         target_index: target_index.map_or(-1, int),
-        ping_sweep: discovery.options.ping_sweep,
         port_scan: discovery.options.port_scan,
         service_detection: discovery.options.service_detection,
         swept: int(swept),
         addresses: int(addresses),
-        seconds: seconds(discovery.steps()),
+        seconds: seconds(discovery.elapsed()),
         filter: filter(discovery.filter),
         count_all: count(FoundFilter::All),
         count_new: count(FoundFilter::New),
@@ -110,10 +115,9 @@ fn int(n: usize) -> i32 {
     i32::try_from(n).unwrap_or(i32::MAX)
 }
 
-/// The time a run took to reach its `steps`th step, in whole seconds.
-fn seconds(steps: u32) -> i32 {
-    let millis = STEP.as_millis().saturating_mul(u128::from(steps));
-    i32::try_from(millis / 1000).unwrap_or(i32::MAX)
+/// A time into a run, in whole seconds.
+fn seconds(time: Duration) -> i32 {
+    i32::try_from(time.as_secs()).unwrap_or(i32::MAX)
 }
 
 fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found) -> ui::FoundView {
@@ -146,9 +150,9 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         name: device.name.trim().into(),
         ip: found.ip.to_string().into(),
         mac: found.mac.map(|m| m.to_string()).unwrap_or_default().into(),
-        hostname: text(device.hostname),
-        manufacturer: text(device.manufacturer),
-        model: text(device.model),
+        hostname: text(device.hostname.as_deref()),
+        manufacturer: text(device.manufacturer.as_deref()),
+        model: text(device.model.as_deref()),
         kind: convert::kind(device.kind),
         role: convert::role_label(labels, network, &device.role),
         role_index: role_index.map_or(-1, int),
@@ -160,7 +164,6 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
             .unwrap_or_default()
             .into(),
         methods: ModelRc::new(VecModel::from(methods)),
-        confidence: i32::from(found.confidence),
         unidentified: found.unidentified(),
         finding: finding(found.finding),
         duplicate_of: text(duplicate_of),
@@ -207,7 +210,7 @@ fn card_rows(state: &AppState, row: &ui::FoundView, found: &Found) -> Vec<ui::Fo
 
 fn log_view(state: &AppState, entry: &LogEntry) -> ui::LogView {
     let base = ui::LogView {
-        seconds: seconds(entry.step),
+        seconds: seconds(entry.at),
         warning: entry.event.is_warning(),
         ..ui::LogView::default()
     };
@@ -245,12 +248,9 @@ fn log_view(state: &AppState, entry: &LogEntry) -> ui::LogView {
                 .into(),
             ..base
         },
-        LogEvent::Paused => ui::LogView {
-            event: ui::LogEvent::Paused,
-            ..base
-        },
-        LogEvent::Resumed => ui::LogView {
-            event: ui::LogEvent::Resumed,
+        LogEvent::Failed { reason } => ui::LogView {
+            event: ui::LogEvent::Failed,
+            text: reason.as_str().into(),
             ..base
         },
         LogEvent::Stopped { found } => ui::LogView {
@@ -270,7 +270,6 @@ fn phase(phase: Phase) -> ui::DiscoveryPhase {
     match phase {
         Phase::Idle => ui::DiscoveryPhase::Idle,
         Phase::Running => ui::DiscoveryPhase::Running,
-        Phase::Paused => ui::DiscoveryPhase::Paused,
         Phase::Finished => ui::DiscoveryPhase::Finished,
     }
 }
@@ -288,11 +287,7 @@ fn method(method: Method) -> ui::DiscoveryMethod {
     match method {
         Method::Arp => ui::DiscoveryMethod::Arp,
         Method::Ping => ui::DiscoveryMethod::Ping,
-        Method::Snmp => ui::DiscoveryMethod::Snmp,
         Method::Mdns => ui::DiscoveryMethod::Mdns,
-        Method::Upnp => ui::DiscoveryMethod::Upnp,
-        Method::Onvif => ui::DiscoveryMethod::Onvif,
-        Method::Lldp => ui::DiscoveryMethod::Lldp,
     }
 }
 

@@ -1,8 +1,10 @@
-//! The sample home network, the fake refresh a discovery run makes of it, and the hosts that
-//! answer the run (see [`answers`]).
+//! The sample home network the map starts with, and for the tests the hosts that answer a
+//! discovery run of it (see [`answers`]).
 
+#[cfg(test)]
 mod answers;
 
+#[cfg(test)]
 pub(crate) use answers::answers;
 
 use std::net::Ipv4Addr;
@@ -21,12 +23,6 @@ const HOME: [u8; 3] = [192, 168, 1];
 const LAB: [u8; 3] = [10, 0, 0];
 const DOCKER: [u8; 3] = [172, 17, 0];
 const WAN: [u8; 3] = [203, 0, 113];
-
-/// The device whose status flips on each simulated scan, so a refresh visibly changes something.
-const FLAKY_DEVICE: DeviceId = DeviceId(13);
-
-/// Minutes added to "last seen" of devices that do not answer a simulated scan.
-const SCAN_INTERVAL_MINUTES: u32 = 30;
 
 /// The custom roles the sample virtual machines and containers share, each with its kind's icon.
 const VIRTUAL_MACHINE: &str = "Virtual machine";
@@ -75,9 +71,9 @@ impl Spec {
                 host: DeviceId(host),
                 kind,
             }),
-            manufacturer: self.manufacturer,
-            model: self.model,
-            hostname: self.hostname,
+            manufacturer: self.manufacturer.map(str::to_owned),
+            model: self.model.map(str::to_owned),
+            hostname: self.hostname.map(str::to_owned),
             last_seen: LastSeen {
                 minutes_ago: self.minutes_ago,
             },
@@ -647,25 +643,6 @@ fn add_groups(network: &mut Network) {
     }
 }
 
-/// Pretends a scan ran: responsive devices are seen now, silent ones age, and one device flips
-/// between online and offline. No network access takes place.
-pub(crate) fn simulate_scan(network: &mut Network) {
-    if let Some(flaky) = network.device_mut(FLAKY_DEVICE) {
-        flaky.status = match flaky.status {
-            Status::Online => Status::Offline,
-            Status::Offline | Status::Unknown => Status::Online,
-        };
-    }
-    for device in network.devices_mut() {
-        device.last_seen.minutes_ago = match device.status {
-            Status::Online => 0,
-            Status::Offline | Status::Unknown => {
-                device.last_seen.minutes_ago + SCAN_INTERVAL_MINUTES
-            }
-        };
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -803,22 +780,5 @@ mod tests {
                 assert_eq!(plugged, Some(CardId(host)), "{}: into its host", guest.name);
             }
         }
-    }
-
-    #[test]
-    fn scan_flips_the_flaky_device_and_ages_silent_ones() {
-        let mut network = network();
-        let status = |n: &Network, id| n.device(id).map(|d| (d.status, d.last_seen.minutes_ago));
-        let before = status(&network, DeviceId(15));
-
-        simulate_scan(&mut network);
-        assert_eq!(status(&network, FLAKY_DEVICE), Some((Status::Offline, 30)));
-        assert_eq!(
-            status(&network, DeviceId(15)),
-            before.map(|(s, m)| (s, m + 30))
-        );
-
-        simulate_scan(&mut network);
-        assert_eq!(status(&network, FLAKY_DEVICE), Some((Status::Online, 0)));
     }
 }

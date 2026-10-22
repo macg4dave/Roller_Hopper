@@ -10,6 +10,7 @@ mod install;
 mod response;
 mod run;
 mod samples;
+pub(crate) mod saved_prompt;
 
 pub(crate) use generation::{Generation, MAX_CONTEXT_TOKENS};
 pub(crate) use install::{InstallError, install};
@@ -68,15 +69,11 @@ impl Choice {
     }
 }
 
-/// The identification prompt, shared with the evaluation tool so both ask the same thing. The
-/// tool holds its answers to the schema while generating; the AI settings window runs whatever
-/// prompt the user edits, so it does not, and the schema is part of the prompt. It is the
-/// model's instruction, not UI text, so it is not translated.
-pub(crate) const PROMPT: &str = concat!(
-    include_str!("../tools/ai/prompt.md"),
-    "\nAnswer with JSON matching this schema:\n",
-    include_str!("../tools/ai/schema.json"),
-);
+/// The default identification prompt, which the AI settings window starts from until the user
+/// changes it ([`saved_prompt`]). It names its own answer fields, so no schema is added. The
+/// evaluation tool reads its own `tools/ai/prompt.md` and schema. It is the model's
+/// instruction, not UI text, so it is not translated.
+pub(crate) const PROMPT: &str = include_str!("ai/default-prompt.txt");
 
 pub(crate) use samples::evidence_sample;
 
@@ -139,10 +136,15 @@ impl ModelFile {
     }
 }
 
-/// Where models are installed: the user's application data folder (`%APPDATA%` on Windows), or
-/// `None` when the system has none.
+/// The app's folder in the user's application data folder (`%APPDATA%` on Windows), or `None`
+/// when the system has none.
+pub(crate) fn data_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("Network Mapper"))
+}
+
+/// Where models are installed, in the app's data folder.
 pub(crate) fn models_dir() -> Option<PathBuf> {
-    dirs::data_dir().map(|d| d.join("Network Mapper").join("models"))
+    data_dir().map(|d| d.join("models"))
 }
 
 /// Whether this build can run models on an NVIDIA GPU (built with the `cuda` feature).

@@ -1,6 +1,6 @@
-//! A simulated discovery run over one subnet: it checks the addresses in steps, reveals the
-//! hosts that answer as it reaches them, flags those not on the map, and adds the ones the user
-//! picks. Which hosts answer is handed in (sample data); nothing here touches a real network.
+//! A discovery run over one subnet: it takes the hosts the scanner reports as they come, flags
+//! those not on the map, and adds the ones the user picks. The scanning itself is elsewhere
+//! (`crate::scan`); nothing here touches a network, so runs can be replayed in tests.
 
 mod found;
 mod moves;
@@ -9,6 +9,7 @@ pub(crate) use found::{Answer, Decision, Finding, Found, FoundFilter, Method};
 pub(crate) use moves::Parent;
 
 use std::net::Ipv4Addr;
+use std::time::{Duration, Instant};
 
 use ipnet::Ipv4Net;
 
@@ -16,14 +17,10 @@ use super::card::{CardId, MacAddr, NetworkCard};
 use super::device::{Device, DeviceId, DeviceKind, LastSeen, Status};
 use super::network::{ConnectionKind, Network};
 
-/// Steps a whole run takes, whatever the size of the subnet, so every run is short.
-pub(crate) const STEPS_PER_RUN: u32 = 40;
-
-/// What a run looks for. Without service detection, a host's make, model, hostname and the
-/// methods that tell what it is stay unknown.
+/// What a run looks for beyond which addresses answer. Without service detection, a host's
+/// hostname and the software on its ports stay unknown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ScanOptions {
-    pub(crate) ping_sweep: bool,
     pub(crate) port_scan: bool,
     pub(crate) service_detection: bool,
 }
@@ -31,7 +28,6 @@ pub(crate) struct ScanOptions {
 impl Default for ScanOptions {
     fn default() -> Self {
         Self {
-            ping_sweep: true,
             port_scan: true,
             service_detection: true,
         }
@@ -43,11 +39,11 @@ pub(crate) enum Phase {
     #[default]
     Idle,
     Running,
-    Paused,
     Finished,
 }
 
-/// What a run did and found, as data: the UI words it.
+/// What a run did and found, as data: the UI words it. When it `Failed`, the `reason` is the
+/// system's or scanner's own message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum LogEvent {
     Started { target: Ipv4Net },
@@ -55,8 +51,7 @@ pub(crate) enum LogEvent {
     Discovered { name: String, ip: Ipv4Addr },
     Unidentified { ip: Ipv4Addr, mac: Option<MacAddr> },
     PossibleDuplicate { ip: Ipv4Addr, of: DeviceId },
-    Paused,
-    Resumed,
+    Failed { reason: String },
     Stopped { found: usize },
     Finished { found: usize },
 }
@@ -66,22 +61,26 @@ impl LogEvent {
     pub(crate) fn is_warning(&self) -> bool {
         matches!(
             self,
-            Self::Unidentified { .. } | Self::PossibleDuplicate { .. }
+            Self::Unidentified { .. } | Self::PossibleDuplicate { .. } | Self::Failed { .. }
         )
     }
 }
 
-/// A log line, at the step of the run it happened in.
+/// A log line, at the time into the run it happened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LogEntry {
-    pub(crate) step: u32,
+    pub(crate) at: Duration,
     pub(crate) event: LogEvent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Discovery {
     pub(crate) options: ScanOptions,
-    /// The subnet to scan next, or being scanned.
+    /// The subnets this computer is on, which the user picks the next run's from. A subnet on
+    /// the map is not one of them unless the computer is on it: mapping a network is no
+    /// permission to scan it.
+    pub(crate) targets: Vec<Ipv4Net>,
+    /// The subnet picked to scan next, or being scanned.
     pub(crate) target: Option<Ipv4Net>,
     pub(crate) filter: FoundFilter,
     /// The found host shown in the details, by its place in [`Self::found`].
@@ -89,13 +88,15 @@ pub(crate) struct Discovery {
     /// The card of that host shown instead, by its place among the host's cards.
     pub(crate) selected_card: Option<usize>,
     phase: Phase,
-    /// Every host the run will find, in address order; the first `revealed` have been reached.
+    /// The hosts found, in the order they were reported; [`Self::shown`] puts them in address
+    /// order. Their places here never change while they are listed.
     hosts: Vec<Found>,
-    revealed: usize,
     /// Addresses checked so far, of `addresses`.
     swept: usize,
     addresses: usize,
-    steps: u32,
+    /// When the run started, and how long it took once it ended.
+    started: Option<Instant>,
+    took: Option<Duration>,
     log: Vec<LogEntry>,
 }
 
@@ -104,14 +105,19 @@ impl Discovery {
         self.phase
     }
 
-    /// Running or paused.
     pub(crate) fn busy(&self) -> bool {
-        matches!(self.phase, Phase::Running | Phase::Paused)
+        self.phase == Phase::Running
     }
 
-    /// The hosts found so far, in address order.
+    /// The subnet the page shows and the next run scans: the one picked, or else the first.
+    pub(crate) fn next_target(&self) -> Option<Ipv4Net> {
+        let picked = self.target.filter(|t| self.targets.contains(t));
+        picked.or_else(|| self.targets.first().copied())
+    }
+
+    /// The hosts found so far, in the order they were reported.
     pub(crate) fn found(&self) -> &[Found] {
-        self.hosts.get(..self.revealed).unwrap_or_default()
+        &self.hosts
     }
 
     /// Addresses checked so far, and in all.
@@ -119,8 +125,10 @@ impl Discovery {
         (self.swept, self.addresses)
     }
 
-    pub(crate) fn steps(&self) -> u32 {
-        self.steps
+    /// How long the run has been going, or took.
+    pub(crate) fn elapsed(&self) -> Duration {
+        let running = self.started.map(|s| s.elapsed());
+        self.took.or(running).unwrap_or_default()
     }
 
     pub(crate) fn log(&self) -> &[LogEntry] {
@@ -131,17 +139,19 @@ impl Discovery {
         self.found().iter().filter(|f| filter.admits(f)).count()
     }
 
-    /// The found hosts the filter lets through, by their place in [`Self::found`], each with how
-    /// many of them it runs within: as in the device list, a guest follows its host, indented
-    /// under it, and stands on its own when its host is not shown.
+    /// The found hosts the filter lets through, in address order, by their place in
+    /// [`Self::found`], each with how many of them it runs within: as in the device list, a
+    /// guest follows its host, indented under it, and stands on its own when its host is not
+    /// shown.
     pub(crate) fn shown(&self) -> Vec<(usize, usize)> {
         let found = self.found();
-        let admitted: Vec<usize> = found
+        let mut admitted: Vec<usize> = found
             .iter()
             .enumerate()
             .filter(|(_, f)| self.filter.admits(f))
             .map(|(index, _)| index)
             .collect();
+        admitted.sort_by_key(|&index| found.get(index).map(|f| f.ip));
         let host = |index: usize| {
             let host = found.get(index)?.device.guest?.host;
             let mut hosts = admitted.iter().copied();
@@ -167,89 +177,83 @@ impl Discovery {
         shown
     }
 
-    /// Starts a run over `target`, in which the hosts of `answers` on it answer.
-    pub(crate) fn start(&mut self, target: Ipv4Net, answers: Vec<Answer>, network: &Network) {
-        let options = self.options;
-        let mut hosts: Vec<Found> = answers
-            .into_iter()
-            .filter_map(|answer| Found::detect(answer, target, options, network))
-            .collect();
-        hosts.sort_by_key(|f| f.ip);
+    /// Starts a run over `target`, forgetting the last one's results. Refused (false) while a
+    /// run is busy.
+    pub(crate) fn start(&mut self, target: Ipv4Net) -> bool {
+        if self.busy() {
+            return false;
+        }
+        let addresses = target.hosts().count();
         *self = Self {
-            options,
+            options: self.options,
+            targets: std::mem::take(&mut self.targets),
             target: Some(target),
             filter: self.filter,
             phase: Phase::Running,
-            hosts,
-            addresses: target.hosts().count(),
+            addresses,
+            started: Some(Instant::now()),
             ..Self::default()
         };
         self.note(LogEvent::Started { target });
-        if options.ping_sweep {
-            let addresses = self.addresses;
-            self.note(LogEvent::Sweep { addresses });
-        }
-    }
-
-    /// Pauses a running scan, or resumes a paused one.
-    pub(crate) fn toggle_pause(&mut self) {
-        let (phase, event) = match self.phase {
-            Phase::Running => (Phase::Paused, LogEvent::Paused),
-            Phase::Paused => (Phase::Running, LogEvent::Resumed),
-            Phase::Idle | Phase::Finished => return,
-        };
-        self.phase = phase;
-        self.note(event);
-    }
-
-    /// Ends the scan where it got to: hosts it has not reached are not found. True if it was
-    /// running or paused.
-    pub(crate) fn stop(&mut self) -> bool {
-        if !self.busy() {
-            return false;
-        }
-        self.hosts.truncate(self.revealed);
-        self.phase = Phase::Finished;
-        let found = self.hosts.len();
-        self.note(LogEvent::Stopped { found });
+        self.note(LogEvent::Sweep { addresses });
         true
     }
 
-    /// One step of a running scan: checks the next addresses and reveals the hosts among them.
-    /// True when this step finishes the run.
-    pub(crate) fn step(&mut self) -> bool {
-        if self.phase != Phase::Running {
-            return false;
+    /// Notes how many addresses the running scan has checked.
+    pub(crate) fn checked(&mut self, swept: usize) {
+        if self.busy() {
+            self.swept = swept.min(self.addresses);
         }
-        self.steps += 1;
-        let stride = self.addresses.div_ceil(STEPS_PER_RUN as usize);
-        self.swept = (self.swept + stride).min(self.addresses);
-        let first = self.target.map_or(0, |t| u32::from(t.network()));
-        while let Some(host) = self.hosts.get(self.revealed)
-            && (u32::from(host.ip).saturating_sub(first) as usize) <= self.swept
-        {
-            let event = host.event();
-            self.revealed += 1;
-            if let Some(event) = event {
+    }
+
+    /// Takes a host the running scan found; one not on the subnet scanned is no answer to it.
+    pub(crate) fn answer(&mut self, answer: Answer, network: &Network) {
+        let Some(target) = self.target.filter(|_| self.busy()) else {
+            return;
+        };
+        if let Some(found) = Found::detect(answer, target, network) {
+            if let Some(event) = found.event() {
                 self.note(event);
             }
+            self.hosts.push(found);
         }
-        if self.swept < self.addresses {
+    }
+
+    /// Ends the scan once every address is checked. True if it was running.
+    pub(crate) fn finish(&mut self) -> bool {
+        self.swept = self.addresses;
+        self.end(|found| LogEvent::Finished { found })
+    }
+
+    /// Ends the scan where it got to, keeping the hosts found so far. True if it was running.
+    pub(crate) fn stop(&mut self) -> bool {
+        self.end(|found| LogEvent::Stopped { found })
+    }
+
+    /// Ends the scan when it cannot go on, keeping the hosts found so far. True if it was
+    /// running.
+    pub(crate) fn fail(&mut self, reason: String) -> bool {
+        self.end(|_| LogEvent::Failed { reason })
+    }
+
+    fn end(&mut self, event: impl FnOnce(usize) -> LogEvent) -> bool {
+        if !self.busy() {
             return false;
         }
+        self.took = Some(self.elapsed());
         self.phase = Phase::Finished;
         let found = self.hosts.len();
-        self.note(LogEvent::Finished { found });
+        self.note(event(found));
         true
     }
 
     fn note(&mut self, event: LogEvent) {
-        let step = self.steps;
-        self.log.push(LogEntry { step, event });
+        let at = self.elapsed();
+        self.log.push(LogEntry { at, event });
     }
 
     fn found_mut(&mut self, index: usize) -> Option<&mut Found> {
-        self.hosts.get_mut(..self.revealed)?.get_mut(index)
+        self.hosts.get_mut(index)
     }
 
     /// Edits a host not on the map (its name, role, icon or notes), which it will be added
@@ -317,20 +321,22 @@ mod tests {
         "192.168.1.0/24".parse().unwrap()
     }
 
-    fn started(options: ScanOptions) -> (Discovery, Network) {
-        let network = mock_data::network();
-        let mut discovery = Discovery {
-            options,
-            ..Discovery::default()
-        };
-        discovery.start(home(), mock_data::answers(&network), &network);
-        (discovery, network)
+    /// A run of `target` that every sample answer has reached, still running.
+    fn answered(target: Ipv4Net, network: &Network) -> Discovery {
+        let mut discovery = Discovery::default();
+        assert!(discovery.start(target));
+        for answer in mock_data::answers(network) {
+            discovery.answer(answer, network);
+        }
+        discovery
     }
 
-    fn run_to_end(discovery: &mut Discovery) {
-        for _ in 0..STEPS_PER_RUN {
-            discovery.step();
-        }
+    /// A finished run of the home network, and the sample network it ran against.
+    fn finished() -> (Discovery, Network) {
+        let network = mock_data::network();
+        let mut discovery = answered(home(), &network);
+        assert!(discovery.finish());
+        (discovery, network)
     }
 
     fn named<'a>(discovery: &'a Discovery, name: &str) -> (usize, &'a Found) {
@@ -339,89 +345,105 @@ mod tests {
     }
 
     #[test]
-    fn a_run_reveals_each_host_on_its_subnet_once_in_address_order() {
-        let (mut discovery, _) = started(ScanOptions::default());
-        assert_eq!(discovery.found(), []);
-        discovery.step();
-        let early = discovery.found().len();
-        run_to_end(&mut discovery);
+    fn a_run_takes_the_hosts_on_its_subnet_and_shows_them_in_address_order() {
+        let network = mock_data::network();
+        let mut discovery = Discovery::default();
+        discovery.start(home());
+        assert_eq!(
+            (discovery.found(), discovery.progress()),
+            (&[][..], (0, 254))
+        );
+        discovery.checked(100);
+        assert_eq!(discovery.progress(), (100, 254));
+        let mut answers = mock_data::answers(&network);
+        answers.reverse();
+        for answer in answers {
+            discovery.answer(answer, &network);
+        }
+        assert!(discovery.finish());
         assert_eq!(discovery.phase(), Phase::Finished);
         assert_eq!(discovery.progress(), (254, 254));
-        assert!(discovery.steps() <= STEPS_PER_RUN);
-        let ips: Vec<_> = discovery.found().iter().map(|f| f.ip).collect();
-        assert!(early < ips.len(), "hosts appear as the sweep reaches them");
+        let found = discovery.found();
+        let ips: Vec<_> = discovery
+            .shown()
+            .iter()
+            .map(|&(i, _)| found[i].ip)
+            .collect();
+        assert_eq!(ips.len(), found.len());
         assert!(ips.windows(2).all(|w| w[0] < w[1]), "in order, once each");
         assert!(ips.iter().all(|ip| home().contains(ip)));
-        assert!(!discovery.step(), "a finished run stays finished");
+
+        assert!(!discovery.finish(), "a finished run stays finished");
+        let late = mock_data::answers(&network).swap_remove(0);
+        discovery.answer(late, &network);
+        assert_eq!(discovery.found().len(), ips.len(), "nothing after the end");
         let log = discovery.log();
         assert!(matches!(
             log.first().unwrap().event,
             LogEvent::Started { .. }
         ));
-        let found = ips.len();
-        assert_eq!(log.last().unwrap().event, LogEvent::Finished { found });
+        let end = LogEvent::Finished { found: ips.len() };
+        assert_eq!(log.last().unwrap().event, end);
     }
 
     #[test]
-    fn pausing_freezes_the_run_and_stopping_ends_it_with_what_was_found() {
-        let (mut discovery, _) = started(ScanOptions::default());
-        discovery.step();
-        discovery.toggle_pause();
-        let paused = discovery.progress();
-        discovery.step();
-        assert_eq!(discovery.progress(), paused);
-        discovery.toggle_pause();
-        discovery.step();
-        assert!(discovery.progress().0 > paused.0);
-
+    fn stopping_ends_the_run_with_what_was_found() {
+        let network = mock_data::network();
+        let mut discovery = Discovery::default();
+        discovery.start(home());
+        for answer in mock_data::answers(&network).into_iter().take(3) {
+            discovery.answer(answer, &network);
+        }
+        assert!(!discovery.start(home()), "a busy run is not restarted");
         let found = discovery.found().len();
         assert!(discovery.stop());
         assert_eq!(discovery.phase(), Phase::Finished);
-        run_to_end(&mut discovery);
-        assert_eq!(discovery.found().len(), found);
         assert_eq!(
             discovery.log().last().unwrap().event,
             LogEvent::Stopped { found }
         );
         assert!(!discovery.stop());
+        assert!(discovery.start(home()), "a new run starts afresh");
+        assert_eq!(discovery.found(), []);
     }
 
     #[test]
-    fn options_limit_what_is_found_out() {
-        let options = ScanOptions {
-            ping_sweep: false,
-            port_scan: false,
-            service_detection: false,
+    fn a_failed_run_keeps_its_hosts_and_says_why() {
+        let network = mock_data::network();
+        let mut discovery = answered(home(), &network);
+        let found = discovery.found().len();
+        assert!(discovery.fail("no route".into()));
+        assert_eq!(discovery.found().len(), found);
+        let last = &discovery.log().last().unwrap().event;
+        assert_eq!(
+            *last,
+            LogEvent::Failed {
+                reason: "no route".into()
+            }
+        );
+        assert!(last.is_warning());
+        assert!(!discovery.fail("again".into()));
+    }
+
+    #[test]
+    fn the_next_target_is_the_one_picked_or_the_first_of_this_computers_subnets() {
+        let lab: Ipv4Net = "10.0.0.0/24".parse().unwrap();
+        let mut discovery = Discovery {
+            targets: vec![home(), lab],
+            ..Discovery::default()
         };
-        let (mut discovery, _) = started(options);
-        run_to_end(&mut discovery);
-        let found = discovery.found();
-        assert_ne!(found, []);
-        for f in found {
-            assert!(
-                f.device
-                    .cards
-                    .iter()
-                    .all(|c| c.services.iter().count() == 0)
-            );
-            assert_eq!(f.device.manufacturer, None);
-            assert!(
-                f.methods.iter().all(|&m| m == Method::Arp),
-                "{:?}",
-                f.methods
-            );
-        }
-        let sweep = discovery
-            .log()
-            .iter()
-            .any(|e| matches!(e.event, LogEvent::Sweep { .. }));
-        assert!(!sweep);
+        assert_eq!(discovery.next_target(), Some(home()));
+        discovery.target = Some(lab);
+        assert_eq!(discovery.next_target(), Some(lab));
+        discovery.target = "172.16.0.0/24".parse().ok();
+        assert_eq!(discovery.next_target(), Some(home()), "not one of ours");
+        discovery.start(lab);
+        assert_eq!(discovery.targets, [home(), lab], "kept for the next run");
     }
 
     #[test]
     fn hosts_are_matched_with_the_map_by_mac_address() {
-        let (mut discovery, _) = started(ScanOptions::default());
-        run_to_end(&mut discovery);
+        let (discovery, _) = finished();
         let camera = DeviceId(12);
         let finding = |name| named(&discovery, name).1.finding;
         assert_eq!(finding("IP Camera Front"), Finding::Known(camera));
@@ -445,8 +467,7 @@ mod tests {
 
     #[test]
     fn a_new_host_is_added_once_as_edited_behind_the_router() {
-        let (mut discovery, mut network) = started(ScanOptions::default());
-        run_to_end(&mut discovery);
+        let (mut discovery, mut network) = finished();
         let (index, _) = named(&discovery, "Kitchen Speaker");
         discovery.edit(index, |d| {
             d.name = "Kitchen".into();
@@ -490,8 +511,7 @@ mod tests {
 
     #[test]
     fn an_ignored_host_stays_off_the_map_until_added() {
-        let (mut discovery, mut network) = started(ScanOptions::default());
-        run_to_end(&mut discovery);
+        let (mut discovery, mut network) = finished();
         let before = network.clone();
         let (index, _) = named(&discovery, "Guest Laptop");
         discovery.ignore(index);
@@ -507,29 +527,19 @@ mod tests {
             let cards = docker.device.cards.iter();
             cards.map(|c| docker.seen(c)).collect::<Vec<_>>()
         };
-        let (mut home, _) = started(ScanOptions::default());
-        run_to_end(&mut home);
+        let (home, network) = finished();
         assert_eq!(
             docker_seen(&home),
             [true, false],
             "its lab card is on another subnet"
         );
-
-        let network = mock_data::network();
-        let mut lab = Discovery::default();
-        lab.start(
-            "10.0.0.0/24".parse().unwrap(),
-            mock_data::answers(&network),
-            &network,
-        );
-        run_to_end(&mut lab);
+        let lab = answered("10.0.0.0/24".parse().unwrap(), &network);
         assert_eq!(docker_seen(&lab), [false, true]);
     }
 
     #[test]
     fn guests_follow_their_host_in_the_results_unless_it_is_filtered_out() {
-        let (mut discovery, _) = started(ScanOptions::default());
-        run_to_end(&mut discovery);
+        let (mut discovery, _) = finished();
         let shown = discovery.shown();
         assert_eq!(shown.len(), discovery.found().len(), "each host once");
         let place = |name| {
@@ -559,14 +569,12 @@ mod tests {
     #[test]
     fn another_subnet_finds_only_its_own_hosts() {
         let network = mock_data::network();
-        let lab: Ipv4Net = "10.0.0.0/24".parse().unwrap();
-        let mut discovery = Discovery::default();
-        discovery.start(lab, mock_data::answers(&network), &network);
-        run_to_end(&mut discovery);
+        let discovery = answered("10.0.0.0/24".parse().unwrap(), &network);
+        let found = discovery.found();
         let names: Vec<_> = discovery
-            .found()
+            .shown()
             .iter()
-            .map(|f| f.device.name.as_str())
+            .map(|&(i, _)| found[i].device.name.as_str())
             .collect();
         assert_eq!(names, ["Lab Router", "Lab Switch", "Docker Host", "Lab Pi"]);
     }

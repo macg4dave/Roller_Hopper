@@ -166,7 +166,7 @@ pub(crate) struct Guest {
     pub(crate) kind: GuestKind,
 }
 
-/// How long before the latest (simulated) scan the device was last seen.
+/// How long before the latest scan the device was last seen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) struct LastSeen {
     pub(crate) minutes_ago: u32,
@@ -186,9 +186,9 @@ pub(crate) struct Device {
     pub(crate) cards: Vec<NetworkCard>,
     /// The host it runs on, for a virtual machine or container; `None` for a physical device.
     pub(crate) guest: Option<Guest>,
-    pub(crate) manufacturer: Option<&'static str>,
-    pub(crate) model: Option<&'static str>,
-    pub(crate) hostname: Option<&'static str>,
+    pub(crate) manufacturer: Option<String>,
+    pub(crate) model: Option<String>,
+    pub(crate) hostname: Option<String>,
     pub(crate) last_seen: LastSeen,
     pub(crate) notes: String,
 }

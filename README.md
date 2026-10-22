@@ -1,7 +1,10 @@
 # Network Mapper
 
-A Rust + Slint desktop **UI prototype** of a local network mapper. It uses in-memory mock data
-only — there is no real network discovery or scanning. Settings → AI settings installs an AI
+A Rust + Slint desktop **UI prototype** of a local network mapper. The map shows in-memory
+sample data. The discovery page scans one of this computer's subnets for real with
+[netscli-core](https://crates.io/crates/netscli-core): a ping sweep with the neighbour table and
+mDNS names, then TCP connects to common ports and reverse DNS. Found hosts can be added to the
+map, but nothing is saved yet. Settings → AI settings installs an AI
 model (Qwen3-4B-Q4_K_M, 2.5 GB) into the user's application data folder,
 loads one with [Candle](https://github.com/huggingface/candle), and runs it on an editable
 prompt and sample device file. The app runs Qwen3 GGUF files only; another one placed in that
@@ -44,17 +47,19 @@ src/main.rs        wiring only: build state, create window, connect callbacks, r
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices with their network cards, virtual machines and
                    containers; the map's tree of network cards, roles, groups,
-                   layout; the simulated discovery run) — no Slint imports
+                   layout; the discovery run's record) — no Slint imports
+src/scan.rs        the real scan on its own Tokio threads, and in scan/ this computer's
+                   subnets and turning what a host answers into model data — no Slint imports
 src/ai.rs          the AI models offered, pinned by revision and hash, where they are
                    installed, the user's own GGUF files, the prompt and sample; ai/ downloads
                    and checks them and runs the loaded one with mistral.rs (CPU or CUDA) — no
                    Slint imports
 src/ai_settings.rs the AI settings window: install, load/unload, GPU switch and Run in the
                    background
-src/mock_data.rs   the sample network, and in mock_data/ the hosts a discovery run finds
+src/mock_data.rs   the sample network, and in mock_data/ the hosts a test discovery run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
 src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,
-                   lines, motion), discovery (the timed scan run), view/ (sending state to
+                   lines, motion), discovery (running a scan), view/ (sending state to
                    the UI), model ↔ Slint conversion, reading the icon folder, choosing the
                    language
 ui/                .slint files: app window, panels, canvas, edit and discovery pages,

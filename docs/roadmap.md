@@ -27,26 +27,29 @@ until their qualification task is done.
 - Map nodes are interface cards (`CardId`) drawn with their device's icon; a device can own
   several cards and nested VMs/containers. The discovery page, pre-Add editing of name, role,
   icon and notes, mapped-device editing, Add/Ignore and Show on map all work with sample data.
-- The simulated scan (`ui_bridge/discovery.rs`, `mock_data/answers.rs`) refreshes every sample
-  status at Start, then reveals precomputed answers on a 150 ms timer over about forty steps.
-  Methods, confidence and elapsed time are made up.
+- Discovery scans for real, ahead of the milestone order at the user's request (`src/scan.rs`):
+  netscli-core's `DiscoverEngine` sweep (ping, neighbour table, mDNS names; its own name lookup
+  off, since on Windows it runs `ping -a`), then `PortScanner` TCP connects to 31 common ports
+  and hickory reverse DNS per host. It runs on an owned Tokio runtime; hosts arrive as model
+  `Answer`s over a channel the UI drains every 200 ms; Stop drops the task and shuts the runtime
+  down without waiting. Names and banners are bounded and control characters rejected. Found
+  hosts are of Unknown kind with no maker (a card's OUI vendor is not the device's maker). Only
+  built and unit-tested on Windows; no live run yet. The sample map stays; the fixture answers
+  in `mock_data/answers.rs` are test-only.
 - Gaps before real data:
-  - Runtime metadata is `Option<&'static str>`; a card has one optional IPv4/prefix and gateway.
+  - A card has one optional IPv4/prefix and gateway.
   - Services are keyed by port number alone, with no transport (TCP vs UDP).
   - IP uniqueness is global. Discovery matches on MAC+IP, flags changed-IP/same-MAC as a
     possible duplicate, and treats a missing MAC as new.
   - IDs are "current maximum plus one", so they can be reused. The bridge uses `i32` with
     `-1` for no selection, while the IDs are `u32`.
   - Status and relative last-seen are device-wide; empty values also mean "not collected".
-  - Stop becomes Finished, with no cancelled, failed or partial outcome. Discovery results
-    and actions use list indices.
-  - Targets come from mapped prefixes, so an empty project cannot bootstrap a scan.
+  - Stop and failure both end in Finished (failure logs the system's message), with no
+    separate cancelled or partial outcome. Discovery results and actions use list indices.
   - `Network::new` trusts its inputs, and mutable access bypasses address validation. Layout
     starts from rootless cards, so an imported rootless cycle would get no positions.
   - `Found::detect` keeps the whole fixture device. Add copies it, and insertion connects its
     first card without rechecking address conflicts.
-  - A newcomer added to the map can be found twice on the next simulated run, because
-    mapped answers and fixed newcomers overlap. This was found by reading, not reproduced.
   - Every update and motion tick rebuilds view vectors. Measure before adding caches.
 - Map placement: a drop calls `Network::connect`, updates `Arrangement` and re-runs layout,
   so display reparenting creates a network link. `lay_out` replaces all positions and startup
@@ -75,9 +78,9 @@ controls, changed only where the brief or an agreed decision says. It already de
 - Move network card: moving a card to another device merges them, confirmed when it is the
   source device's only card; its guests follow. On the discovery page a found card can move
   onto a mapped device, which is how a possible duplicate is resolved by hand.
-- Discovery: a Network choice; Ping sweep, Port scan and Service detection options; Start or
-  Scan again, Pause/Resume and Stop; "n of m addresses checked" with elapsed time and a
-  progress bar. Results show name, found-by method chips, confidence and the flags New,
+- Discovery: a Network choice; Port scan and Service detection options; Start or Scan again
+  and Stop (Pause was removed until BE-0057 can pause for real); "n of m addresses checked"
+  with elapsed time and a progress bar. Results show name, found-by method chips and the flags New,
   Duplicate?, Added and Ignored, with "Same MAC as"; a mapped card outside the scanned network
   shows Not seen. A mapped host gets its normal editor and Show on map; others get a pre-Add
   form, Add to map and Ignore. The log has Info and Warning lines, and the header shows
@@ -92,11 +95,13 @@ Gaps the UI shows against the plan:
   install Qwen3-4B-Q4_K_M (the only model offered), or list the user's own GGUF files from the
   models folder (Qwen3 only); Load or Unload one with Candle (CPU, or GPU in a `cuda` build,
   with a CUDA light), and Run it on an editable prompt and sample file (an nmap-style NAS) with
-  adjustable answer settings. The settings and edited texts are not saved. Its output is shown raw, not checked against the
+  adjustable answer settings. An edited prompt is saved in the app's data folder until it is
+  restored to the default (`src/ai/default-prompt.txt`); the answer settings and device text
+  are not saved. Its output is shown raw, not checked against the
   schema; it fills no device fields; both automation switches stay disabled, saying why.
-- The Network choice lists mapped prefixes; the three option checkboxes predate the agreed
-  depth and pace presets; method labels include SNMP, ONVIF and LLDP, which are not offered;
-  Confidence is a made-up percentage.
+- The Network choice lists this computer's interface subnets, the default route's first, with
+  no VPN/virtual labelling or routes; the two option checkboxes predate the agreed depth and
+  pace presets; there is no confidence until the agreed Strong/Some/Weak lands (BE-0072).
 - The card IP hint promises an address "no other card has" (global uniqueness); manual ports
   have no transport; last seen is relative ("At last scan", "n minutes ago").
 - Forget device comes back on restart, and Ignore lasts one run. Custom icons are referenced
@@ -243,7 +248,7 @@ Gaps the UI shows against the plan:
 
 | Need | Candidate (inspected) | Notes |
 | --- | --- | --- |
-| Runtime, channels, cancellation | tokio 1.54.0, tokio-util 0.7.20 | MIT, MSRV 1.85. Minimal features, not `full`. Bounded `mpsc`, `watch` for progress, `JoinSet`, `CancellationToken`. |
+| Runtime, channels, cancellation | **In use: tokio 1.54.0** (`rt-multi-thread` only; netscli-core pulls in `full` anyway); tokio-util 0.7.20 a candidate | MIT, MSRV 1.85. `JoinSet` is used; `CancellationToken`, `watch` and bounded `mpsc` come with BE-0056. |
 | Interfaces and gateways | netdev 0.46.3 | MIT, three OSes. Only if netscli-core lacks it. Doesn't pick per-destination routes. |
 | mDNS/DNS-SD | mdns-sd 0.21.6 | MIT/Apache, MSRV 1.71, in process. Not zeroconf (needs Bonjour/Avahi). |
 | DNS | hickory-resolver 0.26.3 | MSRV 1.88. System resolver policy; no default public DNS/DoH. Check split DNS over VPN. |
@@ -460,7 +465,7 @@ in its own worktree). A failed model check blocks the AI milestones but not inve
 | [M-009](#m-009-project-foundation-checkpoint) | Useful manual project before live scanning | M-008 |
 | [M-010](#m-010-explicit-scan-scope-and-capabilities) | Validated scope and honest capability preview | M-009, BE-0007–BE-0009 |
 | [M-011](#m-011-background-run-lifecycle) | Responsive bounded run control | M-010 |
-| [M-012](#m-012-connect-real-scanner-observations) | Real engine results replace simulation | M-011 |
+| [M-012](#m-012-connect-real-scanner-observations) | Real engine results become scoped observations | M-011 |
 | [M-013](#m-013-identity-continuity-and-admission) | Repeat runs reconcile safely | M-012 |
 | [M-014](#m-014-real-discovery-review-workflow) | Existing review/edit/Add flow with real data | M-013 |
 | [M-015](#m-015-reliable-updates-history-and-conflicts) | Saved, traceable updates preserve user work | M-014 |
@@ -494,8 +499,7 @@ Goal: extend the current pure model rather than create a second inventory.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0013 | Replace static-only metadata with owned runtime values while preserving existing device/card/edit behaviour. | — |
-| BE-0014 | Non-reused device/card/run/result keys with a saved allocator; bounded Slint handles kept separate. Check exhaustion and save/reopen continuity. | BE-0013 |
+| BE-0014 | Non-reused device/card/run/result keys with a saved allocator; bounded Slint handles kept separate. Check exhaustion and save/reopen continuity. | — |
 | BE-0015 | Named network contexts and scoped address associations; the card editor's uniqueness rule and hint become per context. Equal private IPs in different contexts stay distinct; a missing remote MAC or prefix is valid. | BE-0014 |
 | BE-0016 | Keep device → card and VM/container ownership with validated references; reject cycles. Move network card (guests following) uses the same validation. Never infer guest ownership from vendor or IP. | BE-0015 |
 | BE-0017 | Service endpoints keyed by context/address/transport/port with typed outcomes (not tested, denied, no response…). TCP and UDP on one port stay distinct; the edit page's manual ports gain a transport (TCP by default) and keep their description. | BE-0015 |
@@ -598,9 +602,9 @@ Goal: truthful run settings before any network traffic.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0050 | Enumerate interfaces, addresses and routes through qualified APIs so an empty project can scan; the discovery page's Network choice offers these, not mapped prefixes; distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
+| BE-0050 | The Network choice already offers this computer's interface subnets (`scan/subnets.rs`); add routes and the source interface per target through qualified APIs, and distinguish VPN/virtual adapters and network contexts. | BE-0049, BE-0008 |
 | BE-0051 | Validate IPv4 addresses/CIDRs/exclusions lazily, including /31 and /32; show the source interface; mapped prefixes never grant permission. | BE-0050 |
-| BE-0052 | Replace the Ping sweep / Port scan / Service detection checkboxes with the agreed TCP port field and presets, named UDP methods, depth and pace; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
+| BE-0052 | Replace the Port scan / Service detection checkboxes and the fixed common-port list with the agreed TCP port field and presets, named UDP methods, depth and pace; TCP/service checks run without a ping reply; no blanket UDP sweep. | BE-0051 |
 | BE-0053 | Show available/unavailable methods with reasons, estimated work and limits before Start; reject invalid or oversized work without probing. | BE-0052, BE-0009 |
 | BE-0054 | Freeze context, targets, exclusions, ports, methods and limits into an immutable run configuration. | BE-0053 |
 
@@ -612,7 +616,7 @@ Goal: real run states without blocking the event loop.
 | --- | --- | --- |
 | BE-0055 | One active scan with its runtime/tasks off the UI thread, sending owned data into the existing document. | BE-0054 |
 | BE-0056 | Bounded non-blocking command/result flow, coalesced progress and UI drain budgets; Stop independent of a full queue; report coverage loss rather than dropping findings. | BE-0055 |
-| BE-0057 | Preparing/running/pausing/paused/cancelling and completed/cancelled/failed/partial outcomes, using upstream pause/cancel rather than a new scheduler. | BE-0056, BE-0009 |
+| BE-0057 | Preparing/running/pausing/paused/cancelling and completed/cancelled/failed/partial outcomes, using upstream pause/cancel rather than a new scheduler; bring back the Pause control. | BE-0056, BE-0009 |
 | BE-0058 | Reject stale run/generation events; apply accepted observations before the terminal outcome; Stop keeps valid partial results. | BE-0057 |
 | BE-0059 | Runs survive navigation, with the header showing Scanning…; close or confirmed project replacement cancels and accounts for owned work. | BE-0058, BE-0044 |
 | BE-0060 | Test monotonic elapsed time, stage counters, indeterminate work, partial method failure, full queues and bounded shutdown. | BE-0059 |
@@ -623,9 +627,8 @@ Goal: replace fabricated answers with the qualified library's probes.
 
 | Task ID | Task / completion check | Depends on |
 | --- | --- | --- |
-| BE-0061 | Integrate the qualified netscli-core with capture off and only approved features; remove the fake status refresh and timer answers from the real Start path. | BE-0060, BE-0007 |
-| BE-0062 | Convert incremental TCP and identification results into scoped endpoint observations with typed outcomes, provenance and timestamps; never copy whole fixture devices. | BE-0061 |
-| BE-0063 | Add qualified named UDP/discovery methods (and supplementary crates only where the engine lacks them); stop subscriptions at run end; record overload/disconnect/permission failures. Method chips name only offered methods (drop SNMP, ONVIF and LLDP). | BE-0062, BE-0008 |
+| BE-0062 | Convert the scan's TCP and identification results (now flattened into a found `Device` per host) into scoped endpoint observations with typed outcomes, provenance and timestamps. | BE-0060, BE-0007 |
+| BE-0063 | Add qualified named UDP/discovery methods (and supplementary crates only where the engine lacks them); stop subscriptions at run end; record overload/disconnect/permission failures. On Linux/macOS without raw sockets the sweep's "Ping" is a TCP probe: label it so. | BE-0062, BE-0008 |
 | BE-0064 | Bound untrusted reply sizes, parser depth, timeouts and description URL redirects; redact credentials; replies cannot run commands or widen targets. | BE-0063 |
 | BE-0065 | Test local and routed/no-MAC cases, denied optional methods and partial failure with deterministic fixtures; a live smoke run only with approved targets. | BE-0064 |
 
@@ -640,7 +643,7 @@ Goal: repeat scans update the right card and device without overriding the user.
 | BE-0068 | Upsert repeated findings and services under stable keys, including multi-card devices; missing MAC/prefix stays unknown. | BE-0067 |
 | BE-0069 | Revalidate review/Add against the latest revision and selected endpoint/context; admit only supported cards; reject stale candidates. | BE-0068 |
 | BE-0070 | Update mapped devices through shared reconciliation without touching manual fields, guest ownership or placement. | BE-0069 |
-| BE-0071 | Test repeat-run deduplication, changed/reused IPs, routed hosts, multi-card ownership and delayed events, including the fixture-copy and newcomer-duplication risks. | BE-0070 |
+| BE-0071 | Test repeat-run deduplication, changed/reused IPs, routed hosts, multi-card ownership and delayed events, including the whole-device-copy risk. | BE-0070 |
 
 ## M-014: Real discovery review workflow
 
@@ -651,7 +654,7 @@ Goal: reuse existing pages and forms for real results.
 | BE-0072 | Results, counts/filters, stable result selection and details driven by real evidence, labelled with method, age, the agreed Strong/Some/Weak confidence and possible duplicates ("Same MAC as"). | BE-0071 |
 | BE-0073 | Keep pre-Add name/role/icon/notes editing and Add/leave-unadded; moving a found card onto a mapped device resolves a duplicate; Ignore is saved per identity and context, with an Ignored filter and a way to stop ignoring. Pre-Add edits become protected manual values. | BE-0072 |
 | BE-0074 | Reuse mapped-device editing and Show on map; discovery and inventory share the device; drafts survive result batches. | BE-0073 |
-| BE-0075 | Real progress, pause/in-flight, terminal/partial states and per-method issues in the existing controls and log; remove "simulated" wording from the real path. | BE-0074 |
+| BE-0075 | Real progress, pause/in-flight, terminal/partial states and per-method issues in the existing controls and log. | BE-0074 |
 | BE-0076 | Check start/stop/navigation, review/edit/Add, keyboard focus and translations; record approved GUI checks separately from source checks. | BE-0075 |
 
 ## M-015: Reliable updates, history and conflicts

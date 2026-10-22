@@ -4,8 +4,9 @@ What a computer needs to run Network Mapper. There is no installer or download y
 built from source (see [building.md](building.md)), and these are the requirements for the
 computer that runs that build.
 
-Network Mapper is still a prototype. It shows a sample network and simulated scans; it does
-not scan your network yet.
+Network Mapper is still a prototype. Its map shows a sample network, and its discovery page
+scans your network for real: it pings every address of the subnet you pick and probes common
+TCP ports. Only scan networks you are allowed to.
 
 ## The computer
 
@@ -14,7 +15,7 @@ not scan your network yet.
 | Operating system | Windows 11, 64-bit. Linux and macOS are planned but not yet confirmed. |
 | Processor | 64-bit x86. A build optimised for AVX2 (most processors from 2015 on) runs only on processors with AVX2. |
 | Disk | Space for the app and its `icons` folder, plus the AI model you install (see below). |
-| Internet | Only to install an AI model. Nothing else is downloaded and nothing is sent. |
+| Internet | Only to install an AI model. Nothing else is downloaded and nothing is sent to the internet; a scan stays on the subnet you pick, apart from reverse DNS lookups to your usual DNS server. |
 
 Keep the `icons` folder beside `network-mapper.exe`: the app reads device icons from there.
 

@@ -46,6 +46,8 @@ export component AiSettingsWindow inherits Window {
     in-out property <bool> use-gpu;
 
     in-out property <string> prompt;
+    // The edited prompt could not be saved in the app's data folder.
+    in property <bool> prompt-not-saved;
     in-out property <string> input;
     in-out property <int> evidence-index: 0;
     in property <string> output;
@@ -73,8 +75,10 @@ export component AiSettingsWindow inherits Window {
     callback stop();
     callback restore-generation();
     callback select-thinking(bool);
-    // Puts back the default prompt and sample evidence.
+    // Puts back the default prompt, forgetting the saved one, and the sample evidence.
     callback restore-texts();
+    // The user changed the prompt; it is saved for next time.
+    callback prompt-edited(string);
     callback select-evidence(int);
 
     title: @tr("ai-settings.title");
@@ -242,6 +246,8 @@ export component AiSettingsWindow inherits Window {
                     run(prompt, input) => { root.run(prompt, input); }
                     stop => { root.stop(); }
                     restore-texts => { root.restore-texts(); }
+                    prompt-not-saved: root.prompt-not-saved;
+                    prompt-edited(text) => { root.prompt-edited(text); }
                     select-evidence(index) => { root.select-evidence(index); }
                 }
             }

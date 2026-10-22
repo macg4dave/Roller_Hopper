@@ -41,15 +41,13 @@ export component DiscoveryResults inherits VerticalLayout {
                 overflow: elide;
             }
             for heading in [
-                { text: @tr("details.ip"), width: FoundColumns.ip, align: TextHorizontalAlignment.left },
-                { text: @tr("details.mac"), width: FoundColumns.mac, align: TextHorizontalAlignment.left },
-                { text: @tr("details.role"), width: FoundColumns.role, align: TextHorizontalAlignment.left },
-                { text: @tr("discovery.found-by"), width: FoundColumns.methods, align: TextHorizontalAlignment.left },
-                { text: @tr("discovery.confidence"), width: FoundColumns.confidence, align: TextHorizontalAlignment.right },
+                { text: @tr("details.ip"), width: FoundColumns.ip },
+                { text: @tr("details.mac"), width: FoundColumns.mac },
+                { text: @tr("details.role"), width: FoundColumns.role },
+                { text: @tr("discovery.found-by"), width: FoundColumns.methods },
             ]: Text {
                 text: heading.text;
                 width: heading.width;
-                horizontal-alignment: heading.align;
                 font-size: Theme.font-small;
                 font-weight: 600;
                 color: Theme.text-muted;

@@ -1,5 +1,6 @@
-//! The discovery page: a simulated scan, stepped on by a timer, and editing the hosts it finds
-//! and adding them to the map. The run itself is [`crate::model::Discovery`]; [`super::view`] sends it to the UI.
+//! The discovery page: scanning one of this computer's subnets for real, and editing the hosts
+//! found and adding them to the map. The run's record is [`crate::model::Discovery`], the
+//! scanning [`crate::scan`]; [`super::view`] sends the run to the UI.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,38 +10,39 @@ use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
 use super::{AppState, Selection, convert, handler, update};
-use crate::mock_data;
-use crate::model::{Found, FoundFilter, Phase};
+use crate::model::{Found, FoundFilter, ScanOptions};
+use crate::scan::{self, Event, Scan};
 use crate::ui::{self, AppWindow, Bridge};
 
-/// One step of a run, so a whole run takes about six seconds.
-pub(super) const STEP: Duration = Duration::from_millis(150);
+/// How often a running scan's progress and hosts are taken in and shown.
+const POLL: Duration = Duration::from_millis(200);
 
 impl AppState {
-    /// The subnet the page shows and the next run scans: the one picked, or else the first.
-    pub(super) fn discovery_target(&self) -> Option<Ipv4Net> {
-        let subnets = self.network.subnets();
-        let picked = self.discovery.target.filter(|t| subnets.contains(t));
-        picked.or_else(|| subnets.first().copied())
+    /// Starts recording a run of the subnet picked, unless one is busy: what to scan, and how.
+    fn begin_discovery(&mut self) -> Option<(Ipv4Net, ScanOptions)> {
+        let target = self.discovery.next_target()?;
+        let options = self.discovery.options;
+        self.discovery.start(target).then_some((target, options))
     }
 
-    /// Starts a run, unless one is busy. Which devices answer it is decided as it starts, by
-    /// the sample network's fake refresh.
-    fn start_discovery(&mut self) {
-        let Some(target) = self.discovery_target().filter(|_| !self.discovery.busy()) else {
-            return;
-        };
-        mock_data::simulate_scan(&mut self.network);
-        let answers = mock_data::answers(&self.network);
-        self.discovery.start(target, answers, &self.network);
-    }
-
-    /// One step of the run, counting the scan once it finishes. True while it is running.
-    fn step_discovery(&mut self) -> bool {
-        if self.discovery.step() {
-            self.scans += 1;
+    /// Takes in a running scan's progress and what it reported, counting the scan once it
+    /// finishes. True while it is still running.
+    fn take_scan(&mut self, checked: usize, events: impl IntoIterator<Item = Event>) -> bool {
+        self.discovery.checked(checked);
+        for event in events {
+            match event {
+                Event::Host(answer) => self.discovery.answer(*answer, &self.network),
+                Event::Finished => {
+                    if self.discovery.finish() {
+                        self.scans += 1;
+                    }
+                }
+                Event::Failed(reason) => {
+                    self.discovery.fail(reason);
+                }
+            }
         }
-        self.discovery.phase() == Phase::Running
+        self.discovery.busy()
     }
 
     fn stop_discovery(&mut self) {
@@ -80,7 +82,6 @@ impl AppState {
     fn set_discovery_option(&mut self, option: ui::DiscoveryOption, on: bool) {
         let options = &mut self.discovery.options;
         match option {
-            ui::DiscoveryOption::PingSweep => options.ping_sweep = on,
             ui::DiscoveryOption::PortScan => options.port_scan = on,
             ui::DiscoveryOption::ServiceDetection => options.service_detection = on,
         }
@@ -96,31 +97,40 @@ fn filter_from_ui(filter: ui::FoundFilter) -> FoundFilter {
     }
 }
 
-/// The run's controls and options, the result filter, and the found hosts.
+/// The run's controls and options, the result filter, and the found hosts. The subnets to
+/// choose from are this computer's, read once here.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
-    let timer = Rc::new(Timer::default());
-    let run = {
-        let (ui, state) = (ui.as_weak(), Rc::clone(state));
-        Rc::new(move || run(&ui, &state, &timer))
-    };
+    state.borrow_mut().discovery.targets = scan::local_subnets();
+    let running = Rc::new(Running::default());
 
-    let start = handler(ui, state, |st, ()| st.start_discovery());
-    let start_run = Rc::clone(&run);
+    let (start_ui, start_state, start_running) =
+        (ui.as_weak(), Rc::clone(state), Rc::clone(&running));
     bridge.on_start_discovery(move || {
-        start(());
-        start_run();
-    });
-    let pause = handler(ui, state, |st, ()| st.discovery.toggle_pause());
-    bridge.on_pause_discovery(move || {
-        pause(());
-        run();
+        let mut started = None;
+        update(&start_ui, &start_state, |st| {
+            let Some((target, options)) = st.begin_discovery() else {
+                return;
+            };
+            match Scan::start(target, options) {
+                Ok(scan) => started = Some(scan),
+                Err(error) => {
+                    st.discovery.fail(error.to_string());
+                }
+            }
+        });
+        if let Some(scan) = started {
+            start_running.watch(scan, &start_ui, &start_state);
+        }
     });
     let stop = handler(ui, state, |st, ()| st.stop_discovery());
-    bridge.on_stop_discovery(move || stop(()));
+    bridge.on_stop_discovery(move || {
+        running.end();
+        stop(());
+    });
 
     bridge.on_set_discovery_target(handler(ui, state, |st, index| {
-        st.discovery.target = st.network.subnets().get(convert::index(index)).copied();
+        st.discovery.target = st.discovery.targets.get(convert::index(index)).copied();
     }));
     let set_option = handler(ui, state, |st, (option, on)| {
         st.set_discovery_option(option, on);
@@ -200,62 +210,99 @@ fn connect_found_cards(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_set_found_card_icon(move |index, card, icon| set_icon((index, card, icon)));
 }
 
-/// Steps the run on until it stops running: finished, paused or stopped (or the window closed).
-fn run(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, timer: &Rc<Timer>) {
-    if timer.running() {
-        return;
+/// The scan running, if any, and the timer that takes in what it reports.
+#[derive(Default)]
+struct Running {
+    scan: RefCell<Option<Scan>>,
+    timer: Timer,
+}
+
+impl Running {
+    /// Takes in what `started` reports until it ends (or the window closes).
+    fn watch(self: &Rc<Self>, started: Scan, ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>) {
+        self.scan.replace(Some(started));
+        let (ui, state, this) = (ui.clone(), Rc::clone(state), Rc::downgrade(self));
+        self.timer.start(TimerMode::Repeated, POLL, move || {
+            let Some(running) = this.upgrade() else {
+                return;
+            };
+            let mut going = false;
+            if let Some(scan) = running.scan.borrow().as_ref() {
+                update(&ui, &state, |st| {
+                    going = st.take_scan(scan.checked(), scan.events());
+                });
+            }
+            if !going {
+                running.end();
+            }
+        });
     }
-    let (ui, state, this) = (ui.clone(), Rc::clone(state), Rc::downgrade(timer));
-    timer.start(TimerMode::Repeated, STEP, move || {
-        let mut running = false;
-        update(&ui, &state, |st| running = st.step_discovery());
-        if let Some(stepping) = this.upgrade().filter(|_| !running) {
-            stepping.stop();
-        }
-    });
+
+    /// Stops taking in the scan, and stops the scan if it is still going.
+    fn end(&self) {
+        self.timer.stop();
+        self.scan.take();
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mock_data;
+    use crate::model::Phase;
 
+    fn home() -> Ipv4Net {
+        "192.168.1.0/24".parse().unwrap()
+    }
+
+    /// The sample answers, as the scan reports them.
+    fn hosts(state: &AppState) -> Vec<Event> {
+        let answers = mock_data::answers(&state.network).into_iter();
+        answers
+            .map(|answer| Event::Host(Box::new(answer)))
+            .collect()
+    }
+
+    /// A run of the home network that every sample answer has reached.
     fn finished(state: &mut AppState) {
-        state.start_discovery();
-        while state.step_discovery() {}
+        state.discovery.targets = vec![home()];
+        state.begin_discovery();
+        let mut events = hosts(state);
+        events.push(Event::Finished);
+        state.take_scan(254, events);
     }
 
     #[test]
-    fn a_run_refreshes_the_sample_network_and_counts_once_finished() {
+    fn a_run_takes_in_the_scan_and_counts_once_finished() {
         let mut state = AppState::new(mock_data::network());
-        state.start_discovery();
-        assert!(state.discovery.busy());
+        assert_eq!(state.begin_discovery(), None, "nothing this computer is on");
+        state.discovery.targets = vec![home()];
+        let run = Some((home(), ScanOptions::default()));
+        assert_eq!(state.begin_discovery(), run);
+        assert_eq!(state.begin_discovery(), None, "a busy run is not restarted");
+        let hosts = hosts(&state);
+        assert!(state.take_scan(100, hosts));
+        assert_eq!(state.discovery.progress(), (100, 254));
+        assert_ne!(state.discovery.found(), []);
         assert_eq!(state.scans, 0);
-        state.step_discovery();
-        state.start_discovery();
-        assert_eq!(state.discovery.steps(), 1, "a busy run is not restarted");
-        while state.step_discovery() {}
-        assert_eq!(state.discovery.phase(), Phase::Finished);
+        assert!(!state.take_scan(254, [Event::Finished]));
+        assert_eq!((state.discovery.phase(), state.scans), (Phase::Finished, 1));
+        assert!(!state.take_scan(254, [Event::Finished]), "counted once");
         assert_eq!(state.scans, 1);
-        assert_ne!(state.network, mock_data::network(), "the fake refresh ran");
     }
 
     #[test]
-    fn stopping_counts_the_scan_and_an_idle_stop_does_nothing() {
+    fn stopping_counts_the_scan_failing_does_not_and_an_idle_stop_does_nothing() {
         let mut state = AppState::new(mock_data::network());
+        state.discovery.targets = vec![home()];
         state.stop_discovery();
         assert_eq!(state.scans, 0);
-        state.start_discovery();
+        state.begin_discovery();
+        assert!(!state.take_scan(0, [Event::Failed("no route".into())]));
+        assert_eq!((state.discovery.phase(), state.scans), (Phase::Finished, 0));
+        state.begin_discovery();
         state.stop_discovery();
         assert_eq!((state.discovery.phase(), state.scans), (Phase::Finished, 1));
-    }
-
-    #[test]
-    fn the_target_is_the_one_picked_or_the_first_subnet() {
-        let mut state = AppState::new(mock_data::network());
-        let subnets = state.network.subnets();
-        assert_eq!(state.discovery_target(), subnets.first().copied());
-        state.discovery.target = subnets.get(1).copied();
-        assert_eq!(state.discovery_target(), subnets.get(1).copied());
     }
 
     #[test]

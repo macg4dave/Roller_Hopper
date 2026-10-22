@@ -13,7 +13,6 @@ export global FoundColumns {
     out property <length> mac: 128px;
     out property <length> role: 100px;
     out property <length> methods: 160px;
-    out property <length> confidence: 44px;
 }
 
 // One row of the discovery results. As in the device list, a host heads a group, with each of
@@ -149,14 +148,6 @@ export component FoundRow inherits Rectangle {
             font-size: Theme.font-small;
             vertical-alignment: center;
             overflow: elide;
-        }
-        Text {
-            text: card ? "" : @tr("discovery.percent", found.confidence);
-            width: FoundColumns.confidence;
-            color: found.confidence < 60 ? Theme.warning : Theme.text;
-            font-size: Theme.font-body;
-            horizontal-alignment: right;
-            vertical-alignment: center;
         }
     }
 }

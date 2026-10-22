@@ -267,12 +267,11 @@ mod tests {
     /// The sample network after a finished scan of the home subnet.
     fn scanned() -> AppState {
         let mut state = AppState::new(mock_data::network());
-        let home = "192.168.1.0/24".parse().unwrap();
-        let answers = mock_data::answers(&state.network);
-        state.discovery.start(home, answers, &state.network);
-        while state.discovery.busy() {
-            state.discovery.step();
+        state.discovery.start("192.168.1.0/24".parse().unwrap());
+        for answer in mock_data::answers(&state.network) {
+            state.discovery.answer(answer, &state.network);
         }
+        state.discovery.finish();
         state
     }
 

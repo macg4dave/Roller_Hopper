@@ -1,9 +1,11 @@
-//! Network Mapper: a UI prototype of a local network mapper using mock data only.
+//! Network Mapper: a UI prototype of a local network mapper. The map starts with sample data;
+//! the discovery page scans this computer's subnets for real.
 
 mod ai;
 mod ai_settings;
 mod mock_data;
 mod model;
+mod scan;
 mod ui;
 mod ui_bridge;
 

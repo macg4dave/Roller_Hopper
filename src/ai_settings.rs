@@ -10,7 +10,9 @@ use std::rc::Rc;
 
 use slint::{CloseRequestResponse, ComponentHandle, Model as _, ModelRc, SharedString, VecModel};
 
-use crate::ai::{self, Answered, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent};
+use crate::ai::{
+    self, Answered, End, Generation, Job, MODELS, RunError, Worker, WorkerEvent, saved_prompt,
+};
 use crate::ui::{AiSettingsWindow, AnswerEnd, AppWindow, ModelState};
 
 /// Opens the window from Settings, bringing back the same window each time.
@@ -18,7 +20,9 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     let window = AiSettingsWindow::new()?;
     install::connect(&window);
     show_installed(&window);
-    restore_texts(&window);
+    let prompt = ai::data_dir().map_or_else(|| ai::PROMPT.to_owned(), |d| saved_prompt::load(&d));
+    window.set_prompt(prompt.into());
+    show_evidence(&window, 0);
     restore_generation(&window);
     window.set_max_context_tokens(i32::try_from(ai::MAX_CONTEXT_TOKENS).unwrap_or(i32::MAX));
     // A CUDA build uses the GPU unless the user switches it off.
@@ -28,6 +32,12 @@ pub(crate) fn connect(ui: &AppWindow) -> Result<(), slint::PlatformError> {
     window.on_restore_texts(move || {
         if let Some(open) = restoring.upgrade() {
             restore_texts(&open);
+        }
+    });
+    let editing = window.as_weak();
+    window.on_prompt_edited(move |text| {
+        if let Some(open) = editing.upgrade() {
+            save_prompt(&open, &text);
         }
     });
     let selecting = window.as_weak();
@@ -143,9 +153,17 @@ fn load(window: &AiSettingsWindow, worker: &Worker, name: &str, gpu: bool) {
     send(window, worker, Job::Load { model, gpu });
 }
 
+/// Puts back the default prompt, forgetting the user's saved one, and the first sample.
 fn restore_texts(window: &AiSettingsWindow) {
     window.set_prompt(ai::PROMPT.into());
+    save_prompt(window, ai::PROMPT);
     show_evidence(window, 0);
+}
+
+/// Keeps the user's prompt for next time, saying so in the window when it cannot be saved.
+fn save_prompt(window: &AiSettingsWindow, text: &str) {
+    let saved = ai::data_dir().is_some_and(|dir| saved_prompt::save(&dir, text).is_ok());
+    window.set_prompt_not_saved(!saved);
 }
 
 fn show_evidence(window: &AiSettingsWindow, index: i32) {

@@ -137,6 +137,9 @@ msgstr "The model stopped with an error part-way through its answer."
 msgid "ai-settings.prompt"
 msgstr "Prompt"
 
+msgid "ai-settings.prompt-not-saved"
+msgstr "Your changes to the prompt could not be saved, so they will be lost when the app closes."
+
 msgid "ai-settings.input"
 msgstr "Device text (sent exactly as written)"
 
@@ -928,7 +931,7 @@ msgstr "{} (inferred link)"
 
 # Status bar. scan.loaded / scan.complete: {0} is scan.devices, {1} the number offline.
 msgid "scan.running"
-msgstr "Simulating a scan of the sample network…"
+msgstr "Scanning…"
 
 msgid "scan.devices"
 msgid_plural "scan.devices.plural"
@@ -939,23 +942,20 @@ msgid "scan.loaded"
 msgstr "Sample network loaded · {0}, {1} offline"
 
 msgid "scan.complete"
-msgstr "Simulated scan complete · {0}, {1} offline"
+msgstr "Scan complete · {0}, {1} offline"
 
 msgid "status-bar.sample-only"
-msgstr "Sample data only. No real network access."
+msgstr "The map shows sample data. Scans are real."
 
-# Discovery page, opened by the Scan button. The scan is simulated with the sample data.
+# Discovery page, opened by the Scan button. The scan probes the real network.
 msgid "discovery.title"
 msgstr "Discovery"
 
-msgid "discovery.simulated"
-msgstr "A simulated scan of the sample network. Nothing is sent on your network."
+msgid "discovery.notice"
+msgstr "Scans the network for real: it pings every address and probes common ports. Only scan networks you are allowed to."
 
 msgid "discovery.network"
 msgstr "Network"
-
-msgid "discovery.option.ping-sweep"
-msgstr "Ping sweep"
 
 msgid "discovery.option.port-scan"
 msgstr "Port scan"
@@ -969,12 +969,6 @@ msgstr "Start scan"
 msgid "discovery.start-again"
 msgstr "Scan again"
 
-msgid "discovery.pause"
-msgstr "Pause"
-
-msgid "discovery.resume"
-msgstr "Resume"
-
 msgid "discovery.stop"
 msgstr "Stop"
 
@@ -984,9 +978,6 @@ msgstr "Ready to scan {}"
 
 msgid "discovery.heading.running"
 msgstr "Scanning {}…"
-
-msgid "discovery.heading.paused"
-msgstr "Paused scanning {}"
 
 msgid "discovery.heading.finished"
 msgstr "Finished scanning {}"
@@ -1016,12 +1007,6 @@ msgstr "Name"
 
 msgid "discovery.found-by"
 msgstr "Found by"
-
-msgid "discovery.confidence"
-msgstr "Confidence"
-
-msgid "discovery.percent"
-msgstr "{}%"
 
 # By a found host's network card that is not on the subnet scanned.
 msgid "discovery.not-seen"
@@ -1054,27 +1039,15 @@ msgstr "Added"
 msgid "flag.ignored"
 msgstr "Ignored"
 
-# How a host was found or identified.
+# How a host was found or named.
 msgid "method.arp"
 msgstr "ARP"
 
 msgid "method.ping"
 msgstr "Ping"
 
-msgid "method.snmp"
-msgstr "SNMP"
-
 msgid "method.mdns"
 msgstr "mDNS"
-
-msgid "method.upnp"
-msgstr "UPnP"
-
-msgid "method.onvif"
-msgstr "ONVIF"
-
-msgid "method.lldp"
-msgstr "LLDP"
 
 msgid "discovery.details.empty"
 msgstr "Select a host to see what the scan found out about it."
@@ -1103,7 +1076,7 @@ msgstr "Warning"
 
 # {} is a subnet.
 msgid "log.started"
-msgstr "Started a simulated scan of {}"
+msgstr "Started a scan of {}"
 
 # {} is a number of addresses.
 msgid "log.sweep"
@@ -1115,17 +1088,15 @@ msgstr "Found {0} at {1}"
 
 # {0} is an IP address, {1} a MAC address.
 msgid "log.unidentified"
-msgstr "Could not tell what the host at {0} is ({1})"
+msgstr "No name found for the host at {0} ({1})"
 
 # {0} is an IP address, {1} the name of the device on the map with the same MAC address.
 msgid "log.duplicate"
 msgstr "The host at {0} has the same MAC address as {1}"
 
-msgid "log.paused"
-msgstr "Paused"
-
-msgid "log.resumed"
-msgstr "Resumed"
+# {} is the system's or scanner's own message, not translated.
+msgid "log.failed"
+msgstr "The scan stopped: {}"
 
 msgid "log.stopped"
 msgid_plural "log.stopped.plural"

@@ -5,41 +5,27 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-use super::{LogEvent, ScanOptions};
+use super::LogEvent;
 use crate::model::card::{MacAddr, NetworkCard};
 use crate::model::device::{Device, DeviceId, DeviceKind};
 use crate::model::network::Network;
-use crate::model::services::Services;
 
-/// A way a host can be found or identified.
+/// A way a host was found or named.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Method {
+    /// The operating system's neighbour table had its MAC address.
     Arp,
     Ping,
-    Snmp,
+    /// It announced its name over mDNS.
     Mdns,
-    Upnp,
-    Onvif,
-    Lldp,
 }
 
-impl Method {
-    /// Whether it tells what a host is, beyond its address; only used with service detection.
-    fn identifies(self) -> bool {
-        match self {
-            Self::Arp | Self::Ping => false,
-            Self::Snmp | Self::Mdns | Self::Upnp | Self::Onvif | Self::Lldp => true,
-        }
-    }
-}
-
-/// A host that answers a scan, as the (simulated) network reports it.
+/// A host that answered a scan, as the scanner reports it: the device it looks like, with only
+/// what the scan's options found out, and how it was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Answer {
     pub(crate) device: Device,
     pub(crate) methods: Vec<Method>,
-    /// How sure the identification is, in per cent.
-    pub(crate) confidence: u8,
 }
 
 /// How a found host compares with the devices on the map, matched by MAC address.
@@ -83,7 +69,7 @@ impl FoundFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Found {
-    /// As detected, with only what the scan's options could find out, and all its cards.
+    /// As detected, with all its cards.
     pub(crate) device: Device,
     /// The subnet the run found it on; its cards elsewhere were not seen.
     pub(crate) subnet: Ipv4Net,
@@ -91,41 +77,19 @@ pub(crate) struct Found {
     pub(crate) ip: Ipv4Addr,
     pub(crate) mac: Option<MacAddr>,
     pub(crate) methods: Vec<Method>,
-    pub(crate) confidence: u8,
     pub(crate) finding: Finding,
     pub(crate) decision: Decision,
 }
 
 impl Found {
     /// What a scan of `target` finds of `answer`: nothing unless one of its cards is on it.
-    pub(super) fn detect(
-        answer: Answer,
-        target: Ipv4Net,
-        options: ScanOptions,
-        network: &Network,
-    ) -> Option<Self> {
-        let Answer {
-            mut device,
-            mut methods,
-            confidence,
-        } = answer;
+    pub(super) fn detect(answer: Answer, target: Ipv4Net, network: &Network) -> Option<Self> {
+        let Answer { device, methods } = answer;
         let on_target = device.cards.iter().find_map(|card| {
             let address = card.address.filter(|a| target.contains(&a.addr()))?;
             Some((address.addr(), card.mac))
         });
         let (ip, mac) = on_target?;
-        if !options.ping_sweep {
-            methods.retain(|&m| m != Method::Ping);
-        }
-        if !options.service_detection {
-            methods.retain(|m| !m.identifies());
-            (device.manufacturer, device.model, device.hostname) = (None, None, None);
-        }
-        if !options.port_scan {
-            for card in &mut device.cards {
-                card.services = Services::default();
-            }
-        }
         Some(Self {
             finding: finding(network, ip, mac),
             decision: Decision::Pending,
@@ -134,7 +98,6 @@ impl Found {
             ip,
             mac,
             methods,
-            confidence,
         })
     }
 
@@ -165,13 +128,15 @@ impl Found {
         }
     }
 
-    /// What the log says when the scan reaches it; nothing for a device already on the map.
+    /// What the log says when the scan finds it; nothing for a device already on the map. A
+    /// host that told no name is worth a look; one of unknown kind alone is not, since most
+    /// real hosts are.
     pub(super) fn event(&self) -> Option<LogEvent> {
         let ip = self.ip;
         match self.finding {
             Finding::Known(_) => None,
             Finding::Duplicate(of) => Some(LogEvent::PossibleDuplicate { ip, of }),
-            Finding::New if self.unidentified() => {
+            Finding::New if self.device.name.trim().is_empty() => {
                 Some(LogEvent::Unidentified { ip, mac: self.mac })
             }
             Finding::New => Some(LogEvent::Discovered {

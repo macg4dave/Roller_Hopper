@@ -19,10 +19,14 @@ export component AiTrial inherits VerticalLayout {
     in property <int> prompt-tokens;
     in property <float> first-token-seconds;
     in property <AnswerEnd> answer-end;
+    // The prompt the user edited could not be kept for next time.
+    in property <bool> prompt-not-saved;
 
     callback run(string, string);
     callback stop();
     callback restore-texts();
+    // The user changed the prompt, to be kept for next time.
+    callback prompt-edited(string);
     callback select-evidence(int);
 
     spacing: Theme.space-s;
@@ -43,6 +47,13 @@ export component AiTrial inherits VerticalLayout {
         text <=> root.prompt;
         wrap: word-wrap;
         vertical-stretch: 3;
+        edited(text) => { root.prompt-edited(text); }
+    }
+    if root.prompt-not-saved: Text {
+        text: @tr("ai-settings.prompt-not-saved");
+        color: Theme.warning;
+        font-size: Theme.font-small;
+        wrap: word-wrap;
     }
 
     HorizontalLayout {

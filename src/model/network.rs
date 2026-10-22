@@ -73,10 +73,6 @@ impl Network {
         &self.devices
     }
 
-    pub(crate) fn devices_mut(&mut self) -> impl Iterator<Item = &mut Device> {
-        self.devices.iter_mut()
-    }
-
     pub(crate) fn device(&self, id: DeviceId) -> Option<&Device> {
         self.devices.iter().find(|d| d.id == id)
     }

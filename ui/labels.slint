@@ -148,11 +148,7 @@ export global Labels {
     public pure function method(method: DiscoveryMethod) -> string {
         if method == DiscoveryMethod.arp { return @tr("method.arp"); }
         if method == DiscoveryMethod.ping { return @tr("method.ping"); }
-        if method == DiscoveryMethod.snmp { return @tr("method.snmp"); }
-        if method == DiscoveryMethod.mdns { return @tr("method.mdns"); }
-        if method == DiscoveryMethod.upnp { return @tr("method.upnp"); }
-        if method == DiscoveryMethod.onvif { return @tr("method.onvif"); }
-        return @tr("method.lldp");
+        return @tr("method.mdns");
     }
 
     // Minutes and seconds, as on a stopwatch.
@@ -180,7 +176,6 @@ export global Labels {
     // Over the progress bar: what the run is doing to which subnet.
     public pure function discovery-heading(phase: DiscoveryPhase, target: string) -> string {
         if phase == DiscoveryPhase.running { return @tr("discovery.heading.running", target); }
-        if phase == DiscoveryPhase.paused { return @tr("discovery.heading.paused", target); }
         if phase == DiscoveryPhase.finished { return @tr("discovery.heading.finished", target); }
         return @tr("discovery.heading.idle", target);
     }
@@ -191,8 +186,7 @@ export global Labels {
         if entry.event == LogEvent.discovered { return @tr("log.discovered", entry.text, entry.ip); }
         if entry.event == LogEvent.unidentified { return @tr("log.unidentified", entry.ip, entry.mac); }
         if entry.event == LogEvent.duplicate { return @tr("log.duplicate", entry.ip, device-name(entry.text)); }
-        if entry.event == LogEvent.paused { return @tr("log.paused"); }
-        if entry.event == LogEvent.resumed { return @tr("log.resumed"); }
+        if entry.event == LogEvent.failed { return @tr("log.failed", entry.text); }
         if entry.event == LogEvent.stopped { return @tr("log.stopped" | "log.stopped.plural" % entry.count); }
         return @tr("log.finished" | "log.finished.plural" % entry.count);
     }
