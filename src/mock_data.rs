@@ -10,8 +10,8 @@ use std::net::Ipv4Addr;
 use ipnet::Ipv4Net;
 
 use crate::model::{
-    CardId, CardLink, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Guest, GuestKind,
-    Icon, LastSeen, LineStyle, MacAddr, Network, NetworkCard, Role, Services, Status,
+    CardId, CardLink, ConnectionKind, Device, DeviceId, DeviceKind, GroupColour, Icon, LastSeen,
+    LineStyle, MacAddr, Network, NetworkCard, Role, Services, Status,
 };
 
 /// The home network's /24, that of the separate lab network behind the Lab Router, the
@@ -38,8 +38,6 @@ struct Spec {
     host: u8,
     prefix: u8,
     mac: [u8; 6],
-    /// The id of the device it runs on, for a virtual machine or container.
-    guest: Option<(u32, GuestKind)>,
     manufacturer: Option<&'static str>,
     model: Option<&'static str>,
     hostname: Option<&'static str>,
@@ -65,10 +63,6 @@ impl Spec {
                 .map(|card| NetworkCard { services, ..card })
                 .into_iter()
                 .collect(),
-            guest: self.guest.map(|(host, kind)| Guest {
-                host: DeviceId(host),
-                kind,
-            }),
             manufacturer: self.manufacturer.map(str::to_owned),
             model: self.model.map(str::to_owned),
             hostname: self.hostname.map(str::to_owned),
@@ -104,7 +98,6 @@ fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -
         host,
         prefix: 24,
         mac,
-        guest: None,
         manufacturer: None,
         model: None,
         hostname: None,
@@ -113,9 +106,6 @@ fn spec(id: u32, name: &'static str, kind: DeviceKind, host: u8, mac: [u8; 6]) -
         notes: "",
     }
 }
-
-const ON_LINUX_SERVER: Option<(u32, GuestKind)> = Some((6, GuestKind::VirtualMachine));
-const ON_DOCKER_HOST: Option<(u32, GuestKind)> = Some((19, GuestKind::Container));
 
 #[expect(
     clippy::too_many_lines,
@@ -328,7 +318,6 @@ fn devices() -> Vec<Device> {
         // Virtual machines on the Linux Server; BC:24:11 is the Proxmox MAC prefix.
         Spec {
             manufacturer: Some("Proxmox"),
-            guest: ON_LINUX_SERVER,
             hostname: Some("homeassistant"),
             services: &[(8123, "Home Assistant")],
             ..spec(
@@ -341,7 +330,6 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
-            guest: ON_LINUX_SERVER,
             hostname: Some("pihole"),
             services: &[(53, "DNS"), (80, "HTTP")],
             notes: "Blocks adverts for the whole network.",
@@ -355,7 +343,6 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
-            guest: ON_LINUX_SERVER,
             hostname: Some("docker"),
             services: &[(22, "SSH")],
             ..spec(
@@ -372,7 +359,6 @@ fn devices() -> Vec<Device> {
             hostname: Some("portainer"),
             subnet: DOCKER,
             prefix: 16,
-            guest: ON_DOCKER_HOST,
             services: &[(9443, "Portainer")],
             ..spec(
                 24,
@@ -387,7 +373,6 @@ fn devices() -> Vec<Device> {
             hostname: Some("proxy"),
             subnet: DOCKER,
             prefix: 16,
-            guest: ON_DOCKER_HOST,
             services: &[(80, "HTTP"), (81, "Admin"), (443, "HTTPS")],
             notes: "Reverse proxy for the home lab's web pages.",
             ..spec(
@@ -400,7 +385,6 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
-            guest: ON_LINUX_SERVER,
             hostname: Some("win11-vm"),
             services: &[(3389, "RDP")],
             status: Status::Offline,
@@ -416,7 +400,6 @@ fn devices() -> Vec<Device> {
         },
         Spec {
             manufacturer: Some("Proxmox"),
-            guest: ON_LINUX_SERVER,
             hostname: Some("ubuntu-dev"),
             services: &[(22, "SSH")],
             ..spec(
@@ -543,7 +526,7 @@ fn links() -> Vec<CardLink> {
         (3, 13, Inferred),
         (22, 23, Known),
         (22, DOCKER_LAB_CARD, Known),
-        // Each guest's card is plugged into its host's.
+        // Virtual devices use ordinary links to the physical devices running them.
         (6, 17, Known),
         (6, 18, Known),
         (6, 19, Known),
@@ -571,9 +554,13 @@ pub(crate) fn network() -> Network {
         (
             &[17, 18, 19, 20, 21],
             VIRTUAL_MACHINE,
-            GuestKind::VirtualMachine.icon(),
+            Icon::new("Virtual machines/Virtual machine"),
         ),
-        (&[24, 25], CONTAINER, GuestKind::Container.icon()),
+        (
+            &[24, 25],
+            CONTAINER,
+            Icon::new("Virtual machines/Container"),
+        ),
     ];
     for (ids, name, icon) in custom {
         let Some(role) = network.add_custom_role(name, icon) else {
@@ -591,7 +578,7 @@ pub(crate) fn network() -> Network {
 
 /// Example groups for the custom roles, as if the user had made them, beside the standard
 /// groups the standard roles are in: each with a pairing of colour and line style none of the
-/// others has. Guests' lines are dashed or dotted, and Other is left in no group.
+/// others has. Virtual-device lines are dashed or dotted, and Other is left in no group.
 fn add_groups(network: &mut Network) {
     let custom = |name: &str| Role::Custom(name.into());
     let groups = [
@@ -748,13 +735,10 @@ mod tests {
     }
 
     #[test]
-    fn guests_share_a_role_and_run_on_their_host() {
+    fn virtual_devices_use_roles_icons_and_normal_network_links() {
         let network = network();
         let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        for (name, kind, host, count) in [
-            (VIRTUAL_MACHINE, GuestKind::VirtualMachine, 6, 5),
-            (CONTAINER, GuestKind::Container, 19, 2),
-        ] {
+        for (name, host, count) in [(VIRTUAL_MACHINE, 6, 5), (CONTAINER, 19, 2)] {
             let role = Role::Custom(name.into());
             let icon = network
                 .role_icon(&role)
@@ -763,20 +747,20 @@ mod tests {
                 icon.is_some_and(|file| folder.join(file).is_file()),
                 "{name}: the icon ships with the app"
             );
-            let guests: Vec<_> = network
+            let devices: Vec<_> = network
                 .devices()
                 .iter()
                 .filter(|d| d.role == role)
                 .collect();
-            assert_eq!(guests.len(), count, "{name}");
-            for guest in guests {
-                let on = Some(Guest {
-                    host: DeviceId(host),
-                    kind,
-                });
-                assert_eq!(guest.guest, on, "{}", guest.name);
-                let plugged = network.uplink(guest.cards[0].id).map(|c| c.upstream);
-                assert_eq!(plugged, Some(CardId(host)), "{}: into its host", guest.name);
+            assert_eq!(devices.len(), count, "{name}");
+            for device in devices {
+                let plugged = network.uplink(device.cards[0].id).map(|c| c.upstream);
+                assert_eq!(
+                    plugged,
+                    Some(CardId(host)),
+                    "{}: linked normally",
+                    device.name
+                );
             }
         }
     }

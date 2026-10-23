@@ -476,10 +476,6 @@ msgstr "Name"
 msgid "details.role"
 msgstr "Role"
 
-# For a virtual machine or container: the device it runs on (see runs-on.*).
-msgid "details.runs-on"
-msgstr "Runs on"
-
 # One of the device's network cards.
 msgid "details.card"
 msgstr "Network card"
@@ -680,7 +676,7 @@ msgid "edit.forget"
 msgstr "Forget device"
 
 msgid "edit.forget-question"
-msgstr "Remove this device, with any virtual machines and containers on it, from the map and the list? It comes back when the app restarts."
+msgstr "Remove this device from the map and the list? It comes back when the app restarts."
 
 msgid "edit.forget-confirm"
 msgstr "Forget"
@@ -688,19 +684,9 @@ msgstr "Forget"
 msgid "edit.cancel"
 msgstr "Cancel"
 
-# The button above the device list, and its menu. What it adds starts blank and is selected,
-# so it can be filled in. A virtual machine runs on the selected device, named by {}.
+# The button above the device list. What it adds starts blank and is selected for editing.
 msgid "edit.add"
-msgstr "Add"
-
-msgid "edit.add-device"
-msgstr "Device"
-
-msgid "edit.add-guest"
-msgstr "Virtual machine"
-
-msgid "edit.add-guest-on"
-msgstr "Virtual machine on {}"
+msgstr "Add device"
 
 # The network cards of the device being edited, each opened from its row to edit it. A new card
 # starts blank and is selected, so its IP address and the rest can be filled in.
@@ -737,28 +723,6 @@ msgstr "Enter an IPv4 address, such as 192.168.1.1."
 
 msgid "edit.card-mac-hint"
 msgstr "Enter six pairs of hexadecimal digits, such as 3C:22:FB:1A:2B:3C."
-
-# The virtual machines and containers on the device being edited, listed with adding more (see
-# guest.*). Each is edited on its own, opened from its row.
-msgid "edit.guests"
-msgstr "Guests"
-
-# Under a guest's name in that list: what it runs as, then its IP address.
-msgid "edit.guest-summary"
-msgstr "{} · {}"
-
-# The button leading from a virtual machine or container back to its host, which is named on
-# the button.
-msgid "edit.guest-back"
-msgstr "Back to the host"
-
-# Whether the guest being edited is a virtual machine or a container.
-msgid "edit.guest-kind"
-msgstr "Runs as"
-
-# Adds a blank virtual machine to the device being edited, and opens it.
-msgid "edit.guest-add"
-msgstr "Add virtual machine"
 
 # The open ports of the device being edited.
 msgid "edit.port-number"
@@ -1063,20 +1027,6 @@ msgid "last-seen.days"
 msgid_plural "last-seen.days.plural"
 msgstr[0] "{n} day ago"
 msgstr[1] "{n} days ago"
-
-# What a guest runs as on its host.
-msgid "guest.virtual-machine"
-msgstr "Virtual machine"
-
-msgid "guest.container"
-msgstr "Container"
-
-# {} is the name of the device a guest runs on.
-msgid "runs-on.virtual-machine"
-msgstr "{} (virtual machine)"
-
-msgid "runs-on.container"
-msgstr "{} (container)"
 
 # {} is the name of the device it connects through.
 msgid "uplink.known"

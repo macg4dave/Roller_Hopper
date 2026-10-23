@@ -14,9 +14,7 @@ mod snap;
 
 pub(crate) use arrangement::{Arrangement, Level};
 pub(crate) use card::{CardId, MacAddr, NetworkCard};
-pub(crate) use device::{
-    Device, DeviceId, DeviceKind, Guest, GuestKind, Icon, LastSeen, Role, Status,
-};
+pub(crate) use device::{Device, DeviceId, DeviceKind, Icon, LastSeen, Role, Status};
 pub(crate) use discovery::{
     AiImportPhase, Answer, Decision, Discovery, Finding, Found, FoundFilter, FoundSort, LogEntry,
     LogEvent, Method, Parent, Phase, ScanMode, ScanOptions, ScanProgress, TargetError,

@@ -1,11 +1,10 @@
 //! The map's tree. Its nodes are the network cards, each drawn with its device's icon and
 //! name; devices themselves are not on the map. A card hangs from the card it is plugged into,
-//! and a card plugged in nowhere heads a tree of its own. A virtual machine's or container's
-//! card is plugged into a card of its host, like any other.
+//! and a card plugged in nowhere heads a tree of its own.
 
 use super::{CardLink, ConnectionKind, Network};
 use crate::model::card::CardId;
-use crate::model::device::{Device, DeviceId};
+use crate::model::device::Device;
 
 /// A line of the map's tree, from a card towards the router (`upstream`) to a card plugged
 /// into it (`downstream`).
@@ -116,11 +115,6 @@ impl Network {
         }
         true
     }
-
-    /// The device `id` runs on, for a guest.
-    pub(crate) fn host(&self, id: DeviceId) -> Option<DeviceId> {
-        Some(self.device(id)?.guest?.host)
-    }
 }
 
 #[cfg(test)]
@@ -152,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn a_guests_card_is_plugged_into_its_hosts_and_a_further_card_elsewhere() {
+    fn an_ordinary_virtual_devices_cards_use_normal_links() {
         let network = mock_data::network();
         let up = |card| network.uplink(card).map(|c| c.upstream);
         assert_eq!(up(DOCKER_HOST), Some(LINUX_SERVER));
@@ -176,7 +170,7 @@ mod tests {
         );
         assert!(
             network.is_within(DOCKER_HOST, ACCESS_POINT),
-            "and their guests"
+            "and downstream virtual devices"
         );
     }
 

@@ -1,5 +1,5 @@
 import { Button, ComboBox, TextEdit } from "std-widgets.slint";
-import { Bridge, GuestKind } from "bridge.slint";
+import { Bridge } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { ChildRow } from "components/child-row.slint";
@@ -9,26 +9,13 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 import { SelectableText } from "components/selectable-text.slint";
 
-// The selected device's editable fields: icon, name, role, its network cards and guests with
-// adding more, notes, and forgetting it. Used in the map details panel's edit mode and in the
+// The selected device's editable fields: icon, name, role, network cards, notes, and forgetting
+// it. Used in the map details panel's edit mode and in the
 // discovery details for a host on the map, which puts what the run found out
 // under the role as this form's children.
 export component DeviceForm inherits VerticalLayout {
     alignment: start;
     spacing: Theme.space-xs;
-
-    // A guest is a child of its host, which it leads back to.
-    if Bridge.details.host-id >= 0: HorizontalLayout {
-        alignment: start;
-        padding-bottom: Theme.space-s;
-        Button {
-            text: Labels.device-name(Bridge.details.host-name);
-            icon: @image-url("icons/chevron-left.svg");
-            colorize-icon: true;
-            accessible-label: @tr("edit.guest-back");
-            clicked => { Bridge.select(Bridge.details.host-id); }
-        }
-    }
 
     HorizontalLayout {
         spacing: Theme.space-m;
@@ -37,8 +24,7 @@ export component DeviceForm inherits VerticalLayout {
             width: 52px;
             height: 52px;
             icon: Bridge.details.icon;
-            // A guest's picker opens on the guest icons; a device's on its current icon's.
-            start-category: Bridge.details.guest != GuestKind.none ? Bridge.guest-icon-category : -1;
+            start-category: Bridge.details.icon.group;
             icon-size: 36px;
             tint: Theme.group-colour(Bridge.details.colour, Theme.accent);
             reset-text: @tr("edit.icon-from-role");
@@ -75,20 +61,8 @@ export component DeviceForm inherits VerticalLayout {
             selected => { Bridge.choose-role(self.current-index); }
         }
     }
-    // A guest can be a virtual machine or a container; a new one starts as a virtual machine.
-    if Bridge.details.guest != GuestKind.none: DetailField {
-        label: @tr("edit.guest-kind");
-        ComboBox {
-            // In GuestKind order, after none.
-            model: [Labels.guest-kind(GuestKind.virtual-machine), Labels.guest-kind(GuestKind.container)];
-            current-index: Bridge.details.guest == GuestKind.container ? 1 : 0;
-            accessible-label: @tr("edit.guest-kind");
-            selected => { Bridge.set-guest-kind(self.current-index == 1 ? GuestKind.container : GuestKind.virtual-machine); }
-        }
-    }
     @children
-    // Cards and guests are each edited on their own, opened from their row. A new one is blank
-    // and selected, so it can be filled in.
+    // Cards are edited on their own, opened from their row. A new one is blank and selected.
     DetailField {
         label: @tr("edit.cards");
         VerticalLayout {
@@ -108,30 +82,6 @@ export component DeviceForm inherits VerticalLayout {
                     icon: @image-url("icons/plus.svg");
                     colorize-icon: true;
                     clicked => { Bridge.add-card(); }
-                }
-            }
-        }
-    }
-    DetailField {
-        label: @tr("edit.guests");
-        VerticalLayout {
-            spacing: Theme.space-xs;
-            for guest in Bridge.guests: ChildRow {
-                icon: guest.icon;
-                start-category: Bridge.guest-icon-category;
-                tint: Theme.group-colour(guest.colour, Theme.accent);
-                name: Labels.device-name(guest.name);
-                detail: Labels.guest-summary(guest.kind, Labels.address(guest.ip, guest.dhcp));
-                picked(icon) => { Bridge.set-icon(guest.id, icon.id); }
-                clicked => { Bridge.select(guest.id); }
-            }
-            HorizontalLayout {
-                alignment: start;
-                Button {
-                    text: @tr("edit.guest-add");
-                    icon: @image-url("icons/plus.svg");
-                    colorize-icon: true;
-                    clicked => { Bridge.add-device(GuestKind.virtual-machine); }
                 }
             }
         }

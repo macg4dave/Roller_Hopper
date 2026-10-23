@@ -95,7 +95,7 @@ mod tests {
     const ROUTER_LAN: CardId = CardId(1);
 
     #[test]
-    fn a_guests_card_dragged_away_is_unplugged_like_any_other() {
+    fn a_virtual_devices_card_dragged_away_is_unplugged_like_any_other() {
         let mut state = AppState::new(mock_data::network());
         let docker_host = CardId(19);
         let far = Point {
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn a_guest_held_over_a_line_from_the_list_previews_it_and_goes_back_if_taken_off() {
+    fn a_virtual_device_held_over_a_line_previews_it_and_goes_back_if_taken_off() {
         let mut state = AppState::new(mock_data::network());
         // A container's first card has the container's id, like every sample device's.
         let (container, lab_pi) = (CardId(24), CardId(23));

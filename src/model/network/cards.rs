@@ -5,7 +5,7 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-use super::{ConnectionKind, Network, children};
+use super::{ConnectionKind, Network};
 use crate::model::card::MacAddr;
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::DeviceId;
@@ -78,20 +78,17 @@ impl Network {
         (owner.cards.len() == 1).then_some(owner.id)
     }
 
-    /// Whether `card` may become a child of `to`: a device other than its own and, when it is
-    /// its device's only card, not one running on that device, which then runs on `to`.
+    /// Whether `card` may become a child of a device other than its own.
     pub(crate) fn can_move_card(&self, card: CardId, to: DeviceId) -> bool {
         let Some(owner) = self.card_owner(card) else {
             return false;
         };
-        self.device(to).is_some()
-            && owner.id != to
-            && !(owner.cards.len() == 1 && self.runs_within(to, owner.id))
+        self.device(to).is_some() && owner.id != to
     }
 
     /// Makes `card` the last card of `to`, keeping its id, settings and links, apart from those
     /// to `to`'s other cards, as a device's cards are never plugged into each other. A device
-    /// left with no card is removed, and what ran on it runs on `to`. Refused (false) where
+    /// left with no card is removed. Refused (false) where
     /// [`Self::can_move_card`] does not allow it.
     pub(crate) fn move_card(&mut self, card: CardId, to: DeviceId) -> bool {
         if !self.can_move_card(card, to) {
@@ -114,10 +111,7 @@ impl Network {
         };
         self.links.retain(|l| !between(l));
         if let Some(gone) = emptied {
-            let guests = self.devices.iter_mut().filter_map(|d| d.guest.as_mut());
-            guests.filter(|g| g.host == gone).for_each(|g| g.host = to);
             self.devices.retain(|d| d.id != gone);
-            self.devices = children::hosts_first(std::mem::take(&mut self.devices));
         }
         true
     }
@@ -223,7 +217,7 @@ mod tests {
         assert!(!network.plug_card(SWITCH_CARD, Some(PC_CARD)), "loop");
         assert!(
             network.plug_card(DOCKER_HOME, Some(SWITCH_CARD)),
-            "a guest's too"
+            "a virtual device's too"
         );
         assert!(network.plug_card(card, None));
         assert!(network.uplink(card).is_none());
@@ -254,27 +248,6 @@ mod tests {
         assert!(network.move_card(DOCKER_LAB, DeviceId(22)));
         assert_eq!(network.device(docker).unwrap().cards.len(), 1, "kept");
         assert!(network.uplink(DOCKER_LAB).is_none(), "was the lab router's");
-    }
-
-    #[test]
-    fn what_ran_on_a_removed_device_runs_where_its_card_went() {
-        let mut network = mock_data::network();
-        let (server, docker, router) = (DeviceId(6), DeviceId(19), DeviceId(1));
-        let server_card = CardId(6);
-        assert!(!network.move_card(server_card, docker), "runs on it");
-        assert!(!network.move_card(server_card, DeviceId(6)), "its own");
-        assert!(!network.move_card(server_card, DeviceId(999)));
-        assert!(!network.move_card(CardId(999), router));
-        assert!(network.move_card(server_card, router));
-        assert!(network.device(server).is_none());
-        assert_eq!(network.host(docker), Some(router));
-        let devices = network.devices();
-        for (at, device) in devices.iter().enumerate().skip(1) {
-            if let Some(host) = network.host(device.id) {
-                let before = &devices[at - 1];
-                assert!(network.runs_within(before.id, host), "{}", device.name);
-            }
-        }
     }
 
     #[test]

@@ -157,31 +157,6 @@ impl Role {
     }
 }
 
-/// What a guest runs as on its host.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) enum GuestKind {
-    VirtualMachine,
-    Container,
-}
-
-impl GuestKind {
-    /// The icon a guest of this kind is shown with when neither it nor its role has one: one of
-    /// the icons that ship with the app. Their category is the one a guest's icon picker opens on.
-    pub(crate) fn icon(self) -> Icon {
-        Icon::new(match self {
-            Self::VirtualMachine => "Virtual machines/Virtual machine",
-            Self::Container => "Virtual machines/Container",
-        })
-    }
-}
-
-/// A device that runs on another one, which may itself be a guest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) struct Guest {
-    pub(crate) host: DeviceId,
-    pub(crate) kind: GuestKind,
-}
-
 /// How long before the latest scan the device was last seen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct LastSeen {
@@ -200,8 +175,6 @@ pub(crate) struct Device {
     /// Its children in the lists, and what stands for it on the map. Every device has at least
     /// one; the first is the one its address is shown from.
     pub(crate) cards: Vec<NetworkCard>,
-    /// The host it runs on, for a virtual machine or container; `None` for a physical device.
-    pub(crate) guest: Option<Guest>,
     pub(crate) manufacturer: Option<String>,
     pub(crate) model: Option<String>,
     pub(crate) hostname: Option<String>,
@@ -252,7 +225,6 @@ mod tests {
                     ..NetworkCard::blank(CardId(2))
                 },
             ],
-            guest: None,
             manufacturer: None,
             model: None,
             hostname: None,

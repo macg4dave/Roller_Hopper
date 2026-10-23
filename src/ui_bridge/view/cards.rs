@@ -1,10 +1,10 @@
-//! Network cards and guests as the UI shows them. A card is a child of its device: a row under
-//! it in the lists, and a node on the map drawn with the device's icon and name. A guest is
+//! Network cards as the UI shows them. A card is a child of its device: a row under it in the
+//! lists, and a node on the map drawn with the device's icon and name.
 //! listed in its host's editor.
 
 use slint::{ModelRc, SharedString, VecModel};
 
-use crate::model::{CardId, ConnectionKind, Device, DeviceId, Network, NetworkCard};
+use crate::model::{CardId, ConnectionKind, Device, Network, NetworkCard};
 use crate::ui::{self, Labels};
 use crate::ui_bridge::convert;
 use crate::ui_bridge::icons::Icons;
@@ -94,31 +94,11 @@ pub(super) fn card_views(
     views.collect()
 }
 
-/// The virtual machines and containers running straight on `host`, in device order; those on
-/// them are listed with their own host.
-pub(super) fn guest_views(network: &Network, icons: &Icons, host: DeviceId) -> Vec<ui::GuestView> {
-    let guests = network.devices().iter().filter_map(|device| {
-        let guest = device.guest.filter(|g| g.host == host)?;
-        Some(ui::GuestView {
-            id: convert::ui_id(device.id),
-            kind: convert::guest_kind(Some(guest.kind)),
-            name: device.name.trim().into(),
-            ip: device.primary_card().map(convert::ip).unwrap_or_default(),
-            dhcp: device.primary_card().is_some_and(|card| card.dhcp),
-            icon: icons.choice(&network.icon(device)),
-            colour: convert::colour(network.colour(device)),
-        })
-    });
-    guests.collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mock_data;
-
-    const PC: DeviceId = DeviceId(5);
-    const DOCKER_HOST: DeviceId = DeviceId(19);
+    use crate::model::DeviceId;
 
     #[test]
     fn a_featured_card_is_first_without_changing_its_device_index() {
@@ -127,31 +107,5 @@ mod tests {
         let views = card_views(&network, &Icons::default(), device, Some(CardId(101)));
         let order: Vec<_> = views.iter().map(|view| (view.id, view.index)).collect();
         assert_eq!(order, [(101, 1), (1, 0)]);
-    }
-
-    #[test]
-    fn a_hosts_guests_are_those_running_straight_on_it() {
-        let network = mock_data::network();
-        let icons = Icons::default();
-        let ids = |host| {
-            guest_views(&network, &icons, host)
-                .into_iter()
-                .map(|g| g.id)
-        };
-        let on_docker: Vec<i32> = network
-            .devices()
-            .iter()
-            .filter(|d| network.host(d.id) == Some(DOCKER_HOST))
-            .map(|d| convert::ui_id(d.id))
-            .collect();
-        assert_ne!(on_docker, [] as [i32; 0]);
-        assert_eq!(ids(DOCKER_HOST).collect::<Vec<_>>(), on_docker);
-        let on_linux_server: Vec<i32> = ids(network.host(DOCKER_HOST).unwrap()).collect();
-        assert!(on_linux_server.contains(&convert::ui_id(DOCKER_HOST)));
-        assert!(
-            on_docker.iter().all(|id| !on_linux_server.contains(id)),
-            "not the guests of its guests"
-        );
-        assert_eq!(ids(PC).count(), 0);
     }
 }

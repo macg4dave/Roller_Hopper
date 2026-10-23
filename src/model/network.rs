@@ -33,8 +33,6 @@ pub(crate) struct CardLink {
 /// Read from a file, it is only used once [`Self::checked`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Network {
-    /// Each guest comes after its host, among the host's other guests, so every list shows the
-    /// guests under their host.
     devices: Vec<Device>,
     links: Vec<CardLink>,
     roles: Roles,
@@ -60,7 +58,7 @@ impl Network {
     #[cfg(test)]
     pub(crate) fn new(devices: Vec<Device>, links: Vec<CardLink>) -> Self {
         Self {
-            devices: children::hosts_first(devices),
+            devices,
             links,
             ..Self::default()
         }
@@ -99,17 +97,13 @@ impl Network {
         self.roles.icon(role)
     }
 
-    /// The icon shown for a device: the one picked for it, else its role's, else a guest's
-    /// kind's, else the detected one.
+    /// The icon shown for a device: the one picked for it, else its role's, else the detected one.
     pub(crate) fn icon(&self, device: &Device) -> Icon {
         let picked = device
             .icon
             .as_ref()
             .or_else(|| self.role_icon(&device.role));
-        picked.cloned().unwrap_or_else(|| match device.guest {
-            Some(guest) => guest.kind.icon(),
-            None => device.kind.icon(),
-        })
+        picked.cloned().unwrap_or_else(|| device.kind.icon())
     }
 
     /// Adds a custom role shown with `icon`, and returns it (see [`Roles::add`]).
@@ -220,7 +214,7 @@ impl Network {
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::{DeviceKind, Guest, GuestKind};
+    use crate::model::DeviceKind;
 
     #[test]
     fn search_filters_devices() {
@@ -274,29 +268,6 @@ mod tests {
         let dropped_in = Icon::new("My icons/Fish tank");
         device.icon = Some(dropped_in.clone());
         assert_eq!(network.icon(&device), dropped_in);
-    }
-
-    #[test]
-    fn a_guest_without_an_icon_of_its_own_or_its_roles_shows_its_kinds() {
-        let network = mock_data::network();
-        let mut guest = network
-            .devices()
-            .iter()
-            .find(|d| d.guest.is_some())
-            .cloned()
-            .unwrap();
-        guest.icon = None;
-        guest.role = Role::Other;
-        for kind in [GuestKind::VirtualMachine, GuestKind::Container] {
-            guest.guest = guest.guest.map(|g| Guest { kind, ..g });
-            assert_eq!(network.icon(&guest), kind.icon(), "{kind:?}");
-        }
-        guest.role = Role::Server;
-        assert_eq!(
-            network.icon(&guest),
-            DeviceKind::Server.icon(),
-            "role first"
-        );
     }
 
     fn roles_of(network: &Network, role: &Role) -> usize {

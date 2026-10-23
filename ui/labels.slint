@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { AiImportPhase, DeviceKind, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, StandardGroup, TargetError } from "bridge.slint";
+import { AiImportPhase, DeviceKind, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, StandardGroup, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -98,22 +98,6 @@ export global Labels {
         if colour == GroupColour.blue { return @tr("groups.colour.blue"); }
         if colour == GroupColour.purple { return @tr("groups.colour.purple"); }
         return @tr("groups.colour.none");
-    }
-
-    public pure function guest-kind(kind: GuestKind) -> string {
-        if kind == GuestKind.container { return @tr("guest.container"); }
-        return @tr("guest.virtual-machine");
-    }
-
-    // A guest's line under its name in map edit mode: what it runs as, and its address.
-    public pure function guest-summary(kind: GuestKind, ip: string) -> string {
-        return ip == "" ? guest-kind(kind) : @tr("edit.guest-summary", guest-kind(kind), ip);
-    }
-
-    // The device a guest runs on, and what it runs as.
-    public pure function runs-on(host-name: string, kind: GuestKind) -> string {
-        if kind == GuestKind.container { return @tr("runs-on.container", device-name(host-name)); }
-        return @tr("runs-on.virtual-machine", device-name(host-name));
     }
 
     public pure function uplink(name: string, inferred: bool) -> string {

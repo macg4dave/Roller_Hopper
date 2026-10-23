@@ -143,7 +143,6 @@ fn device(hostname: Option<String>, name: String, card: NetworkCard) -> Device {
         icon: None,
         status: Status::Online,
         cards: vec![card],
-        guest: None,
         manufacturer: None,
         model: None,
         hostname,

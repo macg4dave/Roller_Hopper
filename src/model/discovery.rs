@@ -190,9 +190,7 @@ impl Discovery {
     }
 
     /// The found hosts the filter lets through, in the selected column order, by their place in
-    /// [`Self::found`], each with how many of them it runs within: as in the device list, a
-    /// guest follows its host, indented under it, and stands on its own when its host is not
-    /// shown.
+    /// [`Self::found`], each at the top level.
     pub(crate) fn shown(&self) -> Vec<(usize, usize)> {
         let found = self.found();
         let mut admitted: Vec<usize> = found
@@ -212,29 +210,7 @@ impl Discovery {
                 order
             }
         });
-        let host = |index: usize| {
-            let host = found.get(index)?.device.guest?.host;
-            let mut hosts = admitted.iter().copied();
-            hosts.find(|&at| found.get(at).and_then(Found::on_map) == Some(host))
-        };
-        let tops = admitted
-            .iter()
-            .rev()
-            .filter(|&&index| host(index).is_none());
-        let mut pending: Vec<(usize, usize)> = tops.map(|&index| (index, 0)).collect();
-        let mut shown = Vec::with_capacity(admitted.len());
-        while let Some((index, depth)) = pending.pop() {
-            shown.push((index, depth));
-            let guests = admitted.iter().rev().filter(|&&g| host(g) == Some(index));
-            pending.extend(guests.map(|&g| (g, depth + 1)));
-        }
-        // Guests in a loop of hosts reach no top; they stand on their own at the end.
-        let looped: Vec<usize> = admitted
-            .into_iter()
-            .filter(|&index| shown.iter().all(|&(at, _)| at != index))
-            .collect();
-        shown.extend(looped.into_iter().map(|index| (index, 0)));
-        shown
+        admitted.into_iter().map(|index| (index, 0)).collect()
     }
 
     fn compare_found(&self, left: &Found, right: &Found) -> std::cmp::Ordering {
@@ -715,24 +691,11 @@ mod tests {
     }
 
     #[test]
-    fn guests_follow_their_host_in_the_results_unless_it_is_filtered_out() {
+    fn every_result_is_a_top_level_device() {
         let (mut discovery, _) = finished();
         let shown = discovery.shown();
         assert_eq!(shown.len(), discovery.found().len(), "each host once");
-        let place = |name| {
-            let (index, _) = named(&discovery, name);
-            let at = shown.iter().position(|&(i, _)| i == index).unwrap();
-            (at, shown[at].1)
-        };
-        let (server, server_depth) = place("Linux Server");
-        let (docker, docker_depth) = place("Docker Host");
-        assert_eq!((server_depth, docker_depth), (0, 1));
-        assert!(server < docker, "a guest after its host");
-        let guests = shown.iter().skip(server + 1);
-        assert!(
-            guests.take_while(|&&(_, d)| d > 0).count() > 1,
-            "the server's guests, and theirs, straight after it"
-        );
+        assert!(shown.iter().all(|&(_, depth)| depth == 0));
 
         discovery.filter = FoundFilter::Unidentified;
         let unidentified = discovery.shown();

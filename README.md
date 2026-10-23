@@ -52,8 +52,8 @@ All UI text is translatable. To add or change a language, see
 ```text
 src/main.rs        wiring only: build state, create window, connect callbacks, run
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
-src/model/         pure data and logic (devices with their network cards, virtual machines and
-                   containers; the map's tree of network cards, roles, groups,
+src/model/         pure data and logic (devices with their network cards; the map's tree of
+                   network cards, roles, groups,
                    layout; the discovery run's record) — no Slint imports
 src/scan.rs        the real scan on its own Tokio threads, and in scan/ this computer's
                    subnet, the port lists, mDNS, the type and OS rules, and turning what a

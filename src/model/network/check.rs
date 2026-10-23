@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{CardLink, Network, children};
+use super::{CardLink, Network};
 use crate::model::card::CardId;
 use crate::model::device::{DeviceId, Role};
 
@@ -14,25 +14,22 @@ pub(crate) enum Invalid {
     DuplicateId,
     /// A device has no network card.
     NoCard,
-    /// A guest's host, a link's card, a device's role or a role's group does not exist.
+    /// A link's card, a device's role or a role's group does not exist.
     MissingReference,
     /// A card is plugged in twice, or into its own device.
     BadLink,
-    /// Guests run on each other in a ring, or links do.
+    /// Links form a ring.
     Loop,
     /// Roles or groups listed twice, a blank or repeated name, or Other missing.
     BadRoles,
 }
 
 impl Network {
-    /// The network as read from a file, once it holds together; its devices are put in list
-    /// order (guests after their host).
-    pub(crate) fn checked(mut self) -> Result<Self, Invalid> {
+    /// The network as read from a file, once it holds together.
+    pub(crate) fn checked(self) -> Result<Self, Invalid> {
         let owners = self.card_owners()?;
-        self.check_guests()?;
         check_links(&self.links, &owners)?;
         self.check_roles()?;
-        self.devices = children::hosts_first(self.devices);
         Ok(self)
     }
 
@@ -54,21 +51,6 @@ impl Network {
             }
         }
         Ok(owners)
-    }
-
-    fn check_guests(&self) -> Result<(), Invalid> {
-        let hosts: HashMap<DeviceId, Option<DeviceId>> = self
-            .devices
-            .iter()
-            .map(|d| (d.id, d.guest.map(|g| g.host)))
-            .collect();
-        for &host in hosts.values().flatten() {
-            if !hosts.contains_key(&host) {
-                return Err(Invalid::MissingReference);
-            }
-        }
-        let host_of = |id: &DeviceId| hosts.get(id).copied().flatten();
-        no_loops(hosts.keys().copied(), host_of)
     }
 
     fn check_roles(&self) -> Result<(), Invalid> {
@@ -120,19 +102,11 @@ fn no_loops<T: Copy>(
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::{ConnectionKind, Guest, GuestKind};
+    use crate::model::ConnectionKind;
 
     #[test]
-    fn the_sample_network_holds_together_and_its_guests_follow_their_hosts() {
-        let mut shuffled = mock_data::network();
-        shuffled.devices.reverse();
-        let network = shuffled.checked().unwrap();
-        let place = |id| network.devices.iter().position(|d| d.id == id);
-        for device in &network.devices {
-            if let Some(guest) = device.guest {
-                assert!(place(guest.host) < place(device.id), "{}", device.name);
-            }
-        }
+    fn the_sample_network_holds_together() {
+        assert!(mock_data::network().checked().is_ok());
     }
 
     #[test]
@@ -157,25 +131,6 @@ mod tests {
         assert_eq!(
             broken(|n| n.devices[0].role = Role::Custom("Gone".into())),
             Some(Invalid::MissingReference)
-        );
-        assert_eq!(
-            broken(|n| {
-                let guest = Guest {
-                    host: DeviceId(999),
-                    kind: GuestKind::Container,
-                };
-                n.devices[0].guest = Some(guest);
-            }),
-            Some(Invalid::MissingReference)
-        );
-        assert_eq!(
-            broken(|n| {
-                let (a, b) = (n.devices[0].id, n.devices[1].id);
-                let kind = GuestKind::VirtualMachine;
-                n.devices[0].guest = Some(Guest { host: b, kind });
-                n.devices[1].guest = Some(Guest { host: a, kind });
-            }),
-            Some(Invalid::Loop)
         );
         assert_eq!(
             broken(|n| {

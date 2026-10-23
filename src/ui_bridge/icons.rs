@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel, Weak};
 
 use super::{AppState, update};
-use crate::model::{GuestKind, Icon, NetworkCard};
+use crate::model::{Icon, NetworkCard};
 use crate::ui::{self, AppWindow, Bridge};
 
 const FOLDER: &str = "icons";
@@ -94,12 +94,9 @@ pub(super) fn refresh(ui: &Weak<AppWindow>, state: &RefCell<AppState>) {
         let icons = &state.borrow().icons;
         let bridge = ui.global::<Bridge<'_>>();
         bridge.set_icons(ModelRc::new(VecModel::from(icons.groups())));
-        // Where the icons new cards and guests start with live, wherever the user has put
-        // those folders.
+        // Where the icons new cards start with live, wherever the user has put that folder.
         let card_icons = icons.choice(&Icon::new(NetworkCard::DEFAULT_ICON)).group;
         bridge.set_card_icon_category(card_icons);
-        let guest_icons = icons.choice(&GuestKind::VirtualMachine.icon()).group;
-        bridge.set_guest_icon_category(guest_icons);
     }
 }
 

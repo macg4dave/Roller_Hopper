@@ -324,7 +324,6 @@ mod tests {
             icon: None,
             status: Status::Online,
             cards: vec![card],
-            guest: None,
             manufacturer: None,
             model: None,
             hostname: Some("diskstation.home.arpa".into()),

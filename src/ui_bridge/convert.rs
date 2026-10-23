@@ -8,9 +8,8 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, GuestKind, Icon, LineStyle,
-    Network, NetworkCard, OsClue, OsFamily, Point, Role, ServiceSource, Snap, StandardGroup,
-    TargetError,
+    CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, Icon, LineStyle, Network,
+    NetworkCard, OsClue, OsFamily, Point, Role, ServiceSource, Snap, StandardGroup, TargetError,
 };
 use crate::ui::{self, Labels};
 
@@ -234,26 +233,10 @@ pub(super) fn device_view(
         x: at.x,
         y: at.y,
         dimmed: false,
-        depth: i32::try_from(network.depth(device.id)).unwrap_or(i32::MAX),
+        depth: 0,
         children: i32::try_from(device.cards.len()).unwrap_or(i32::MAX),
         expanded: true,
         last: false,
-    }
-}
-
-pub(super) fn guest_kind_from_ui(kind: ui::GuestKind) -> Option<GuestKind> {
-    match kind {
-        ui::GuestKind::None => None,
-        ui::GuestKind::VirtualMachine => Some(GuestKind::VirtualMachine),
-        ui::GuestKind::Container => Some(GuestKind::Container),
-    }
-}
-
-pub(super) fn guest_kind(kind: Option<GuestKind>) -> ui::GuestKind {
-    match kind {
-        None => ui::GuestKind::None,
-        Some(GuestKind::VirtualMachine) => ui::GuestKind::VirtualMachine,
-        Some(GuestKind::Container) => ui::GuestKind::Container,
     }
 }
 
@@ -286,7 +269,6 @@ pub(super) fn details(
     role: SharedString,
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
-    let host = device.guest.and_then(|guest| network.device(guest.host));
     let (os_family, os_detail) = os(device);
     ui::DeviceDetails {
         kind: kind(device.kind),
@@ -296,9 +278,6 @@ pub(super) fn details(
         name: device.name.trim().into(),
         role,
         notes: device.notes.as_str().into(),
-        guest: guest_kind(device.guest.map(|guest| guest.kind)),
-        host_id: host.map_or(-1, |d| ui_id(d.id)),
-        host_name: text(host.map(|d| d.name.trim())),
         manufacturer: text(device.manufacturer.as_deref()),
         model: text(device.model.as_deref()),
         hostname: text(device.hostname.as_deref()),

@@ -30,7 +30,6 @@ export enum StandardGroup { network-core, switching, wi-fi, mobile, workstations
 export enum GroupColour { none, red, orange, yellow, green, blue, purple }
 
 // What a device runs as on its host; `none` for a physical device.
-export enum GuestKind { none, virtual-machine, container }
 
 /// One device in the lists, or one of its network cards: a row under the device in the lists,
 /// and a node on the map. `x`/`y` are map units (icon centre).
@@ -65,8 +64,7 @@ export struct DeviceView {
     y: float,
     // Hidden by the current search or filter: faded on the map.
     dimmed: bool,
-    // How many hosts it runs within: a guest comes after its host in the lists, indented
-    // under it. A card's row is indented one more, under its device.
+    // A device is at depth 0; its network-card rows are one step deeper.
     depth: int,
     // For a device: how many network cards its group holds, and whether the lists show them.
     children: int,
@@ -116,18 +114,6 @@ export struct CardView {
     icon: IconChoice,
 }
 
-/// A virtual machine or container running straight on the selected device, in device order.
-export struct GuestView {
-    id: int,
-    kind: GuestKind,
-    name: string,
-    // Of its first network card; empty when it has none.
-    ip: string,
-    dhcp: bool,
-    icon: IconChoice,
-    colour: GroupColour,
-}
-
 /// A setting of the selected network card, typed in map edit mode.
 export enum CardField { name, address, mask, gateway, mac }
 
@@ -154,9 +140,6 @@ export struct DeviceDetails {
     role: string,
     notes: string,
     // What it runs as, and the id and name of the device it runs on (-1 for none).
-    guest: GuestKind,
-    host-id: int,
-    host-name: string,
     manufacturer: string,
     model: string,
     hostname: string,
@@ -279,7 +262,7 @@ export struct FoundView {
     card-icon: IconChoice,
     seen: bool,
     last: bool,
-    // How many of the hosts shown it runs within: a guest follows its host, indented under it.
+    // A found device is at depth 0; its network-card rows are one step deeper.
     depth: int,
     // The device on the map it is (known, or added since), -1 for none; and where that
     // device's first card sits on the map.
@@ -399,7 +382,6 @@ export global Bridge {
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
     in property <[CardView]> cards;
-    in property <[GuestView]> guests;
     // The selected network card, -1 for none, and its view.
     in property <int> selected-card: -1;
     // A card picked on the map: its device is selected, and this card is listed first.
@@ -455,8 +437,6 @@ export global Bridge {
     // The category of the network card icons in icons, which a card's picker opens on; -1 when
     // the folder has none.
     in property <int> card-icon-category: -1;
-    // Likewise the category of the virtual machine and container icons, for a guest's picker.
-    in property <int> guest-icon-category: -1;
 
     // Edit buffers for the selected device, set by Rust when the selection changes.
     in-out property <string> notes-draft;
@@ -484,8 +464,7 @@ export global Bridge {
     // an empty id is the Unknown icon.
     callback refresh-icons();
     callback edit-notes(string);
-    // Gives the device with this id its own icon (the selected one, or one of its guests); or
-    // the selected device back its role's icon.
+    // Gives the selected device its own icon, or restores its role's icon.
     callback set-icon(int, string);
     callback reset-icon();
     // Removes the selected device until the app restarts.
@@ -522,11 +501,8 @@ export global Bridge {
     // A move that would remove the parent the card leaves waits in move-question for these.
     callback confirm-move();
     callback cancel-move();
-    // Adds a blank device with one blank card, and selects it: a guest of this kind on the
-    // selected device, or with `none` a device of its own.
-    callback add-device(GuestKind);
-    // What the selected guest runs as.
-    callback set-guest-kind(GuestKind);
+    // Adds a blank device with one blank card and selects it.
+    callback add-device();
     // The role list. Roles are identified by their index in role-list.
     callback add-role(string, string);
     callback rename-role(int, string);

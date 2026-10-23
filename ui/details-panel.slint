@@ -1,5 +1,5 @@
 import { Button, ScrollView } from "std-widgets.slint";
-import { Bridge, GuestKind, OsFamily } from "bridge.slint";
+import { Bridge, OsFamily } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
@@ -106,10 +106,6 @@ export component DetailsPanel inherits Rectangle {
 
             if Bridge.selected-card < 0: VerticalLayout {
                 DetailField { label: @tr("details.role"); value: Bridge.details.role; }
-                if Bridge.details.guest != GuestKind.none: DetailField {
-                    label: @tr("details.runs-on");
-                    value: Labels.runs-on(Bridge.details.host-name, Bridge.details.guest);
-                }
                 DetailField { label: @tr("details.type"); value: Labels.kind(Bridge.details.kind); }
                 if Bridge.details.manufacturer != "": DetailField { label: @tr("details.manufacturer"); value: Bridge.details.manufacturer; }
                 if Bridge.details.model != "": DetailField { label: @tr("details.model"); value: Bridge.details.model; }

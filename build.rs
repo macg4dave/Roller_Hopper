@@ -4,6 +4,12 @@
 use slint_build::DefaultTranslationContext;
 
 fn main() -> Result<(), slint_build::CompileError> {
+    // CUDA 13's Windows driver import library requests the static C runtime even
+    // though Rust and our other native dependencies use the dynamic runtime.
+    // Keep the required CUDA library, but ignore its incompatible default.
+    #[cfg(target_os = "windows")]
+    println!("cargo:rustc-link-arg=/NODEFAULTLIB:LIBCMT");
+
     let config = slint_build::CompilerConfiguration::new()
         .with_style("fluent".into())
         .with_bundled_translations("translations")
