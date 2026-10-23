@@ -8,7 +8,7 @@ import { PortList } from "components/port-list.slint";
 export component CardDetails inherits VerticalLayout {
     in property <CardView> card;
 
-    DetailField { label: @tr("details.ip"); value: card.ip == "" ? @tr("card.no-address") : card.ip; }
+    DetailField { label: @tr("details.ip"); value: card.ip == "" ? @tr("card.no-address") : Labels.address(card.ip, card.dhcp); }
     if card.mask != "": DetailField { label: @tr("details.mask"); value: card.mask; }
     if card.gateway != "": DetailField { label: @tr("details.gateway"); value: card.gateway; }
     if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }

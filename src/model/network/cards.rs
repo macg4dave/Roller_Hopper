@@ -6,6 +6,7 @@ use std::net::Ipv4Addr;
 use ipnet::Ipv4Net;
 
 use super::{ConnectionKind, Network, children};
+use crate::model::card::MacAddr;
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::DeviceId;
 
@@ -54,6 +55,21 @@ impl Network {
         };
         edited.address = address;
         true
+    }
+
+    /// Applies a newly observed lease to the existing DHCP card with `mac`. Manual addresses
+    /// are never changed, and an address already used by another card is refused.
+    pub(crate) fn refresh_dhcp_address(&mut self, mac: MacAddr, address: Ipv4Net) -> bool {
+        let card = self
+            .devices
+            .iter()
+            .flat_map(|device| &device.cards)
+            .find(|card| card.mac == Some(mac) && card.dhcp)
+            .map(|card| card.id);
+        let Some(card) = card else {
+            return false;
+        };
+        self.set_card_address(card, Some(address))
     }
 
     /// The device `card` is the only card of, which moving the card to another device removes.
@@ -279,6 +295,23 @@ mod tests {
         assert_eq!(network.card_owner(id).map(|d| d.id), Some(PC));
         let link = network.uplink(id).map(|c| (c.upstream, c.kind));
         assert_eq!(link, Some((SWITCH_CARD, ConnectionKind::Inferred)));
+    }
+
+    #[test]
+    fn only_a_dhcp_card_takes_a_new_address_for_its_mac() {
+        let mut network = mock_data::network();
+        let card = PC_CARD;
+        let mac = network.card(card).and_then(|card| card.mac).unwrap();
+        let original = network.card(card).and_then(|card| card.address);
+        let lease = net("192.168.1.240/24");
+        assert!(!network.refresh_dhcp_address(mac, lease));
+        assert_eq!(network.card(card).and_then(|card| card.address), original);
+        network.card_mut(card).unwrap().dhcp = true;
+        assert!(network.refresh_dhcp_address(mac, lease));
+        assert_eq!(
+            network.card(card).and_then(|card| card.address),
+            Some(lease)
+        );
     }
 
     #[test]

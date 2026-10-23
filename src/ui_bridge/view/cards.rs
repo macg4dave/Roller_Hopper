@@ -29,6 +29,7 @@ pub(super) fn card_row(
         drag_card: convert::ui_card_id(card.id),
         card_icon: icons.choice(&card.icon),
         ip: convert::ip(card),
+        dhcp: card.dhcp,
         mac: convert::mac(card),
         depth: device_row.depth + 1,
         children: 0,
@@ -74,6 +75,7 @@ pub(super) fn card_views(
             index: index_of(device, card.id),
             name: card.name.trim().into(),
             ip: convert::ip(card),
+            dhcp: card.dhcp,
             mask: convert::mask(card),
             gateway: convert::gateway(card),
             mac: convert::mac(card),
@@ -102,6 +104,7 @@ pub(super) fn guest_views(network: &Network, icons: &Icons, host: DeviceId) -> V
             kind: convert::guest_kind(Some(guest.kind)),
             name: device.name.trim().into(),
             ip: device.primary_card().map(convert::ip).unwrap_or_default(),
+            dhcp: device.primary_card().is_some_and(|card| card.dhcp),
             icon: icons.choice(&network.icon(device)),
             colour: convert::colour(network.colour(device)),
         })

@@ -44,6 +44,15 @@ impl AppState {
         progress: ScanProgress,
         events: impl IntoIterator<Item = Event>,
     ) -> bool {
+        let events: Vec<Event> = events.into_iter().collect();
+        for event in &events {
+            let Event::Host(answer) = event else { continue };
+            for card in &answer.device.cards {
+                if let (Some(mac), Some(address)) = (card.mac, card.address) {
+                    self.network.refresh_dhcp_address(mac, address);
+                }
+            }
+        }
         if scan::record(&mut self.discovery, progress, events, &self.network) {
             self.scans += 1;
         }
@@ -374,6 +383,36 @@ mod tests {
             "counted once"
         );
         assert_eq!(state.scans, 1);
+    }
+
+    #[test]
+    fn a_scan_refreshes_a_dhcp_cards_address_before_matching_the_host() {
+        let mut state = AppState::new(mock_data::network());
+        let device = state.network.devices()[0].id;
+        let (card, mac) = {
+            let card = &state.network.device(device).unwrap().cards[0];
+            (card.id, card.mac.unwrap())
+        };
+        state.network.device_mut(device).unwrap().cards[0].dhcp = true;
+        let address: Ipv4Net = "192.168.1.250/24".parse().unwrap();
+        let mut answer = mock_data::answers(&state.network)
+            .into_iter()
+            .find(|answer| answer.device.cards.iter().any(|card| card.mac == Some(mac)))
+            .unwrap();
+        answer
+            .device
+            .cards
+            .iter_mut()
+            .find(|card| card.mac == Some(mac))
+            .unwrap()
+            .address = Some(address);
+
+        state.discovery.target_text = home().to_string();
+        assert!(state.begin_discovery().is_some());
+        assert!(state.take_scan(swept(1), [Event::Host(Box::new(answer))]));
+
+        assert_eq!(state.network.card(card).unwrap().address, Some(address));
+        assert_eq!(state.discovery.found()[0].on_map(), Some(device));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 import { PortView } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 import { PortChip } from "chip.slint";
+import { SelectableText } from "selectable-text.slint";
 
 // A network card's open ports under their label, one row each: the port, then what runs on it,
 // in columns as the discovery page's port editor shows them. Nothing when there are none.
@@ -12,7 +13,7 @@ export component PortList inherits VerticalLayout {
     padding-bottom: Theme.space-xs;
     spacing: Theme.space-xs;
 
-    if ports.length > 0: Text {
+    if ports.length > 0: SelectableText {
         text: @tr("details.open-ports");
         font-size: Theme.font-body;
         color: Theme.text-muted;
@@ -27,21 +28,17 @@ export component PortList inherits VerticalLayout {
                 PortChip { port: port.port; udp: port.udp; }
             }
         }
-        Text {
+        SelectableText {
             text: port.description == "" ? @tr("port.source.open") : port.description;
-            font-size: Theme.font-body;
-            color: Theme.text;
-            vertical-alignment: center;
-            wrap: word-wrap;
+            accessible-label: @tr("details.open-ports");
             horizontal-stretch: 1;
         }
-        Text {
+        SelectableText {
             text: port.source == "detected" ? @tr("port.source.detected")
                 : port.source == "registry" ? @tr("port.source.registry")
                 : port.source == "manual" ? @tr("port.source.manual") : "";
             font-size: Theme.font-small;
             color: Theme.text-muted;
-            vertical-alignment: center;
         }
     }
 }

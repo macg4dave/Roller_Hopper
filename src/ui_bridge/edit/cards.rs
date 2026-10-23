@@ -159,6 +159,9 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         }
     });
     bridge.on_set_card_icon(move |id, icon| set_icon((id, icon)));
+    bridge.on_set_card_dhcp(handler(ui, state, |st, dhcp| {
+        st.edit_selected_card(|card| card.dhcp = dhcp);
+    }));
     let (edit_ui, edit_state) = (ui.as_weak(), Rc::clone(state));
     bridge.on_edit_card(move |field, text| {
         let mut accepted = false;

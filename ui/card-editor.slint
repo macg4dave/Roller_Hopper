@@ -1,4 +1,4 @@
-import { Button, ComboBox } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox } from "std-widgets.slint";
 import { Bridge, CardField } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
@@ -7,6 +7,7 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 import { NameEdit } from "components/name-edit.slint";
 import { PortEditor } from "port-editor.slint";
+import { SelectableText } from "components/selectable-text.slint";
 
 // One setting of the selected card. It is kept on Enter or when the field loses focus. A
 // refused value is replaced by the card's own, with a hint saying what is expected.
@@ -31,7 +32,7 @@ component CardSetting inherits VerticalLayout {
         accessible-label: root.label;
         commit(text) => { root.refused = !Bridge.edit-card(root.field, text); }
     }
-    if refused: Text {
+    if refused: SelectableText {
         text: root.hint;
         font-size: Theme.font-small;
         color: Theme.text-muted;
@@ -81,11 +82,10 @@ export component CardEditor inherits VerticalLayout {
                 field-label: @tr("details.name");
                 commit(text) => { Bridge.edit-card(CardField.name, text); }
             }
-            Text {
+            SelectableText {
                 text: @tr("edit.card-of", Labels.device-name(Bridge.details.name));
                 font-size: Theme.font-body;
                 color: Theme.text-muted;
-                overflow: elide;
             }
         }
     }
@@ -97,6 +97,14 @@ export component CardEditor inherits VerticalLayout {
             value: Bridge.card.ip;
             hint: @tr("edit.card-ip-hint");
             label: @tr("details.ip");
+        }
+    }
+    DetailField {
+        label: @tr("details.dhcp");
+        CheckBox {
+            checked: Bridge.card.dhcp;
+            text: @tr("edit.card-dhcp");
+            toggled => { Bridge.set-card-dhcp(self.checked); }
         }
     }
     DetailField {

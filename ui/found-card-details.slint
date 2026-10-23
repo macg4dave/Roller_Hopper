@@ -8,6 +8,7 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 import { FoundPortEditor } from "components/found-port-editor.slint";
 import { PortList } from "components/port-list.slint";
+import { SelectableText } from "components/selectable-text.slint";
 
 // The discovery details for a network card of a host not on the map: its name and icon, which
 // it is added with, and the parent it is a child of, over what the run found of it. Its settings are the scan's until the host
@@ -66,23 +67,21 @@ export component FoundCardDetails inherits VerticalLayout {
                 field-label: @tr("details.name");
                 commit(text) => { Bridge.rename-found-card(host.index, card.card-index, text); }
             }
-            if !editable: Text {
+            if !editable: SelectableText {
                 text: Labels.card-name(card.card-name, card.card-index);
                 font-size: Theme.font-title;
                 font-weight: 600;
                 color: Theme.text;
-                overflow: elide;
             }
-            Text {
+            SelectableText {
                 text: @tr("edit.card-of", Labels.found-name(host.name));
                 font-size: Theme.font-body;
                 color: Theme.text-muted;
-                overflow: elide;
             }
         }
     }
 
-    if !card.seen: Text {
+    if !card.seen: SelectableText {
         text: @tr("discovery.card-not-seen");
         font-size: Theme.font-small;
         color: Theme.text-muted;
@@ -113,7 +112,7 @@ export component FoundCardDetails inherits VerticalLayout {
     if editable: VerticalLayout {
         padding-top: Theme.space-s;
         spacing: Theme.space-s;
-        Text {
+        SelectableText {
             text: @tr("details.open-ports");
             font-size: Theme.font-body;
             color: Theme.text-muted;

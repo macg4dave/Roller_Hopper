@@ -1,0 +1,10 @@
+import { Theme } from "../theme.slint";
+
+// Plain-looking read-only text that still supports mouse selection and Ctrl+C.
+export component SelectableText inherits TextInput {
+    read-only: true;
+    font-size: Theme.font-body;
+    color: Theme.text;
+    vertical-alignment: center;
+    min-height: 20px;
+}

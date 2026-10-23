@@ -2,10 +2,11 @@ import { IconChoice } from "../bridge.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { IconChooser } from "icon-chooser.slint";
+import { SelectableText } from "selectable-text.slint";
 
 // A network card or guest of the device being edited: its icon, which can be changed in place
-// unless the row is read-only, with its name and a line about it. Clicking the rest of the row
-// opens it on its own.
+// unless the row is read-only, with its name and a line about it. The text can be selected and
+// copied; the surrounding row and chevron open the child on its own.
 export component ChildRow inherits Rectangle {
     in property <IconChoice> icon;
     in property <bool> read-only;
@@ -50,24 +51,30 @@ export component ChildRow inherits Rectangle {
         VerticalLayout {
             alignment: center;
             spacing: 2px;
-            Text {
+            SelectableText {
                 text: root.name;
                 font-size: Theme.font-body;
                 color: Theme.text;
-                overflow: elide;
             }
-            Text {
+            SelectableText {
                 text: root.detail;
                 font-size: Theme.font-small;
                 color: Theme.text-muted;
-                overflow: elide;
             }
         }
-        Image {
-            source: @image-url("../icons/chevron-right.svg");
+        Rectangle {
             width: 14px;
             height: 14px;
-            colorize: touch.has-hover ? Theme.text : Theme.text-muted;
+            Image {
+                source: @image-url("../icons/chevron-right.svg");
+                colorize: open.has-hover ? Theme.text : Theme.text-muted;
+            }
+            open := TouchArea {
+                mouse-cursor: pointer;
+                accessible-role: button;
+                accessible-label: root.name;
+                clicked => { root.clicked(); }
+            }
         }
     }
 }

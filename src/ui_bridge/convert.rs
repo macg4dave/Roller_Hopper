@@ -225,6 +225,7 @@ pub(super) fn device_view(
         // Blank names are shown with a translated placeholder by the UI.
         name: device.name.trim().into(),
         ip: primary.map(ip).unwrap_or_default(),
+        dhcp: primary.is_some_and(|card| card.dhcp),
         mac: primary.map(mac).unwrap_or_default(),
         hostname: device.hostname.as_deref().unwrap_or_default().into(),
         role,

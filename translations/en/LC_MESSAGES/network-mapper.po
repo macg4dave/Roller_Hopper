@@ -499,6 +499,15 @@ msgstr "{}, {}"
 msgid "details.ip"
 msgstr "IP address"
 
+msgid "details.dhcp"
+msgstr "Addressing"
+
+msgid "edit.card-dhcp"
+msgstr "Use DHCP"
+
+msgid "card.dhcp-address"
+msgstr "{0} (DHCP)"
+
 msgid "details.mask"
 msgstr "Subnet mask"
 

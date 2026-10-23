@@ -50,6 +50,10 @@ export global Labels {
         return name == "" ? @tr("device.unnamed") : name;
     }
 
+    public pure function address(address: string, dhcp: bool) -> string {
+        return dhcp && address != "" ? @tr("card.dhcp-address", address) : address;
+    }
+
     public pure function last-seen(minutes: int) -> string {
         if minutes <= 0 { return @tr("last-seen.now"); }
         if minutes < 60 { return @tr("last-seen.minutes" | "last-seen.minutes.plural" % minutes); }

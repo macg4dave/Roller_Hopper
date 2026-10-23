@@ -72,6 +72,9 @@ pub(crate) struct NetworkCard {
     /// The card's address and the prefix length of its subnet; `None` until the user gives one
     /// to a card they added.
     pub(crate) address: Option<Ipv4Net>,
+    /// A scan may refresh this address when DHCP owns it.
+    #[serde(default)]
+    pub(crate) dhcp: bool,
     pub(crate) gateway: Option<Ipv4Addr>,
     /// Detected with the card, or typed by the user.
     pub(crate) mac: Option<MacAddr>,
@@ -95,6 +98,7 @@ impl NetworkCard {
             id,
             name: String::new(),
             address: None,
+            dhcp: false,
             gateway: None,
             mac: None,
             vendor: None,

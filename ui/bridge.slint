@@ -49,6 +49,7 @@ export struct DeviceView {
     name: string,
     // Of its first network card, or of the card itself.
     ip: string,
+    dhcp: bool,
     mac: string,
     // Empty when the device gave none.
     hostname: string,
@@ -99,6 +100,7 @@ export struct CardView {
     index: int,
     name: string,
     ip: string,
+    dhcp: bool,
     mask: string,
     gateway: string,
     mac: string,
@@ -121,6 +123,7 @@ export struct GuestView {
     name: string,
     // Of its first network card; empty when it has none.
     ip: string,
+    dhcp: bool,
     icon: IconChoice,
     colour: GroupColour,
 }
@@ -468,6 +471,7 @@ export global Bridge {
     callback select-map-card(int);
     // Gives the card with this id the icon with this id (see IconChoice).
     callback set-card-icon(int, string);
+    callback set-card-dhcp(bool);
     // Folds a device's group up in the lists, or opens it again.
     callback toggle-group(int);
     // A card's id as a drag payload, and back again: -1 when the payload is not a card. The

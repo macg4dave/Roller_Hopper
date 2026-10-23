@@ -8,6 +8,7 @@ import { ForgetDevice } from "components/forget-device.slint";
 import { CardDetails } from "card-details.slint";
 import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
+import { SelectableText } from "components/selectable-text.slint";
 
 // Right panel: everything known about the selected device, followed by each of its network
 // cards in full and a way to forget it, or about the selected card (its addresses and open
@@ -36,7 +37,7 @@ export component DetailsPanel inherits Rectangle {
         background: Theme.border;
     }
 
-    if Bridge.selected-id < 0: Text {
+    if Bridge.selected-id < 0: SelectableText {
         text: @tr("details.empty");
         font-size: Theme.font-body;
         color: Theme.text-muted;
@@ -88,12 +89,11 @@ export component DetailsPanel inherits Rectangle {
                     alignment: center;
                     spacing: Theme.space-xs;
                     horizontal-stretch: 1;
-                    Text {
+                    SelectableText {
                         text: Labels.device-name(Bridge.details.name);
                         font-size: Theme.font-title;
                         font-weight: 600;
                         color: Theme.text;
-                        overflow: elide;
                     }
                 }
                 HorizontalLayout {

@@ -136,12 +136,12 @@ export component DeviceRow inherits Rectangle {
                 overflow: elide;
             }
             if card && device.ip != "": Text {
-                text: device.ip;
+                text: Labels.address(device.ip, device.dhcp);
                 font-size: Theme.font-small;
                 color: Theme.text-muted;
             }
             if !card: Text {
-                text: Labels.group-summary(device.ip, device.children);
+                text: Labels.group-summary(Labels.address(device.ip, device.dhcp), device.children);
                 font-size: Theme.font-small;
                 color: Theme.text-muted;
                 overflow: elide;

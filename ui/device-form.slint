@@ -7,6 +7,7 @@ import { DetailField } from "components/detail-field.slint";
 import { ForgetDevice } from "components/forget-device.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
+import { SelectableText } from "components/selectable-text.slint";
 
 // The selected device's editable fields: icon, name, role, its network cards and guests with
 // adding more, notes, and forgetting it. Used on the edit page, in the details panel's edit
@@ -56,8 +57,8 @@ export component DeviceForm inherits VerticalLayout {
                 field-label: @tr("details.name");
                 commit(text) => { Bridge.rename(text); }
             }
-            if Bridge.cards.length > 0: Text {
-                text: Bridge.cards[0].ip;
+            if Bridge.cards.length > 0: SelectableText {
+                text: Labels.address(Bridge.cards[0].ip, Bridge.cards[0].dhcp);
                 font-size: Theme.font-body;
                 color: Theme.text-muted;
             }
@@ -96,7 +97,7 @@ export component DeviceForm inherits VerticalLayout {
                 icon: card.icon;
                 start-category: Bridge.card-icon-category;
                 name: Labels.card-name(card.name, card.index);
-                detail: Labels.card(card.ip, card.via-name, card.via-card, card.via-index, card.inferred);
+                detail: Labels.card(Labels.address(card.ip, card.dhcp), card.via-name, card.via-card, card.via-index, card.inferred);
                 picked(icon) => { Bridge.set-card-icon(card.id, icon.id); }
                 clicked => { Bridge.select-card(card.id); }
             }
@@ -120,7 +121,7 @@ export component DeviceForm inherits VerticalLayout {
                 start-category: Bridge.guest-icon-category;
                 tint: Theme.group-colour(guest.colour, Theme.accent);
                 name: Labels.device-name(guest.name);
-                detail: Labels.guest-summary(guest.kind, guest.ip);
+                detail: Labels.guest-summary(guest.kind, Labels.address(guest.ip, guest.dhcp));
                 picked(icon) => { Bridge.set-icon(guest.id, icon.id); }
                 clicked => { Bridge.select(guest.id); }
             }
