@@ -4,15 +4,16 @@ import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
+import { ForgetDevice } from "components/forget-device.slint";
 import { StatusDot } from "components/status-dot.slint";
 import { CardDetails } from "card-details.slint";
 import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
 
 // Right panel: everything known about the selected device, followed by each of its network
-// cards in full, or about the selected card (its addresses and open ports) under its device's
-// name. The pencil turns it
-// into the same editor as the edit page's, for the device or card, until Done.
+// cards in full and a way to forget it, or about the selected card (its addresses and open
+// ports) under its device's name. The pencil turns it into the same editor as the edit page's,
+// for the device or card, until Done.
 export component DetailsPanel inherits Rectangle {
     // Showing the editor rather than the details; ends when nothing is selected.
     property <bool> editing;
@@ -179,6 +180,7 @@ export component DetailsPanel inherits Rectangle {
                     }
                     CardDetails { card: card; }
                 }
+                ForgetDevice { padding-top: Theme.space-l; }
             }
         }
     }

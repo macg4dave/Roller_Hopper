@@ -148,7 +148,8 @@ async fn run(subnet: Ipv4Net, options: ScanOptions, counts: Arc<Counts>, events:
         .scan_subnet_with_progress(subnet, false, Some(progress))
         .await;
     let end = match swept {
-        Ok(hosts) => {
+        Ok(mut hosts) => {
+            subnets::add_own_macs(&mut hosts, &subnets::own_macs());
             let announced = match browse {
                 // A browse that failed heard nothing.
                 Some(task) => task.await.unwrap_or_default(),

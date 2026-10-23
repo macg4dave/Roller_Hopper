@@ -4,6 +4,7 @@ import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { ChildRow } from "components/child-row.slint";
 import { DetailField } from "components/detail-field.slint";
+import { ForgetDevice } from "components/forget-device.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 
@@ -12,11 +13,6 @@ import { NameBox } from "components/name-box.slint";
 // mode and in the discovery details for a host on the map, which puts what the run found out
 // under the role as this form's children.
 export component DeviceForm inherits VerticalLayout {
-    // Forgetting asks first; a new selection drops the question.
-    property <bool> confirm-forget;
-    property <int> selected-id: Bridge.selected-id;
-    changed selected-id => { confirm-forget = false; }
-
     alignment: start;
     spacing: Theme.space-xs;
 
@@ -151,35 +147,5 @@ export component DeviceForm inherits VerticalLayout {
     }
 
     Rectangle { height: Theme.space-m; }
-    if !confirm-forget: HorizontalLayout {
-        alignment: start;
-        Button {
-            text: @tr("edit.forget");
-            icon: @image-url("icons/delete.svg");
-            colorize-icon: true;
-            clicked => { confirm-forget = true; }
-        }
-    }
-    if confirm-forget: VerticalLayout {
-        spacing: Theme.space-s;
-        Text {
-            text: @tr("edit.forget-question");
-            font-size: Theme.font-body;
-            color: Theme.text;
-            wrap: word-wrap;
-        }
-        HorizontalLayout {
-            alignment: start;
-            spacing: Theme.space-s;
-            Button {
-                text: @tr("edit.forget-confirm");
-                primary: true;
-                clicked => { Bridge.forget(); }
-            }
-            Button {
-                text: @tr("edit.cancel");
-                clicked => { confirm-forget = false; }
-            }
-        }
-    }
+    ForgetDevice { }
 }

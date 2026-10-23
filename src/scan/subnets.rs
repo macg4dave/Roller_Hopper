@@ -1,10 +1,11 @@
 //! This computer's own subnet, which the network box starts with: the IPv4 subnet of a network
-//! connection that is up, preferring the one the default route uses.
+//! connection that is up, preferring the one the default route uses. And its own MAC addresses,
+//! which a scan that finds it cannot learn from the neighbour table.
 
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
 use ipnet::{IpNet, Ipv4Net};
-use netscli_core::NetworkManager;
+use netscli_core::{Host, NetworkManager};
 
 /// The narrowest subnet suggested; a /31 or /32 links to one other host, or none.
 const NARROWEST: u8 = 30;
@@ -22,6 +23,26 @@ pub(crate) fn local_subnet() -> Option<Ipv4Net> {
     });
     let default = netscli_core::detect_default_ipv4_subnet();
     best(routed_address(), default, addresses)
+}
+
+/// This computer's own addresses, each with the MAC address of the connection it is on.
+pub(super) fn own_macs() -> Vec<(IpAddr, String)> {
+    let interfaces = NetworkManager::get_interfaces();
+    let connections = interfaces.iter().filter(|i| !i.is_loopback);
+    connections
+        .filter_map(|i| Some((i, i.mac?.to_string())))
+        .flat_map(|(i, mac)| i.ips.iter().map(move |ip| (ip.addr(), mac.clone())))
+        .collect()
+}
+
+/// Gives each of `hosts` that is this computer, at one of its `own` addresses, the MAC address
+/// of its connection there. Its own neighbour table never lists itself, so the sweep finds it
+/// without one, and it would not match itself on the map.
+pub(super) fn add_own_macs(hosts: &mut [Host], own: &[(IpAddr, String)]) {
+    for host in hosts.iter_mut().filter(|h| h.mac.is_none()) {
+        let mine = own.iter().find(|(ip, _)| *ip == host.ip);
+        host.mac = mine.map(|(_, mac)| mac.clone());
+    }
 }
 
 /// The address this computer sends from to the internet, as its routing table says; none when
@@ -125,6 +146,29 @@ mod tests {
             best(None, default, addresses.into_iter()),
             "10.1.2.0/24".parse().ok()
         );
+    }
+
+    #[test]
+    fn this_computer_takes_its_own_mac_and_others_keep_theirs() {
+        let host = |ip: &str, mac: Option<&str>| Host {
+            ip: ip.parse().unwrap(),
+            hostname: None,
+            mac: mac.map(str::to_owned),
+            vendor: None,
+            rtt_ms: None,
+            found_by: netscli_core::FoundBy::Probe,
+            hostname_source: None,
+        };
+        let mut hosts = [
+            host("192.168.20.105", None),
+            host("192.168.20.1", Some("00:11:22:33:44:55")),
+            host("192.168.20.7", None),
+        ];
+        let own = [(hosts[0].ip, "AA:BB:CC:DD:EE:FF".to_owned())];
+        add_own_macs(&mut hosts, &own);
+        let macs: Vec<_> = hosts.iter().map(|h| h.mac.as_deref()).collect();
+        let expected = [Some("AA:BB:CC:DD:EE:FF"), Some("00:11:22:33:44:55"), None];
+        assert_eq!(macs, expected);
     }
 
     #[test]

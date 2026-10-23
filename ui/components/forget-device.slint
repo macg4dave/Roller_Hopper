@@ -1,0 +1,43 @@
+import { Button } from "std-widgets.slint";
+import { Bridge } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// Forgets the selected device, asking first; a new selection drops the question. In the device
+// form and in the details panel, so a device picked on the map is forgotten without editing it.
+export component ForgetDevice inherits VerticalLayout {
+    property <bool> confirm;
+    property <int> selected-id: Bridge.selected-id;
+    changed selected-id => { confirm = false; }
+
+    if !confirm: HorizontalLayout {
+        alignment: start;
+        Button {
+            text: @tr("edit.forget");
+            icon: @image-url("../icons/delete.svg");
+            colorize-icon: true;
+            clicked => { confirm = true; }
+        }
+    }
+    if confirm: VerticalLayout {
+        spacing: Theme.space-s;
+        Text {
+            text: @tr("edit.forget-question");
+            font-size: Theme.font-body;
+            color: Theme.text;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space-s;
+            Button {
+                text: @tr("edit.forget-confirm");
+                primary: true;
+                clicked => { Bridge.forget(); }
+            }
+            Button {
+                text: @tr("edit.cancel");
+                clicked => { confirm = false; }
+            }
+        }
+    }
+}
