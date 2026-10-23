@@ -114,7 +114,8 @@ fn within_limits(network: &Network) -> bool {
         let icon = network.role_icon(&role).map_or(0, |i| i.0.len());
         name.max(icon)
     });
-    let group_names = network.groups().iter().map(|(_, name)| name.len());
+    let groups = network.groups().iter();
+    let group_names = groups.map(|(_, name)| name.typed().map_or(0, str::len));
     let short = |text: Option<&str>| text.is_none_or(|t| t.len() <= MAX_TEXT_BYTES);
     devices.len() <= MAX_DEVICES
         && cards.count() <= MAX_CARDS

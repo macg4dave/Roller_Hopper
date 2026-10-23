@@ -8,8 +8,9 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    CardId, Device, DeviceId, DeviceKind, GroupColour, GuestKind, Icon, LineStyle, Network,
-    NetworkCard, OsClue, OsFamily, Point, Role, Snap, Status, StatusFilter, TargetError,
+    CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, GuestKind, Icon, LineStyle,
+    Network, NetworkCard, OsClue, OsFamily, Point, Role, Snap, StandardGroup, Status, StatusFilter,
+    TargetError,
 };
 use crate::ui::{self, Labels};
 
@@ -355,8 +356,32 @@ pub(super) fn address(text: &str) -> Option<Ipv4Net> {
     }
 }
 
+/// The group as shown to the user: as typed if the user named it, otherwise translated.
+fn group_label(labels: &Labels<'_>, name: &GroupName) -> SharedString {
+    let standard = match name {
+        GroupName::Named(name)
+        | GroupName::Standard {
+            renamed: Some(name),
+            ..
+        } => return name.as_str().into(),
+        GroupName::Standard { standard, .. } => standard,
+    };
+    labels.invoke_standard_group(match standard {
+        StandardGroup::NetworkCore => ui::StandardGroup::NetworkCore,
+        StandardGroup::Switching => ui::StandardGroup::Switching,
+        StandardGroup::WiFi => ui::StandardGroup::WiFi,
+        StandardGroup::Mobile => ui::StandardGroup::Mobile,
+        StandardGroup::Workstations => ui::StandardGroup::Workstations,
+        StandardGroup::Printing => ui::StandardGroup::Printing,
+        StandardGroup::Servers => ui::StandardGroup::Servers,
+        StandardGroup::Storage => ui::StandardGroup::Storage,
+        StandardGroup::Security => ui::StandardGroup::Security,
+        StandardGroup::SmartHome => ui::StandardGroup::SmartHome,
+    })
+}
+
 /// The group list's rows, in order.
-pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
+pub(super) fn group_views(labels: &Labels<'_>, network: &Network) -> Vec<ui::GroupView> {
     let groups = network.groups();
     groups
         .iter()
@@ -364,7 +389,7 @@ pub(super) fn group_views(network: &Network) -> Vec<ui::GroupView> {
             let style = groups.line_style(id);
             let choice = LineStyle::ALL.iter().position(|&s| s == style);
             ui::GroupView {
-                name: name.into(),
+                name: group_label(labels, name),
                 colour: colour(groups.colour(id)),
                 line_style: choice.and_then(|c| i32::try_from(c).ok()).unwrap_or(0),
             }

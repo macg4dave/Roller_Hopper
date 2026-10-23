@@ -21,7 +21,7 @@ pub(crate) use discovery::{
     AiImportPhase, Answer, Decision, Discovery, Finding, Found, FoundFilter, FoundSort, LogEntry,
     LogEvent, Method, Parent, Phase, ScanMode, ScanOptions, ScanProgress, TargetError,
 };
-pub(crate) use groups::{GroupColour, GroupId, LineStyle};
+pub(crate) use groups::{GroupColour, GroupId, GroupName, LineStyle, StandardGroup};
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};
 #[cfg(test)]
 pub(crate) use network::CardLink;

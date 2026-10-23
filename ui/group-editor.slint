@@ -5,7 +5,8 @@ import { NameBox } from "components/name-box.slint";
 import { ColourPicker } from "components/colour-picker.slint";
 import { LineStylePicker } from "components/line-style-picker.slint";
 
-// Edit page, above the roles: the groups roles can be sorted into, with a way to add one.
+// Edit page, above the roles: the groups roles can be sorted into, with ways to add one or
+// restore the standard set.
 export component GroupEditor inherits VerticalLayout {
     property <bool> adding;
 
@@ -76,11 +77,17 @@ export component GroupEditor inherits VerticalLayout {
     }
     if !adding: HorizontalLayout {
         alignment: start;
+        spacing: Theme.space-xs;
         Button {
             text: @tr("groups.add");
             icon: @image-url("icons/plus.svg");
             colorize-icon: true;
             clicked => { adding = true; }
+        }
+        Button {
+            text: @tr("groups.restore");
+            enabled: Bridge.groups-restorable;
+            clicked => { Bridge.restore-groups(); }
         }
     }
     if adding: HorizontalLayout {

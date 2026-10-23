@@ -144,6 +144,13 @@ impl Roles {
         }
     }
 
+    /// Puts each role in no group into the group `group_for` gives it, if any.
+    pub(crate) fn fill_groups(&mut self, group_for: impl Fn(&Role) -> Option<GroupId>) {
+        for entry in self.0.iter_mut().filter(|e| e.group.is_none()) {
+            entry.group = group_for(&entry.role);
+        }
+    }
+
     /// Takes every role out of `group`, which is being deleted.
     pub(crate) fn leave_group(&mut self, group: GroupId) {
         for entry in self.0.iter_mut().filter(|e| e.group == Some(group)) {

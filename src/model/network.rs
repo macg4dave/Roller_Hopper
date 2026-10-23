@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::card::CardId;
 use super::device::{Device, DeviceId, Icon, Role, Status};
-use super::groups::{GroupColour, GroupId, Groups, LineStyle};
+use super::groups::{GroupColour, GroupId, Groups, LineStyle, StandardGroup};
 use super::roles::Roles;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
@@ -50,7 +50,7 @@ impl StatusFilter {
 }
 
 /// Read from a file, it is only used once [`Self::checked`].
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Network {
     /// Each guest comes after its host, among the host's other guests, so every list shows the
     /// guests under their host.
@@ -60,6 +60,20 @@ pub(crate) struct Network {
     groups: Groups,
 }
 
+impl Default for Network {
+    /// A new project: no devices, and the standard roles in the standard groups.
+    fn default() -> Self {
+        let mut network = Self {
+            devices: Vec::new(),
+            links: Vec::new(),
+            roles: Roles::default(),
+            groups: Groups::default(),
+        };
+        network.restore_standard_groups();
+        network
+    }
+}
+
 impl Network {
     /// The tests' sample networks; the app's start empty, or come from a file.
     #[cfg(test)]
@@ -67,8 +81,7 @@ impl Network {
         Self {
             devices: children::hosts_first(devices),
             links,
-            roles: Roles::default(),
-            groups: Groups::default(),
+            ..Self::default()
         }
     }
 
@@ -177,6 +190,21 @@ impl Network {
 
     pub(crate) fn rename_group(&mut self, group: GroupId, new: &str) {
         self.groups.rename(group, new);
+    }
+
+    /// Whether [`Self::restore_standard_groups`] would add a group.
+    pub(crate) fn standard_groups_missing(&self) -> bool {
+        self.groups.standard_missing()
+    }
+
+    /// Adds back the standard groups that were deleted, as a new project has them, and puts each
+    /// standard role that is in no group into its standard group. Groups and roles the user
+    /// changed stay as they are.
+    pub(crate) fn restore_standard_groups(&mut self) {
+        self.groups.restore_standard();
+        let groups = &self.groups;
+        self.roles
+            .fill_groups(|role| StandardGroup::of(role).and_then(|s| groups.standard(s)));
     }
 
     /// Deletes a group; its roles are left in no group.

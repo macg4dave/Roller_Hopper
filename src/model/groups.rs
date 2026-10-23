@@ -1,11 +1,15 @@
 //! Groups the user sorts roles into. A role is in at most one group; groups are optional.
 //!
-//! Group names are the user's own words, kept unique ignoring case. A group may have a colour,
-//! which its roles' devices are shown in, and a line style their lines are drawn in.
+//! A new project starts with the standard groups, each with its own colour and line style,
+//! which are named in the UI's language until the user renames them. Any other group is named
+//! by the user, and the names the user typed are kept unique ignoring case. A group may have a
+//! colour, which its roles' devices are shown in, and a line style their lines are drawn in.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
+
+use super::device::Role;
 
 /// Identifies a group, so renaming it does not lose the roles that are in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -51,10 +55,108 @@ impl LineStyle {
     ];
 }
 
+/// The groups a new project starts with, one for each kind of standard role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) enum StandardGroup {
+    NetworkCore,
+    Switching,
+    WiFi,
+    Mobile,
+    Workstations,
+    Printing,
+    Servers,
+    Storage,
+    Security,
+    SmartHome,
+}
+
+impl StandardGroup {
+    /// Every standard group, in the order a new project lists them.
+    pub(crate) const ALL: [Self; 10] = [
+        Self::NetworkCore,
+        Self::Switching,
+        Self::WiFi,
+        Self::Mobile,
+        Self::Workstations,
+        Self::Printing,
+        Self::Servers,
+        Self::Storage,
+        Self::Security,
+        Self::SmartHome,
+    ];
+
+    /// The standard group `role` starts in; none for Other and the user's own roles.
+    pub(crate) fn of(role: &Role) -> Option<Self> {
+        match role {
+            Role::Router => Some(Self::NetworkCore),
+            Role::Switch => Some(Self::Switching),
+            Role::AccessPoint => Some(Self::WiFi),
+            Role::Laptop | Role::Phone => Some(Self::Mobile),
+            Role::Desktop => Some(Self::Workstations),
+            Role::Printer => Some(Self::Printing),
+            Role::Server => Some(Self::Servers),
+            Role::Nas => Some(Self::Storage),
+            Role::Camera => Some(Self::Security),
+            Role::Iot => Some(Self::SmartHome),
+            Role::Other | Role::Custom(_) => None,
+        }
+    }
+
+    /// How it starts out looking, each pairing its own: the router, the switch and the access
+    /// point in colours of their own, what hangs off Wi-Fi wavy or dotted.
+    fn looks(self) -> (GroupColour, LineStyle) {
+        use GroupColour::{Blue, Green, Orange, Purple, Red, Yellow};
+        use LineStyle::{DashDot, Dotted, LongDashes, Solid, Thick, Wavy, Zigzag};
+        match self {
+            Self::NetworkCore => (Purple, Thick),
+            Self::Switching => (Blue, Solid),
+            Self::WiFi => (Green, Wavy),
+            Self::Mobile => (Green, Dotted),
+            Self::Workstations => (Yellow, Solid),
+            Self::Printing => (Yellow, DashDot),
+            Self::Servers => (Red, Thick),
+            Self::Storage => (Orange, LongDashes),
+            Self::Security => (Red, Zigzag),
+            Self::SmartHome => (Orange, Zigzag),
+        }
+    }
+}
+
+/// What a group is called. A plain name is saved as a string, as every group was before there
+/// were standard ones, so older project files still open.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum GroupName {
+    /// The user's own group.
+    Named(String),
+    /// A standard group, named in the UI's language unless the user `renamed` it.
+    Standard {
+        standard: StandardGroup,
+        renamed: Option<String>,
+    },
+}
+
+impl GroupName {
+    /// The name the user typed, if any; `None` means the UI shows the standard group's name.
+    pub(crate) fn typed(&self) -> Option<&str> {
+        match self {
+            Self::Named(name) => Some(name),
+            Self::Standard { renamed, .. } => renamed.as_deref(),
+        }
+    }
+
+    fn standard(&self) -> Option<StandardGroup> {
+        match self {
+            Self::Named(_) => None,
+            Self::Standard { standard, .. } => Some(*standard),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Group {
     id: GroupId,
-    name: String,
+    name: GroupName,
     colour: Option<GroupColour>,
     line_style: LineStyle,
 }
@@ -67,15 +169,62 @@ pub(crate) struct Groups {
 
 impl Groups {
     /// Every group, in the order it was added.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (GroupId, &str)> {
-        self.list.iter().map(|g| (g.id, g.name.as_str()))
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (GroupId, &GroupName)> {
+        self.list.iter().map(|g| (g.id, &g.name))
     }
 
+    /// The group with a name the user typed that is `name`, ignoring case. Standard names are
+    /// translated in the UI, so they are not compared here.
     fn named_ignoring_case(&self, name: &str) -> Option<GroupId> {
         let lower = name.to_lowercase();
         self.iter()
-            .find(|(_, n)| n.to_lowercase() == lower)
+            .find(|(_, n)| n.typed().is_some_and(|n| n.to_lowercase() == lower))
             .map(|(id, _)| id)
+    }
+
+    /// The standard group, unless it was deleted.
+    pub(crate) fn standard(&self, standard: StandardGroup) -> Option<GroupId> {
+        self.iter()
+            .find(|(_, n)| n.standard() == Some(standard))
+            .map(|(id, _)| id)
+    }
+
+    fn push(
+        &mut self,
+        name: GroupName,
+        colour: Option<GroupColour>,
+        line_style: LineStyle,
+    ) -> GroupId {
+        let id = GroupId(self.next_id);
+        self.next_id += 1;
+        self.list.push(Group {
+            id,
+            name,
+            colour,
+            line_style,
+        });
+        id
+    }
+
+    /// Adds back each standard group that is missing, looking as it first did.
+    pub(crate) fn restore_standard(&mut self) {
+        for standard in StandardGroup::ALL {
+            if self.standard(standard).is_none() {
+                let (colour, style) = standard.looks();
+                let name = GroupName::Standard {
+                    standard,
+                    renamed: None,
+                };
+                self.push(name, Some(colour), style);
+            }
+        }
+    }
+
+    /// Whether any standard group was deleted.
+    pub(crate) fn standard_missing(&self) -> bool {
+        StandardGroup::ALL
+            .into_iter()
+            .any(|s| self.standard(s).is_none())
     }
 
     /// Adds a group and returns it; an existing group with the same name is returned instead of
@@ -88,15 +237,8 @@ impl Groups {
         if let Some(existing) = self.named_ignoring_case(name) {
             return Some(existing);
         }
-        let id = GroupId(self.next_id);
-        self.next_id += 1;
-        self.list.push(Group {
-            id,
-            name: name.to_owned(),
-            colour: None,
-            line_style: LineStyle::default(),
-        });
-        Some(id)
+        let name = GroupName::Named(name.to_owned());
+        Some(self.push(name, None, LineStyle::default()))
     }
 
     /// Renames a group. A blank name, or one another group already has, is ignored.
@@ -108,8 +250,12 @@ impl Groups {
         if new.is_empty() || taken {
             return;
         }
-        if let Some(group) = self.list.iter_mut().find(|g| g.id == id) {
-            new.clone_into(&mut group.name);
+        let Some(group) = self.list.iter_mut().find(|g| g.id == id) else {
+            return;
+        };
+        match &mut group.name {
+            GroupName::Named(name) => new.clone_into(name),
+            GroupName::Standard { renamed, .. } => *renamed = Some(new.to_owned()),
         }
     }
 
@@ -117,14 +263,17 @@ impl Groups {
         self.list.iter().any(|g| g.id == id)
     }
 
-    /// As [`Self::add`] and [`Self::rename`] keep them: IDs unique and below the next one to
-    /// give out, names unique ignoring case and never blank.
+    /// As the methods here keep them: IDs unique and below the next one to give out, each
+    /// standard group once, and the names the user typed unique ignoring case and never blank.
     pub(crate) fn consistent(&self) -> bool {
         let mut ids = HashSet::new();
+        let mut standards = HashSet::new();
         let mut names = HashSet::new();
         self.list.iter().all(|g| {
-            let name = g.name.trim().to_lowercase();
-            g.id.0 < self.next_id && ids.insert(g.id) && !name.is_empty() && names.insert(name)
+            let name = g.name.typed().map(|n| n.trim().to_lowercase());
+            let fresh_name = name.is_none_or(|n| !n.is_empty() && names.insert(n));
+            let fresh_standard = g.name.standard().is_none_or(|s| standards.insert(s));
+            g.id.0 < self.next_id && ids.insert(g.id) && fresh_name && fresh_standard
         })
     }
 
@@ -164,7 +313,7 @@ mod tests {
     use super::*;
 
     fn names(groups: &Groups) -> Vec<&str> {
-        groups.iter().map(|(_, name)| name).collect()
+        groups.iter().filter_map(|(_, name)| name.typed()).collect()
     }
 
     #[test]
@@ -187,7 +336,61 @@ mod tests {
         groups.rename(office, " ");
         assert_eq!(names(&groups), ["Office", "Home"]);
         groups.rename(office, "Work");
-        assert_eq!(groups.iter().next(), Some((office, "Work")));
+        assert_eq!(names(&groups), ["Work", "Home"]);
+        assert_eq!(groups.iter().next().map(|(id, _)| id), Some(office));
+    }
+
+    #[test]
+    fn the_standard_groups_each_look_their_own_and_come_back_once_deleted() {
+        let mut groups = Groups::default();
+        assert!(groups.standard_missing());
+        groups.restore_standard();
+        assert!(!groups.standard_missing());
+        assert!(groups.consistent());
+        let looks: HashSet<_> = groups
+            .iter()
+            .map(|(id, _)| (groups.colour(id), groups.line_style(id)))
+            .collect();
+        assert_eq!(looks.len(), StandardGroup::ALL.len());
+
+        let wifi = groups.standard(StandardGroup::WiFi).unwrap();
+        groups.rename(wifi, "Wireless");
+        groups.set_colour(wifi, None);
+        let printing = groups.standard(StandardGroup::Printing).unwrap();
+        groups.remove(printing);
+        groups.restore_standard();
+        assert_eq!(groups.iter().count(), StandardGroup::ALL.len());
+        assert_eq!(groups.standard(StandardGroup::WiFi), Some(wifi), "kept");
+        assert_eq!(names(&groups), ["Wireless"]);
+        assert_eq!(groups.colour(wifi), None, "as the user left it");
+        let restored = groups.standard(StandardGroup::Printing).unwrap();
+        assert_ne!(restored, printing, "a new group");
+        assert_eq!(groups.colour(restored), Some(GroupColour::Yellow));
+    }
+
+    #[test]
+    fn a_typed_name_never_clashes_with_a_standard_one() {
+        let mut groups = Groups::default();
+        groups.restore_standard();
+        let servers = groups.standard(StandardGroup::Servers).unwrap();
+        let added = groups.add("Servers");
+        assert_ne!(added, Some(servers), "a group of its own");
+        groups.rename(servers, "servers");
+        assert_eq!(names(&groups), ["Servers"], "but typed names stay unique");
+    }
+
+    #[test]
+    fn plain_and_standard_names_are_saved_so_both_read_back() {
+        let mut groups = Groups::default();
+        groups.add("Office");
+        groups.restore_standard();
+        let text = serde_json::to_string(&groups).unwrap();
+        assert_eq!(serde_json::from_str::<Groups>(&text).unwrap(), groups);
+
+        let older =
+            r#"{"list":[{"id":0,"name":"Office","colour":null,"line_style":"Solid"}],"next_id":1}"#;
+        let older: Groups = serde_json::from_str(older).unwrap();
+        assert_eq!(names(&older), ["Office"]);
     }
 
     #[test]

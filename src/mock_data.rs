@@ -589,36 +589,28 @@ pub(crate) fn network() -> Network {
     network
 }
 
-/// Example groups, as if the user had made them: one for each kind of role, so the edit page
-/// shows many, each with its own pairing of colour and line style. The router, the switch and
-/// the access point each show in their own colour; what hangs off Wi-Fi waves or is dotted,
-/// guests' lines are dashed, and Other is left in no group.
+/// Example groups for the custom roles, as if the user had made them, beside the standard
+/// groups the standard roles are in: each with a pairing of colour and line style none of the
+/// others has. Guests' lines are dashed or dotted, and Other is left in no group.
 fn add_groups(network: &mut Network) {
-    use GroupColour::{Blue, Green, Orange, Purple, Red, Yellow};
-    use LineStyle::{DashDot, Dashed, Dotted, LongDashes, Solid, Thick, Wavy, Zigzag};
     let custom = |name: &str| Role::Custom(name.into());
     let groups = [
-        ("Network core", Purple, Thick, vec![Role::Router]),
-        ("Switching", Blue, Solid, vec![Role::Switch]),
-        ("Wi-Fi", Green, Wavy, vec![Role::AccessPoint]),
-        ("Mobile", Green, Dotted, vec![Role::Laptop, Role::Phone]),
-        ("Workstations", Yellow, Solid, vec![Role::Desktop]),
-        ("Printing", Yellow, DashDot, vec![Role::Printer]),
-        ("Servers", Red, Thick, vec![Role::Server]),
         (
             "Virtual machines",
-            Red,
-            Dashed,
+            GroupColour::Red,
+            LineStyle::Dashed,
             vec![custom(VIRTUAL_MACHINE)],
         ),
-        ("Containers", Purple, Dotted, vec![custom(CONTAINER)]),
-        ("Storage", Orange, LongDashes, vec![Role::Nas]),
-        ("Security", Red, Zigzag, vec![Role::Camera]),
-        ("Smart home", Orange, Zigzag, vec![Role::Iot]),
+        (
+            "Containers",
+            GroupColour::Purple,
+            LineStyle::Dotted,
+            vec![custom(CONTAINER)],
+        ),
         (
             "Entertainment",
-            Blue,
-            Wavy,
+            GroupColour::Blue,
+            LineStyle::Wavy,
             vec![custom("TV"), custom("Games console")],
         ),
     ];

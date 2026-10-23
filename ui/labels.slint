@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { AiImportPhase, DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, TargetError } from "bridge.slint";
+import { AiImportPhase, DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, StandardGroup, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -65,6 +65,20 @@ export global Labels {
     }
 
     // First in the role group dropdown. Rust calls this to build that list.
+    // Standard groups only, until renamed. Rust calls this to build the group list.
+    public pure function standard-group(group: StandardGroup) -> string {
+        if group == StandardGroup.network-core { return @tr("groups.standard.network-core"); }
+        if group == StandardGroup.switching { return @tr("groups.standard.switching"); }
+        if group == StandardGroup.wi-fi { return @tr("groups.standard.wi-fi"); }
+        if group == StandardGroup.mobile { return @tr("groups.standard.mobile"); }
+        if group == StandardGroup.workstations { return @tr("groups.standard.workstations"); }
+        if group == StandardGroup.printing { return @tr("groups.standard.printing"); }
+        if group == StandardGroup.servers { return @tr("groups.standard.servers"); }
+        if group == StandardGroup.storage { return @tr("groups.standard.storage"); }
+        if group == StandardGroup.security { return @tr("groups.standard.security"); }
+        return @tr("groups.standard.smart-home");
+    }
+
     public pure function no-group() -> string {
         return @tr("groups.none");
     }

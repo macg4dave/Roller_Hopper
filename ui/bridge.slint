@@ -27,6 +27,9 @@ export enum StatusFilter { all, online, offline }
 // The standard roles; custom roles are sent as the user typed them.
 export enum RoleKind { router, switch, access-point, server, nas, desktop, laptop, phone, printer, camera, iot, other }
 
+// The groups a new project starts with; their names come from Labels.standard-group().
+export enum StandardGroup { network-core, switching, wi-fi, mobile, workstations, printing, servers, storage, security, smart-home }
+
 // A group's colour; `none` leaves its devices in the usual colours.
 export enum GroupColour { none, red, orange, yellow, green, blue, purple }
 
@@ -425,6 +428,8 @@ export global Bridge {
     // The group list's rows, and their names led by "no group" for the role group dropdown.
     in property <[GroupView]> groups;
     in property <[string]> group-choices;
+    // A standard group was deleted.
+    in property <bool> groups-restorable;
     // A preview of each line style, in the order of the group line style dropdown.
     in property <[LineSet]> line-styles;
     in property <StatusFilter> filter;
@@ -544,6 +549,8 @@ export global Bridge {
     callback set-group-line-style(int, int);
     // The group's roles are left in no group.
     callback delete-group(int);
+    // Deleted standard groups back, with the standard roles that are in no group.
+    callback restore-groups();
     // Dragging the card with this id, on the map or from the lists, so its icon is at (x, y) in
     // map units: it moves there and previews the line it would join. Dropping it plugs it in
     // there, or unplugs it away from every line; cancelling sends it back. Both are ignored

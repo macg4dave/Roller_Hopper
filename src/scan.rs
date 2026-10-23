@@ -1,6 +1,6 @@
-//! Scans a subnet for real, off the UI thread: netscli-core's ping sweep, which adds the hosts
-//! in the operating system's neighbour table and names from mDNS, with a browse of the services
-//! hosts announce over mDNS alongside; then, for each host found, TCP connect probes of the
+//! Scans a subnet for real, off the UI thread: a sweep for its hosts (see [`sweep`]), with a
+//! browse of the services hosts announce over mDNS alongside; then, for each host found, TCP
+//! connect probes of the
 //! chosen ports, a reverse DNS lookup and a ping for its time-to-live, as the options ask.
 //! Each host comes back as a model [`Answer`] through a channel the UI drains; dropping the
 //! [`Scan`] stops it.
@@ -14,6 +14,7 @@ mod identify;
 mod mdns;
 mod ports;
 mod subnets;
+mod sweep;
 
 pub(crate) use subnets::local_subnet;
 
@@ -23,10 +24,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryIter};
 
 use ipnet::Ipv4Net;
-use netscli_core::{
-    DiscoverEngine, DiscoverPhase, DiscoverProgress, Host, MdnsService, PingScanner,
-    PortScanProgress, PortScanner, UdpScanner,
-};
+use netscli_core::{Host, MdnsService, PingScanner, PortScanProgress, PortScanner, UdpScanner};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::{JoinHandle, JoinSet};
 
@@ -34,7 +32,7 @@ use crate::model::{Answer, Discovery, Network, ScanOptions, ScanProgress};
 use answer::Probed;
 use ports::{PortNames, PortPlan};
 
-/// Probes in flight at once, in the sweep and across the port probes of all hosts.
+/// Probes in flight at once across the port probes of all hosts, and the sweep's knocks.
 const CONCURRENCY: usize = 128;
 const PING_TIMEOUT_MS: u64 = 1000;
 const PORT_TIMEOUT_MS: u64 = 1000;
@@ -136,20 +134,9 @@ impl Drop for Scan {
 }
 
 async fn run(subnet: Ipv4Net, options: ScanOptions, counts: Arc<Counts>, events: Sender<Event>) {
-    let sweep_counts = Arc::clone(&counts);
-    let progress: Arc<dyn Fn(DiscoverProgress) + Send + Sync> = Arc::new(move |p| {
-        if matches!(p.phase, DiscoverPhase::Ping) {
-            sweep_counts.swept.store(p.completed, Ordering::Relaxed);
-        }
-    });
     let browse = options.mdns_services.then(|| tokio::spawn(mdns::browse()));
-    let sweep = DiscoverEngine::new_with_timeouts(CONCURRENCY, PING_TIMEOUT_MS, DNS_TIMEOUT_MS);
-    let swept = sweep
-        .scan_subnet_with_progress(subnet, false, Some(progress))
-        .await;
-    let end = match swept {
-        Ok(mut hosts) => {
-            subnets::add_own_macs(&mut hosts, &subnets::own_macs());
+    let end = match sweep::hosts(subnet, &counts).await {
+        Ok(hosts) => {
             let announced = match browse {
                 // A browse that failed heard nothing.
                 Some(task) => task.await.unwrap_or_default(),

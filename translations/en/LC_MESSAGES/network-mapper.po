@@ -832,6 +832,41 @@ msgstr "Group name"
 msgid "groups.delete"
 msgstr "Delete group"
 
+# Brings back deleted standard groups, and puts standard roles that are in no group into them.
+msgid "groups.restore"
+msgstr "Restore standard groups"
+
+# The groups a new project starts with, until the user renames them.
+msgid "groups.standard.network-core"
+msgstr "Network core"
+
+msgid "groups.standard.switching"
+msgstr "Switching"
+
+msgid "groups.standard.wi-fi"
+msgstr "Wi-Fi"
+
+msgid "groups.standard.mobile"
+msgstr "Mobile"
+
+msgid "groups.standard.workstations"
+msgstr "Workstations"
+
+msgid "groups.standard.printing"
+msgstr "Printing"
+
+msgid "groups.standard.servers"
+msgstr "Servers"
+
+msgid "groups.standard.storage"
+msgstr "Storage"
+
+msgid "groups.standard.security"
+msgstr "Security"
+
+msgid "groups.standard.smart-home"
+msgstr "Smart home"
+
 # The colour dots beside each group; its devices are shown in the colour chosen.
 msgid "groups.colour.red"
 msgstr "Red"

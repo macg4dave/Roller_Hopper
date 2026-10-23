@@ -135,7 +135,8 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     }
     bridge.set_roles_restorable(network.standard_roles_changed());
 
-    let groups = convert::group_views(network);
+    bridge.set_groups_restorable(network.standard_groups_missing());
+    let groups = convert::group_views(labels, network);
     let choices = std::iter::once(labels.invoke_no_group())
         .chain(groups.iter().map(|g| g.name.clone()))
         .collect();

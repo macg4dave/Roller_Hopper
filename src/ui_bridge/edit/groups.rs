@@ -34,7 +34,8 @@ impl AppState {
     }
 }
 
-/// Adding, renaming, colouring, styling and deleting groups, and putting roles in them.
+/// Adding, renaming, colouring, styling, deleting and restoring groups, and putting roles in
+/// them.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     let set_group = handler(ui, state, |st, (role, choice)| {
@@ -69,13 +70,15 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_delete_group(handler(ui, state, |st, index| {
         st.edit_group(convert::index(index), Network::remove_group);
     }));
+    let restore = handler(ui, state, |st, ()| st.network.restore_standard_groups());
+    bridge.on_restore_groups(move || restore(()));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::Role;
+    use crate::model::{Role, StandardGroup};
 
     #[test]
     fn a_role_is_put_in_a_group_by_dropdown_choice() {
@@ -103,12 +106,24 @@ mod tests {
         state.set_role_group(printer, 1);
         state.edit_group(0, Network::remove_group);
         assert_eq!(state.network.role_group(&Role::Printer), None);
-        assert!(
-            state
-                .network
-                .groups()
-                .iter()
-                .all(|(_, n)| n != "Network core")
-        );
+        let core = state.network.groups().standard(StandardGroup::NetworkCore);
+        assert_eq!(core, None, "the first group");
+    }
+
+    #[test]
+    fn restoring_brings_back_deleted_standard_groups_with_their_roles() {
+        let mut state = AppState::new(Network::default());
+        state.edit_group(0, Network::remove_group);
+        let laptop = state.role_index(&Role::Laptop);
+        state.set_role_group(laptop, 0);
+        assert!(state.network.standard_groups_missing());
+
+        state.network.restore_standard_groups();
+        assert!(!state.network.standard_groups_missing());
+        let core = state.network.groups().standard(StandardGroup::NetworkCore);
+        assert!(core.is_some());
+        assert_eq!(state.network.role_group(&Role::Router), core);
+        let mobile = state.network.groups().standard(StandardGroup::Mobile);
+        assert_eq!(state.network.role_group(&Role::Laptop), mobile, "ungrouped");
     }
 }
