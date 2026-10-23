@@ -440,6 +440,6 @@ mod tests {
         };
         assert_eq!(groups.add("Office"), None);
         groups.restore_standard();
-        assert!(groups.list.is_empty());
+        assert_eq!(groups.list, []);
     }
 }

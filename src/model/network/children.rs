@@ -34,8 +34,7 @@ impl Network {
         mut device: Device,
         uplink: Option<(CardId, ConnectionKind)>,
     ) -> Option<DeviceId> {
-        let device_id = fresh_ids(self.devices.iter().map(|existing| existing.id.0), 1)?
-            .pop()?;
+        let device_id = fresh_ids(self.devices.iter().map(|existing| existing.id.0), 1)?.pop()?;
         let card_ids = fresh_ids(
             self.devices
                 .iter()
