@@ -11,14 +11,12 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use super::{CONCURRENCY, Counts, DNS_TIMEOUT_MS, PING_TIMEOUT_MS, run_bounded, subnets};
 use ipnet::Ipv4Net;
 use netscli_core::{
     DiscoverEngine, DiscoverPhase, DiscoverProgress, FoundBy, Host, NetworkManager, PingScanner,
     PortScanner, PortStatus,
 };
-use tokio::task::JoinSet;
-
-use super::{CONCURRENCY, Counts, DNS_TIMEOUT_MS, PING_TIMEOUT_MS, subnets};
 
 /// Pings in flight at once: fewer than the port probes, so a busy Wi-Fi access point or a
 /// device that limits its replies drops none.
@@ -77,27 +75,32 @@ pub(super) async fn hosts(
 async fn second_chances(silent: &[IpAddr], addresses: usize, counts: &Counts) -> HashSet<IpAddr> {
     let ping = PingScanner::new(SWEEP_CONCURRENCY);
     let ports = PortScanner::new(CONCURRENCY);
-    let mut pending = JoinSet::new();
-    for &ip in silent {
-        let (ping, ports) = (ping.clone(), ports.clone());
-        pending.spawn(async move {
-            let answered =
-                knock(&ports, ip).await || ping.ping(ip, RETRY_PING_TIMEOUT_MS).await.alive;
-            (ip, answered)
-        });
-    }
     let half = addresses / 2;
     let mut answered = HashSet::new();
     let mut done = 0;
-    while let Some(chance) = pending.join_next().await {
-        done += 1;
-        let swept = half + done * (addresses - half) / silent.len();
-        counts.swept.store(swept, Ordering::Relaxed);
-        // A chance that could not run found nothing.
-        if let Ok((ip, true)) = chance {
-            answered.insert(ip);
-        }
-    }
+    run_bounded(
+        silent.to_vec(),
+        SWEEP_CONCURRENCY,
+        |ip| {
+            let (ping, ports) = (ping.clone(), ports.clone());
+            async move {
+                let responded =
+                    knock(&ports, ip).await || ping.ping(ip, RETRY_PING_TIMEOUT_MS).await.alive;
+                (ip, responded)
+            }
+        },
+        |chance| {
+            done += 1;
+            let swept = half + done * (addresses - half) / silent.len();
+            counts.swept.store(swept, Ordering::Relaxed);
+            // A chance that could not run found nothing.
+            if let Ok((ip, true)) = chance {
+                answered.insert(ip);
+            }
+            true
+        },
+    )
+    .await;
     answered
 }
 

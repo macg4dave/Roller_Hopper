@@ -26,7 +26,8 @@ export component AiModelPanel inherits VerticalLayout {
     callback refresh();
 
     property <bool> busy: state == ModelState.loading || state == ModelState.running;
-    property <bool> picked-is-loaded: model-index >= 0 && models[model-index] == loaded-name
+    property <bool> picked-is-loaded: model-index >= 0 && model-index < models.length
+        && models[model-index] == loaded-name
         && state != ModelState.no-gpu && state != ModelState.insufficient-gpu-memory;
 
     pure function state-text(state: ModelState) -> string {

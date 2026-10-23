@@ -51,7 +51,8 @@ impl Saved {
 
     pub(crate) fn save(&self, dir: &Path) -> io::Result<()> {
         fs::create_dir_all(dir)?;
-        fs::write(dir.join(FILE), serde_json::to_string_pretty(self)?)
+        let bytes = serde_json::to_vec_pretty(self)?;
+        crate::files::atomic_write(&dir.join(FILE), &bytes)
     }
 
     /// The prompt to run: the user's, or the default.

@@ -3,14 +3,14 @@
 //! temporary file beside the old one and then swaps it in, so a failed save keeps the old
 //! file. Nothing here knows about Slint.
 
-use std::fs;
-use std::io::Write;
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use atomic_write_file::AtomicWriteFile;
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 
+use crate::files;
 use crate::model::{Arrangement, Device, Network};
 
 /// Marks a file as a project, whatever it is called.
@@ -60,16 +60,28 @@ pub(crate) enum OpenError {
 
 /// Why a save failed: the system's own message. The file there before is left as it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SaveError(pub(crate) String);
+pub(crate) enum SaveError {
+    TooLarge,
+    Io(String),
+}
 
 /// Reads and checks the project at `path`.
 pub(crate) fn read(path: &Path) -> Result<Project, OpenError> {
     let unreadable = |error: std::io::Error| OpenError::Unreadable(error.to_string());
-    if fs::metadata(path).map_err(unreadable)?.len() > MAX_FILE_BYTES {
-        return Err(OpenError::TooLarge);
-    }
-    let bytes = fs::read(path).map_err(unreadable)?;
+    let bytes = read_bounded(path, MAX_FILE_BYTES)
+        .map_err(unreadable)?
+        .ok_or(OpenError::TooLarge)?;
     parse(&bytes)
+}
+
+/// Reads at most one byte beyond `limit`, so a changing or sparse file cannot make the process
+/// allocate without bound between a metadata check and the read.
+fn read_bounded(path: &Path, limit: u64) -> io::Result<Option<Vec<u8>>> {
+    let mut bytes = Vec::new();
+    File::open(path)?
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    Ok((u64::try_from(bytes.len()).unwrap_or(u64::MAX) <= limit).then_some(bytes))
 }
 
 fn parse(bytes: &[u8]) -> Result<Project, OpenError> {
@@ -86,7 +98,7 @@ fn parse(bytes: &[u8]) -> Result<Project, OpenError> {
         serde_json::from_slice(bytes).map_err(|_| OpenError::Damaged)?;
     let Project {
         network,
-        arrangement,
+        mut arrangement,
     } = document.project;
     if !within_limits(&network) {
         return Err(OpenError::TooLarge);
@@ -94,6 +106,7 @@ fn parse(bytes: &[u8]) -> Result<Project, OpenError> {
     // Which check failed is for the tests (see `Network::checked`); the user is told the file
     // is damaged either way.
     let network = network.checked().map_err(|_| OpenError::Damaged)?;
+    arrangement.retain(&network);
     Ok(Project {
         network,
         arrangement,
@@ -140,24 +153,19 @@ fn device_within_limits(device: &Device, short: impl Fn(Option<&str>) -> bool) -
 
 /// Saves `project` at `path`, replacing what was there only once the new file is complete.
 pub(crate) fn write(path: &Path, project: &Project) -> Result<(), SaveError> {
-    let failed = |error: std::io::Error| SaveError(error.to_string());
+    if !within_limits(&project.network) {
+        return Err(SaveError::TooLarge);
+    }
     let document = Document {
         format: FORMAT.to_owned(),
         version: VERSION,
         project,
     };
-    let bytes = serde_json::to_vec_pretty(&document).map_err(|e| SaveError(e.to_string()))?;
-    let mut file = AtomicWriteFile::open(through_link(path)).map_err(failed)?;
-    file.write_all(&bytes).map_err(failed)?;
-    file.commit().map_err(failed)
-}
-
-/// The file a link at `path` points to, which a save replaces rather than the link itself;
-/// `path` itself when it is no link, including when nothing is there yet.
-fn through_link(path: &Path) -> PathBuf {
-    let link = fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
-    let target = link.then(|| fs::canonicalize(path).ok()).flatten();
-    target.unwrap_or_else(|| path.to_owned())
+    let bytes = serde_json::to_vec_pretty(&document).map_err(|e| SaveError::Io(e.to_string()))?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_FILE_BYTES {
+        return Err(SaveError::TooLarge);
+    }
+    files::atomic_write(path, &bytes).map_err(|e| SaveError::Io(e.to_string()))
 }
 
 /// `path` with the project file ending, unless it already ends in `.json`.
@@ -186,6 +194,7 @@ pub(crate) fn name(path: &Path) -> String {
 mod tests {
     use super::*;
     use crate::mock_data;
+    use std::fs;
 
     fn sample() -> Project {
         Project {
@@ -242,6 +251,20 @@ mod tests {
         assert!(parse(&saved(&project)).is_ok(), "notes may be long");
         project.network.device_mut(id).unwrap().name = "n".repeat(MAX_TEXT_BYTES + 1);
         assert_eq!(parse(&saved(&project)), Err(OpenError::TooLarge));
+        assert_eq!(
+            write(Path::new("unused"), &project),
+            Err(SaveError::TooLarge)
+        );
+    }
+
+    #[test]
+    fn reading_never_takes_more_than_the_file_limit() {
+        let folder = std::env::temp_dir().join(format!("rhopper-limit-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let path = folder.join("large.rhopper.json");
+        fs::write(&path, [0_u8; 17]).unwrap();
+        assert_eq!(read_bounded(&path, 16).unwrap(), None);
+        fs::remove_dir_all(folder).unwrap();
     }
 
     #[test]

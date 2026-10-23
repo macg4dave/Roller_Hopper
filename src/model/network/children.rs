@@ -3,11 +3,12 @@
 use super::{ConnectionKind, Network};
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::{Device, DeviceId, DeviceKind, LastSeen, Role, Status};
+use crate::model::fresh_ids;
 
 impl Network {
     /// Adds a blank device with one blank network card and returns it. It is added last and
     /// plugged in nowhere, ready for the user to fill in.
-    pub(crate) fn add_device(&mut self) -> DeviceId {
+    pub(crate) fn add_device(&mut self) -> Option<DeviceId> {
         let device = Device {
             id: DeviceId(0),
             name: String::new(),
@@ -32,10 +33,18 @@ impl Network {
         &mut self,
         mut device: Device,
         uplink: Option<(CardId, ConnectionKind)>,
-    ) -> DeviceId {
-        device.id = DeviceId(self.devices.iter().map(|d| d.id.0).max().unwrap_or(0) + 1);
-        let first_card = self.next_card_id().0;
-        for (card, id) in device.cards.iter_mut().zip(first_card..) {
+    ) -> Option<DeviceId> {
+        let device_id = fresh_ids(self.devices.iter().map(|existing| existing.id.0), 1)?
+            .pop()?;
+        let card_ids = fresh_ids(
+            self.devices
+                .iter()
+                .flat_map(|existing| &existing.cards)
+                .map(|card| card.id.0),
+            device.cards.len(),
+        )?;
+        device.id = DeviceId(device_id);
+        for (card, id) in device.cards.iter_mut().zip(card_ids) {
             card.id = CardId(id);
         }
         let (id, card) = (device.id, device.primary_card().map(|c| c.id));
@@ -43,7 +52,7 @@ impl Network {
         if let Some(card) = card {
             self.plug_found(card, uplink);
         }
-        id
+        Some(id)
     }
 
     pub(super) fn plug_found(&mut self, card: CardId, uplink: Option<(CardId, ConnectionKind)>) {
@@ -88,10 +97,25 @@ mod tests {
     #[test]
     fn a_device_is_added_blank_last_and_plugged_in_nowhere() {
         let mut network = mock_data::network();
-        let id = network.add_device();
+        let id = network.add_device().unwrap();
         let added = network.devices().last().unwrap();
         assert_eq!(added.id, id);
         assert_eq!(added.cards, [NetworkCard::blank(added.cards[0].id)]);
         assert!(network.uplink(added.cards[0].id).is_none());
+    }
+
+    #[test]
+    fn adding_falls_back_to_free_ids_below_the_ui_limit() {
+        let mut network = mock_data::network();
+        network.devices[0].id = DeviceId(crate::model::MAX_MODEL_ID);
+        network.devices[1].id = DeviceId(2);
+        network.devices[0].cards[0].id = CardId(crate::model::MAX_MODEL_ID);
+        network.devices[1].cards[0].id = CardId(2);
+        let id = network.add_device().unwrap();
+        let card = network.device(id).unwrap().cards[0].id;
+        assert!(id.0 <= crate::model::MAX_MODEL_ID);
+        assert!(card.0 <= crate::model::MAX_MODEL_ID);
+        assert_ne!(id, DeviceId(crate::model::MAX_MODEL_ID));
+        assert_ne!(card, CardId(crate::model::MAX_MODEL_ID));
     }
 }

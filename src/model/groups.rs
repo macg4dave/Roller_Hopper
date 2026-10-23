@@ -194,16 +194,16 @@ impl Groups {
         name: GroupName,
         colour: Option<GroupColour>,
         line_style: LineStyle,
-    ) -> GroupId {
+    ) -> Option<GroupId> {
         let id = GroupId(self.next_id);
-        self.next_id += 1;
+        self.next_id = self.next_id.checked_add(1)?;
         self.list.push(Group {
             id,
             name,
             colour,
             line_style,
         });
-        id
+        Some(id)
     }
 
     /// Adds back each standard group that is missing, looking as it first did.
@@ -215,7 +215,9 @@ impl Groups {
                     standard,
                     renamed: None,
                 };
-                self.push(name, Some(colour), style);
+                if self.push(name, Some(colour), style).is_none() {
+                    break;
+                }
             }
         }
     }
@@ -238,7 +240,7 @@ impl Groups {
             return Some(existing);
         }
         let name = GroupName::Named(name.to_owned());
-        Some(self.push(name, None, LineStyle::default()))
+        self.push(name, None, LineStyle::default())
     }
 
     /// Renames a group. A blank name, or one another group already has, is ignored.
@@ -428,5 +430,16 @@ mod tests {
         groups.remove(office);
         assert_eq!(groups.iter().count(), 0);
         assert_ne!(groups.add("Office"), Some(office));
+    }
+
+    #[test]
+    fn an_exhausted_saved_id_counter_refuses_new_groups_without_overflowing() {
+        let mut groups = Groups {
+            next_id: u32::MAX,
+            ..Groups::default()
+        };
+        assert_eq!(groups.add("Office"), None);
+        groups.restore_standard();
+        assert!(groups.list.is_empty());
     }
 }

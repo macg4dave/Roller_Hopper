@@ -54,14 +54,14 @@ impl AppState {
             }
         }
         if scan::record(&mut self.discovery, progress, events, &self.network) {
-            self.scans += 1;
+            self.scans = self.scans.saturating_add(1);
         }
         self.discovery.busy()
     }
 
     fn stop_discovery(&mut self) {
         if self.discovery.stop() {
-            self.scans += 1;
+            self.scans = self.scans.saturating_add(1);
         }
     }
 

@@ -119,6 +119,9 @@ impl Discovery {
         if index >= self.hosts.len() {
             return;
         }
+        if let Some(import) = &mut self.ai_import {
+            import.host_removed(index);
+        }
         self.hosts.remove(index);
         self.selected = match self.selected {
             Some(at) if at == index => None,

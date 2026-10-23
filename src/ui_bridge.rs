@@ -94,7 +94,8 @@ impl AppState {
     }
 
     /// The window's state for `project`, opened from `file`, with nothing changed yet.
-    fn with_project(project: Project, file: Option<PathBuf>) -> Self {
+    fn with_project(mut project: Project, file: Option<PathBuf>) -> Self {
+        project.arrangement.retain(&project.network);
         let positions = tree_layout(&project.network, &project.arrangement);
         let saved = project.clone();
         let Project {

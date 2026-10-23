@@ -2,7 +2,7 @@
 //! other, each split to the left and right of the trunk. This is layout only: what is plugged
 //! into what is in [`Network`], and a card's place here never changes its uplink.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +77,27 @@ pub(crate) struct Arrangement {
 }
 
 impl Arrangement {
+    /// Removes saved layout entries that cannot affect this network. Project files may contain
+    /// stale, duplicated, or deliberately inflated arrangement data; keeping it would bloat every
+    /// later save even though [`Self::tiers`] ignores it while drawing.
+    pub(crate) fn retain(&mut self, network: &Network) {
+        self.tiers.retain(|parent, tiers| {
+            if network.card(*parent).is_none() {
+                return false;
+            }
+            let behind: HashSet<_> = network.behind(*parent).collect();
+            let mut placed = HashSet::new();
+            for tier in tiers.iter_mut() {
+                tier.left
+                    .retain(|id| behind.contains(id) && placed.insert(*id));
+                tier.right
+                    .retain(|id| behind.contains(id) && placed.insert(*id));
+            }
+            tiers.retain(|tier| !tier.is_empty());
+            !tiers.is_empty()
+        });
+    }
+
     /// The tiers under `parent`, as arranged, holding only devices still connected behind it.
     /// Devices not arranged yet go in the first tier, the first half of them on the left, so
     /// with nothing arranged a device's devices sit in one row centred under it.
@@ -270,5 +291,37 @@ mod tests {
         arrangement.place(&network, ACCESS_POINT, ROUTER, alone);
         network.connect(ACCESS_POINT, None);
         assert_eq!(arrangement.tiers(&network, ROUTER).len(), 1);
+    }
+
+    #[test]
+    fn stale_misplaced_and_duplicate_saved_entries_are_discarded() {
+        let network = mock_data::network();
+        let mut arrangement = Arrangement {
+            tiers: BTreeMap::from([
+                (
+                    ROUTER,
+                    vec![Tier {
+                        left: vec![SWITCH, SWITCH, PC],
+                        right: vec![ACCESS_POINT],
+                    }],
+                ),
+                (
+                    CardId(u32::MAX),
+                    vec![Tier {
+                        left: vec![SWITCH],
+                        right: vec![],
+                    }],
+                ),
+            ]),
+        };
+        arrangement.retain(&network);
+        assert_eq!(
+            arrangement.tiers.get(&ROUTER),
+            Some(&vec![Tier {
+                left: vec![SWITCH],
+                right: vec![ACCESS_POINT],
+            }])
+        );
+        assert_eq!(arrangement.tiers.len(), 1);
     }
 }

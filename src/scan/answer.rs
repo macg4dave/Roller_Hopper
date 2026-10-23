@@ -10,7 +10,7 @@ use netscli_core::{FoundBy, Host, MdnsService, NameSource, PortResult, Protocol}
 
 use super::identify::{self, Evidence};
 use super::mdns;
-use super::ports::PortNames;
+use super::ports::PortRegistry;
 use crate::model::{
     Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
     ScanOptions, ServiceProtocol, ServiceSource, Services, Status,
@@ -41,7 +41,7 @@ pub(super) fn answer(
     probed: &Probed,
     subnet: Ipv4Net,
     options: ScanOptions,
-    names: &PortNames,
+    names: &PortRegistry,
 ) -> Option<Answer> {
     let IpAddr::V4(ip) = probed.host.ip else {
         return None;
@@ -176,7 +176,7 @@ fn suggested_name(
 
 /// The open ports, each described by the software that named itself on it when `identify`
 /// allows, or else by the service usual on that port: the scanner's name for it, or IANA's.
-fn services(ports: &[PortResult], identify: bool, names: &PortNames) -> Services {
+fn services(ports: &[PortResult], identify: bool, names: &PortRegistry) -> Services {
     let mut services = Services::default();
     for port in ports.iter().filter(|p| p.open) {
         let protocol = match port.protocol {
@@ -278,8 +278,8 @@ mod tests {
     }
 
     /// No IANA names, so ports keep only the scanner's.
-    fn none() -> PortNames {
-        PortNames::default()
+    fn none() -> PortRegistry {
+        PortRegistry::default()
     }
 
     /// Every option on.
@@ -423,7 +423,7 @@ mod tests {
         let mut database = port(5432, true, "", None);
         database.service = None;
         host.ports = vec![database];
-        let answer = answer(&host, home(), all(), &PortNames::load()).unwrap();
+        let answer = answer(&host, home(), all(), &PortRegistry::load()).unwrap();
         let services = answer.device.cards[0].services.to_string();
         assert_eq!(services, "5432 (postgres)");
         assert_eq!(

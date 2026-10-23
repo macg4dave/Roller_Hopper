@@ -36,9 +36,10 @@ impl AppState {
 
     /// Adds a blank device and selects it so it can be filled in.
     fn add_device(&mut self) {
-        let id = self.network.add_device();
-        self.selected = Some(Selection::Device(id));
-        self.lay_out_at_rest();
+        if let Some(id) = self.network.add_device() {
+            self.selected = Some(Selection::Device(id));
+            self.lay_out_at_rest();
+        }
     }
 }
 

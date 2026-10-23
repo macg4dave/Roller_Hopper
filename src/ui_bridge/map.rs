@@ -83,6 +83,7 @@ impl AppState {
     }
 
     fn lay_out(&mut self) {
+        self.arrangement.retain(&self.network);
         self.positions = tree_layout(&self.network, &self.arrangement);
     }
 

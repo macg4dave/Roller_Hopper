@@ -9,6 +9,7 @@ use super::{ConnectionKind, Network};
 use crate::model::card::MacAddr;
 use crate::model::card::{CardId, NetworkCard};
 use crate::model::device::DeviceId;
+use crate::model::fresh_ids;
 
 impl Network {
     /// Whether a card other than `except` already has `address`.
@@ -19,9 +20,11 @@ impl Network {
         })
     }
 
-    pub(super) fn next_card_id(&self) -> CardId {
+    pub(super) fn next_card_id(&self) -> Option<CardId> {
         let cards = self.devices.iter().flat_map(|d| &d.cards);
-        CardId(cards.map(|card| card.id.0).max().unwrap_or(0) + 1)
+        fresh_ids(cards.map(|card| card.id.0), 1)
+            .and_then(|mut ids| ids.pop())
+            .map(CardId)
     }
 
     pub(crate) fn card(&self, card: CardId) -> Option<&NetworkCard> {
@@ -39,7 +42,7 @@ impl Network {
     /// Adds a blank network card to `device`, plugged in nowhere (so it heads a tree of its own
     /// on the map), and returns it.
     pub(crate) fn add_card(&mut self, device: DeviceId) -> Option<CardId> {
-        let id = self.next_card_id();
+        let id = self.next_card_id()?;
         self.device_mut(device)?.cards.push(NetworkCard::blank(id));
         Some(id)
     }
@@ -131,7 +134,7 @@ impl Network {
         {
             return None;
         }
-        card.id = self.next_card_id();
+        card.id = self.next_card_id()?;
         let id = card.id;
         self.device_mut(to)?.cards.push(card);
         self.plug_found(id, uplink);

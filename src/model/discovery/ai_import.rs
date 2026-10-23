@@ -39,6 +39,23 @@ impl AiImport {
             AiImportPhase::Loading | AiImportPhase::Identifying
         )
     }
+
+    /// Keeps the index queue pointing at the same hosts after one result is removed. If that
+    /// host was currently with the model, its eventual answer is discarded instead of being
+    /// applied to the host that shifted into its place.
+    pub(super) fn host_removed(&mut self, removed: usize) {
+        self.waiting.retain(|&index| index != removed);
+        for index in &mut self.waiting {
+            if *index > removed {
+                *index -= 1;
+            }
+        }
+        self.current = match self.current {
+            Some(index) if index == removed => None,
+            Some(index) if index > removed => Some(index - 1),
+            current => current,
+        };
+    }
 }
 
 impl Discovery {
@@ -182,5 +199,24 @@ mod tests {
         assert!(discovery.start("192.168.1.0/24".parse().unwrap()));
         assert_eq!(discovery.ai_import(), None);
         assert!(!discovery.begin_ai_import(), "not while scanning");
+    }
+
+    #[test]
+    fn removing_a_result_does_not_retarget_queued_or_in_flight_answers() {
+        let mut import = AiImport {
+            phase: AiImportPhase::Identifying,
+            waiting: vec![0, 1, 3, 4],
+            current: Some(2),
+            done: 0,
+            total: 5,
+        };
+        import.host_removed(1);
+        assert_eq!(import.waiting, [0, 2, 3]);
+        assert_eq!(import.current, Some(1));
+        import.host_removed(1);
+        assert_eq!(
+            import.current, None,
+            "answer for the removed host is discarded"
+        );
     }
 }

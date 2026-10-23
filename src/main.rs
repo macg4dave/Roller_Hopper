@@ -3,6 +3,7 @@
 
 mod ai;
 mod ai_settings;
+mod files;
 #[cfg(test)]
 mod mock_data;
 mod model;

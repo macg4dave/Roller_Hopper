@@ -5,6 +5,8 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use atomic_write_file::AtomicWriteFile;
+
 #[derive(Debug, clap::Args)]
 pub(super) struct Options {
     /// Repository root (defaults to this tool's repository); file paths are relative to it.
@@ -111,7 +113,9 @@ pub(super) fn finish(changes: &[Change], options: &Options) -> io::Result<()> {
             }
         }
         for change in changes {
-            fs::write(&change.path, &change.after)?;
+            let mut file = AtomicWriteFile::open(&change.path)?;
+            file.write_all(&change.after)?;
+            file.commit()?;
         }
         writeln!(output, "Updated {} file(s).", changes.len())?;
     }

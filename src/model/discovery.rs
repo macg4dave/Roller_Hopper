@@ -357,7 +357,7 @@ impl Discovery {
         let mut device = found.device.clone();
         device.status = Status::Online;
         device.last_seen = LastSeen::default();
-        let id = network.insert_device(device, uplink);
+        let id = network.insert_device(device, uplink)?;
         found.decision = Decision::Added(id);
         Some(id)
     }

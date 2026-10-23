@@ -221,8 +221,7 @@ fn send(window: &AiSettingsWindow, worker: &Worker, job: Job) {
 /// removed since the list was shown is found or reported missing.
 fn file_named(name: &str) -> Option<PathBuf> {
     let dir = ai::models_dir()?;
-    let model = ai::installed(&dir).into_iter().find(|c| c.name() == name)?;
-    Some(model.file(&dir))
+    ai::named_file(&dir, name)
 }
 
 /// The name the model list shows for the model file at `path`, which Import with AI may have
@@ -232,7 +231,7 @@ fn name_of(path: &Path) -> Option<String> {
     let model = ai::installed(&dir)
         .into_iter()
         .find(|c| c.file(&dir) == path)?;
-    Some(model.name())
+    Some(model.name(&dir))
 }
 
 fn show_event(window: &AiSettingsWindow, event: WorkerEvent) {
@@ -289,7 +288,10 @@ fn state(error: RunError) -> ModelState {
 fn show_installed(window: &AiSettingsWindow) {
     let dir = ai::models_dir();
     let models = dir.as_deref().map(ai::installed).unwrap_or_default();
-    let names: Vec<SharedString> = models.iter().map(|m| m.name().into()).collect();
+    let names: Vec<SharedString> = dir
+        .as_deref()
+        .map(|dir| models.iter().map(|model| model.name(dir).into()).collect())
+        .unwrap_or_default();
     let picked = usize::try_from(window.get_model_index())
         .ok()
         .and_then(|i| window.get_models().row_data(i));

@@ -88,6 +88,7 @@ pub(crate) enum RunError {
 pub(crate) struct Worker {
     jobs: Sender<Job>,
     stop: Arc<AtomicBool>,
+    busy: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -96,15 +97,33 @@ impl Worker {
         let (jobs, inbox) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = Arc::clone(&stop);
-        thread::spawn(move || work(&inbox, idle, &stopping, &report));
-        Self { jobs, stop }
+        let busy = Arc::new(AtomicBool::new(false));
+        let working = Arc::clone(&busy);
+        thread::spawn(move || work(&inbox, idle, &stopping, &working, &report));
+        Self { jobs, stop, busy }
     }
 
     pub(crate) fn send(&self, job: Job) -> bool {
+        let exclusive = !matches!(job, Job::CheckGpu);
+        if exclusive
+            && self
+                .busy
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+        {
+            return false;
+        }
         if matches!(job, Job::Run { .. }) {
             self.stop.store(false, Ordering::Relaxed);
         }
-        self.jobs.send(job).is_ok()
+        if self.jobs.send(job).is_ok() {
+            true
+        } else {
+            if exclusive {
+                self.busy.store(false, Ordering::Release);
+            }
+            false
+        }
     }
 
     pub(crate) fn stop(&self) {
@@ -142,18 +161,30 @@ fn next(inbox: &Receiver<Job>, loaded: bool, idle: Duration) -> Next {
     }
 }
 
-fn work(inbox: &Receiver<Job>, idle: Duration, stop: &AtomicBool, report: &dyn Fn(WorkerEvent)) {
+fn work(
+    inbox: &Receiver<Job>,
+    idle: Duration,
+    stop: &AtomicBool,
+    busy: &AtomicBool,
+    report: &dyn Fn(WorkerEvent),
+) {
     let mut loaded: Option<Loaded> = None;
     loop {
         match next(inbox, loaded.is_some(), idle) {
             Next::Close => return,
-            Next::Idle | Next::Do(Job::Unload) => {
+            Next::Idle => {
                 loaded = None;
+                report(WorkerEvent::Unloaded);
+            }
+            Next::Do(Job::Unload) => {
+                loaded = None;
+                busy.store(false, Ordering::Release);
                 report(WorkerEvent::Unloaded);
             }
             Next::Do(Job::CheckGpu) => report(WorkerEvent::GpuChecked(engine::gpu_supported())),
             Next::Do(Job::Load(path)) => {
                 if let Some(same) = loaded.as_ref().filter(|l| l.path == path) {
+                    busy.store(false, Ordering::Release);
                     report(WorkerEvent::Ready(same.path.clone()));
                     continue;
                 }
@@ -161,10 +192,14 @@ fn work(inbox: &Receiver<Job>, idle: Duration, stop: &AtomicBool, report: &dyn F
                 report(WorkerEvent::Loading);
                 match Model::load(&path).map_err(RunError::from) {
                     Ok(model) => {
+                        busy.store(false, Ordering::Release);
                         report(WorkerEvent::Ready(path.clone()));
                         loaded = Some(Loaded { path, model });
                     }
-                    Err(error) => report(WorkerEvent::LoadFailed(error)),
+                    Err(error) => {
+                        busy.store(false, Ordering::Release);
+                        report(WorkerEvent::LoadFailed(error));
+                    }
                 }
             }
             Next::Do(Job::Run {
@@ -183,6 +218,7 @@ fn work(inbox: &Receiver<Job>, idle: Duration, stop: &AtomicBool, report: &dyn F
                     };
                     answer(&mut l.model, (&system, &user), &run)
                 });
+                busy.store(false, Ordering::Release);
                 report(WorkerEvent::Finished(asker, result));
             }
         }
@@ -270,24 +306,49 @@ mod tests {
     use std::sync::mpsc::RecvTimeoutError;
 
     fn events(jobs: Vec<Job>, mut last: impl FnMut(&WorkerEvent) -> bool) -> Vec<WorkerEvent> {
+        #[derive(Clone, Copy)]
+        enum Terminal {
+            Gpu,
+            Load,
+            Unload,
+            Run(Asker),
+        }
         let (tx, rx) = mpsc::channel();
         let worker = Worker::start(IDLE_UNLOAD, move |event| tx.send(event).unwrap());
-        for job in jobs {
-            assert!(worker.send(job));
-        }
         let mut seen = Vec::new();
-        loop {
-            match rx.recv_timeout(Duration::from_secs(600)) {
-                Ok(event) => {
-                    let done = last(&event);
-                    seen.push(event);
-                    if done {
-                        return seen;
+        for job in jobs {
+            let terminal = match &job {
+                Job::CheckGpu => Terminal::Gpu,
+                Job::Load(_) => Terminal::Load,
+                Job::Unload => Terminal::Unload,
+                Job::Run { asker, .. } => Terminal::Run(*asker),
+            };
+            let is_terminal = |event: &WorkerEvent| match (terminal, event) {
+                (Terminal::Gpu, WorkerEvent::GpuChecked(_))
+                | (Terminal::Unload, WorkerEvent::Unloaded)
+                | (Terminal::Load, WorkerEvent::Ready(_) | WorkerEvent::LoadFailed(_)) => true,
+                (Terminal::Run(asker), WorkerEvent::Finished(finished, _)) => asker == *finished,
+                _ => false,
+            };
+            assert!(worker.send(job));
+            loop {
+                match rx.recv_timeout(Duration::from_secs(600)) {
+                    Ok(event) => {
+                        let done = last(&event);
+                        let job_done = is_terminal(&event);
+                        seen.push(event);
+                        if done {
+                            return seen;
+                        }
+                        if job_done {
+                            break;
+                        }
                     }
+                    Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => return seen,
                 }
-                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => return seen,
             }
         }
+        seen
     }
 
     fn run() -> Job {
@@ -343,6 +404,22 @@ mod tests {
         drop(jobs);
         assert!(matches!(next(&inbox, false, idle), Next::Close));
         assert!(matches!(next(&inbox, true, idle), Next::Close));
+    }
+
+    #[test]
+    fn an_exclusive_job_cannot_be_queued_behind_an_active_one() {
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let worker = Worker::start(IDLE_UNLOAD, move |event| {
+            if event == WorkerEvent::Loading {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+            }
+        });
+        assert!(worker.send(Job::Load(PathBuf::from("missing.gguf"))));
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(!worker.send(Job::Unload));
+        release_tx.send(()).unwrap();
     }
 
     // AI tests run only on the GPU (docs/agents/rust.md), so these exist only in CUDA builds.

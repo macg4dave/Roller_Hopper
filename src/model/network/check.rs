@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{CardLink, Network};
+use crate::model::MAX_MODEL_ID;
 use crate::model::card::CardId;
 use crate::model::device::{DeviceId, Role};
 
@@ -12,6 +13,8 @@ use crate::model::device::{DeviceId, Role};
 pub(crate) enum Invalid {
     /// Two devices, or two cards, share an ID.
     DuplicateId,
+    /// An ID cannot cross the signed model boundary used by the UI.
+    UnsupportedId,
     /// A device has no network card.
     NoCard,
     /// A link's card, a device's role or a role's group does not exist.
@@ -38,6 +41,9 @@ impl Network {
         let mut devices = HashSet::new();
         let mut owners = HashMap::new();
         for device in &self.devices {
+            if device.id.0 > MAX_MODEL_ID {
+                return Err(Invalid::UnsupportedId);
+            }
             if !devices.insert(device.id) {
                 return Err(Invalid::DuplicateId);
             }
@@ -45,6 +51,9 @@ impl Network {
                 return Err(Invalid::NoCard);
             }
             for card in &device.cards {
+                if card.id.0 > MAX_MODEL_ID {
+                    return Err(Invalid::UnsupportedId);
+                }
                 if owners.insert(card.id, device.id).is_some() {
                     return Err(Invalid::DuplicateId);
                 }
@@ -145,5 +154,9 @@ mod tests {
             Some(Invalid::Loop)
         );
         assert_eq!(broken(|n| n.links.push(n.links[0])), Some(Invalid::BadLink));
+        assert_eq!(
+            broken(|n| n.devices[0].id = DeviceId(u32::MAX)),
+            Some(Invalid::UnsupportedId)
+        );
     }
 }

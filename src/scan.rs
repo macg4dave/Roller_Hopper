@@ -18,6 +18,7 @@ mod sweep;
 
 pub(crate) use subnets::local_subnet;
 
+use std::future::Future;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -26,14 +27,17 @@ use std::sync::mpsc::{self, Receiver, Sender, TryIter};
 use ipnet::Ipv4Net;
 use netscli_core::{Host, MdnsService, PingScanner, PortScanProgress, PortScanner, UdpScanner};
 use tokio::runtime::{Builder, Runtime};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::task::{JoinError, JoinHandle, JoinSet};
 
 use crate::model::{Answer, Discovery, Network, ScanOptions, ScanProgress};
 use answer::Probed;
-use ports::{PortNames, PortPlan};
+use ports::{PortPlan, PortRegistry};
 
 /// Probes in flight at once across the port probes of all hosts, and the sweep's knocks.
 const CONCURRENCY: usize = 128;
+/// Whole-host tasks kept at once. Port scanners separately cap their socket work; this cap
+/// prevents a /16 from allocating one suspended task (and its result buffers) per address.
+const HOST_TASKS: usize = 32;
 const PING_TIMEOUT_MS: u64 = 1000;
 const PORT_TIMEOUT_MS: u64 = 1000;
 const DNS_TIMEOUT_MS: u64 = 1500;
@@ -142,9 +146,10 @@ async fn run(subnet: Ipv4Net, options: ScanOptions, counts: Arc<Counts>, events:
                 Some(task) => task.await.unwrap_or_default(),
                 None => Vec::new(),
             };
+            let registry = PortRegistry::load();
             let run = Run {
                 announced: &announced,
-                names: &PortNames::load(),
+                registry: &registry,
                 subnet,
                 options,
             };
@@ -171,7 +176,7 @@ struct Probes {
 struct Run<'a> {
     /// Every service announced over mDNS during the sweep.
     announced: &'a [MdnsService],
-    names: &'a PortNames,
+    registry: &'a PortRegistry,
     subnet: Ipv4Net,
     options: ScanOptions,
 }
@@ -184,7 +189,7 @@ async fn probe_all(
     counts: Arc<Counts>,
     events: &Sender<Event>,
 ) -> Event {
-    let plan = PortPlan::for_mode(run.options.mode);
+    let plan = PortPlan::for_mode(run.options.mode, run.registry);
     counts
         .probes
         .store(hosts.len() * plan.probes(), Ordering::Relaxed);
@@ -197,25 +202,66 @@ async fn probe_all(
             counts.probed.fetch_add(1, Ordering::Relaxed);
         }),
     });
+    let hosts = hosts
+        .into_iter()
+        .map(|host| {
+            let own = mdns::of_host(run.announced, host.ip);
+            (host, own)
+        })
+        .collect::<Vec<_>>();
+    let mut failure = None;
+    run_bounded(
+        hosts,
+        HOST_TASKS,
+        |(host, own)| probe(host, own, Arc::clone(&shared), run.options),
+        |done| {
+            let probed = match done {
+                Ok(Ok(probed)) => probed,
+                Ok(Err(error)) => {
+                    failure = Some(Event::Failed(error));
+                    return false;
+                }
+                Err(error) => {
+                    failure = Some(Event::Failed(error.to_string()));
+                    return false;
+                }
+            };
+            let Some(answer) = answer::answer(&probed, run.subnet, run.options, run.registry)
+            else {
+                return true;
+            };
+            // The UI has gone if this fails; the rest would go unread.
+            events.send(Event::Host(Box::new(answer))).is_ok()
+        },
+    )
+    .await;
+    failure.unwrap_or(Event::Finished)
+}
+
+/// Runs at most `limit` spawned futures at a time and handles each result as it arrives. False
+/// from `done` cancels the remaining set by dropping it.
+async fn run_bounded<I, F, Fut, T, D>(items: I, limit: usize, task: F, mut done: D)
+where
+    I: IntoIterator,
+    I::Item: Send + 'static,
+    F: Fn(I::Item) -> Fut,
+    Fut: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+    D: FnMut(Result<T, JoinError>) -> bool,
+{
+    let mut items = items.into_iter();
     let mut pending = JoinSet::new();
-    for host in hosts {
-        let own = mdns::of_host(run.announced, host.ip);
-        pending.spawn(probe(host, own, Arc::clone(&shared), run.options));
+    for item in items.by_ref().take(limit.max(1)) {
+        pending.spawn(task(item));
     }
-    while let Some(done) = pending.join_next().await {
-        let probed = match done {
-            Ok(probed) => probed,
-            Err(error) => return Event::Failed(error.to_string()),
-        };
-        let Some(answer) = answer::answer(&probed, run.subnet, run.options, run.names) else {
-            continue;
-        };
-        if events.send(Event::Host(Box::new(answer))).is_err() {
-            // The UI has gone; the rest would go unread.
-            break;
+    while let Some(result) = pending.join_next().await {
+        if !done(result) {
+            return;
+        }
+        if let Some(item) = items.next() {
+            pending.spawn(task(item));
         }
     }
-    Event::Finished
 }
 
 /// Finds out what `options` allow about one host beyond what the sweep did; `mdns` is what it
@@ -225,9 +271,9 @@ async fn probe(
     mdns: Vec<MdnsService>,
     probes: Arc<Probes>,
     options: ScanOptions,
-) -> Probed {
-    let mut open_ports = scan_tcp(&probes, host.ip).await;
-    open_ports.extend(scan_udp(&probes, host.ip).await);
+) -> Result<Probed, String> {
+    let mut open_ports = scan_tcp(&probes, host.ip).await?;
+    open_ports.extend(scan_udp(&probes, host.ip).await?);
     let unnamed = host.hostname.is_none() && mdns::hostname(&mdns).is_none();
     let reverse_name = if options.service_detection && unnamed {
         // A failed or timed-out lookup means the network has no name for it.
@@ -242,16 +288,19 @@ async fn probe(
     } else {
         None
     };
-    Probed {
+    Ok(Probed {
         host,
         reverse_name,
         ports: open_ports,
         ttl,
         mdns,
-    }
+    })
 }
 
-async fn scan_tcp(probes: &Probes, host: std::net::IpAddr) -> Vec<netscli_core::PortResult> {
+async fn scan_tcp(
+    probes: &Probes,
+    host: std::net::IpAddr,
+) -> Result<Vec<netscli_core::PortResult>, String> {
     let mut open = Vec::new();
     for batch in probes.plan.tcp.chunks(ports::BATCH_SIZE) {
         let counted = Some(Arc::clone(&probes.counted));
@@ -259,13 +308,16 @@ async fn scan_tcp(probes: &Probes, host: std::net::IpAddr) -> Vec<netscli_core::
             .ports
             .scan_host_with_progress(host, batch.to_vec(), PORT_TIMEOUT_MS, counted)
             .await
-            .unwrap_or_default();
+            .map_err(|error| error.to_string())?;
         open.extend(found.into_iter().filter(|result| result.open));
     }
-    open
+    Ok(open)
 }
 
-async fn scan_udp(probes: &Probes, host: std::net::IpAddr) -> Vec<netscli_core::PortResult> {
+async fn scan_udp(
+    probes: &Probes,
+    host: std::net::IpAddr,
+) -> Result<Vec<netscli_core::PortResult>, String> {
     let mut open = Vec::new();
     for batch in probes.plan.udp.chunks(ports::BATCH_SIZE) {
         let counted = Some(Arc::clone(&probes.counted));
@@ -273,8 +325,8 @@ async fn scan_udp(probes: &Probes, host: std::net::IpAddr) -> Vec<netscli_core::
             .udp
             .scan_host_with_progress(host, batch.to_vec(), PORT_TIMEOUT_MS, counted)
             .await
-            .unwrap_or_default();
+            .map_err(|error| error.to_string())?;
         open.extend(found.into_iter().filter(|result| result.open));
     }
-    open
+    Ok(open)
 }

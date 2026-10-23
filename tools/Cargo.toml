@@ -8,6 +8,7 @@ publish = false
 [workspace]
 
 [dependencies]
+atomic-write-file = "0.3.1"
 clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
 walkdir = "2.5.0"
 regex = { version = "1.12.4", default-features = false, features = ["std", "perf", "unicode-perl"] }

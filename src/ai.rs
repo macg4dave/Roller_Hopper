@@ -50,15 +50,16 @@ pub(crate) enum Choice {
 }
 
 impl Choice {
-    /// The name the model list shows: an offered model's own name, or the file's name, so the
-    /// two never clash.
-    pub(crate) fn name(&self) -> String {
+    /// The name the model list shows: an offered model's own name, or an own file's path below
+    /// the models folder. Including its one allowed parent keeps equal filenames selectable.
+    pub(crate) fn name(&self, dir: &Path) -> String {
         match self {
             Self::Offered(model) => model.name.to_owned(),
             Self::Own(path) => path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
+                .strip_prefix(dir)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/"),
         }
     }
 
@@ -154,9 +155,29 @@ pub(crate) fn models_dir() -> Option<PathBuf> {
 pub(crate) fn import_model(saved: Option<&str>) -> Option<PathBuf> {
     let dir = models_dir()?;
     let models = installed(&dir);
-    let named = saved.and_then(|name| models.iter().find(|m| m.name() == name));
+    let named = saved.and_then(|name| choice_named(&models, &dir, name));
     let offered = || models.iter().find(|m| matches!(m, Choice::Offered(_)));
     Some(named.or_else(offered)?.file(&dir))
+}
+
+/// Resolves a displayed/saved model name. Old settings stored only an own file's basename, so
+/// that form remains accepted when it identifies exactly one file; ambiguous basenames are
+/// deliberately refused rather than loading an arbitrary model.
+pub(crate) fn named_file(dir: &Path, name: &str) -> Option<PathBuf> {
+    let models = installed(dir);
+    choice_named(&models, dir, name).map(|choice| choice.file(dir))
+}
+
+fn choice_named<'a>(models: &'a [Choice], dir: &Path, name: &str) -> Option<&'a Choice> {
+    if let Some(exact) = models.iter().find(|choice| choice.name(dir) == name) {
+        return Some(exact);
+    }
+    let mut legacy = models.iter().filter(|choice| match choice {
+        Choice::Own(path) => path.file_name().is_some_and(|file| file == name),
+        Choice::Offered(_) => false,
+    });
+    let found = legacy.next()?;
+    legacy.next().is_none().then_some(found)
 }
 
 /// The models ready to load from `dir`: the offered ones fully installed, in offer order, then
@@ -223,8 +244,8 @@ mod tests {
         fs::write(offered.join("Qwen3-4B-Q4_K_M.gguf"), "").unwrap();
         fs::create_dir_all(dir.join("folder.gguf")).unwrap();
         let listed = installed(&dir);
-        let names: Vec<String> = listed.iter().map(Choice::name).collect();
-        assert_eq!(names, ["A.GGUF", "b.gguf", "c.gguf"]);
+        let names: Vec<String> = listed.iter().map(|choice| choice.name(&dir)).collect();
+        assert_eq!(names, ["A.GGUF", "b.gguf", "nested/c.gguf"]);
         assert_eq!(
             listed.first().map(|c| c.file(&dir)),
             Some(dir.join("A.GGUF"))
@@ -240,6 +261,21 @@ mod tests {
         assert_eq!(
             Choice::Offered(model).file(dir),
             dir.join("Qwen3").join("Qwen3-4B-Q4_K_M.gguf")
+        );
+    }
+
+    #[test]
+    fn equal_filenames_in_different_folders_have_distinct_names() {
+        let dir = Path::new("models");
+        let top = Choice::Own(dir.join("first").join("same.gguf"));
+        let nested = Choice::Own(dir.join("other").join("same.gguf"));
+        assert_eq!(top.name(dir), "first/same.gguf");
+        assert_eq!(nested.name(dir), "other/same.gguf");
+        let choices = vec![top, nested];
+        assert!(choice_named(&choices, dir, "same.gguf").is_none());
+        assert_eq!(
+            choice_named(&choices, dir, "other/same.gguf").map(|choice| choice.file(dir)),
+            Some(dir.join("other").join("same.gguf"))
         );
     }
 }

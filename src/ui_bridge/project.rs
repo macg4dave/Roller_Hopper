@@ -231,13 +231,17 @@ fn problem_view(problem: Option<&Problem>) -> ui::FileProblem {
         Some(Problem::Open(OpenError::Unreadable(reason))) => {
             (ui::FileProblemKind::Unreadable, reason.clone())
         }
-        Some(Problem::Open(OpenError::TooLarge)) => (ui::FileProblemKind::TooLarge, String::new()),
+        Some(Problem::Open(OpenError::TooLarge)) | Some(Problem::Save(SaveError::TooLarge)) => {
+            (ui::FileProblemKind::TooLarge, String::new())
+        }
         Some(Problem::Open(OpenError::NotProject)) => {
             (ui::FileProblemKind::NotProject, String::new())
         }
         Some(Problem::Open(OpenError::Newer)) => (ui::FileProblemKind::Newer, String::new()),
         Some(Problem::Open(OpenError::Damaged)) => (ui::FileProblemKind::Damaged, String::new()),
-        Some(Problem::Save(SaveError(reason))) => (ui::FileProblemKind::SaveFailed, reason.clone()),
+        Some(Problem::Save(SaveError::Io(reason))) => {
+            (ui::FileProblemKind::SaveFailed, reason.clone())
+        }
     };
     ui::FileProblem {
         kind,
