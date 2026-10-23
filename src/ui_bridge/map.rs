@@ -16,7 +16,7 @@ use std::time::Duration;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel, Weak};
 
 use super::view::sync;
-use super::{AppState, Selection, convert, handler, update};
+use super::{AppState, convert, handler, update};
 use crate::model::{
     CardId, Connection, Level, Point, Positions, Snap, link_route, tree_layout, trunk,
 };
@@ -28,22 +28,22 @@ const FRAME: Duration = Duration::from_millis(16);
 impl AppState {
     /// The cards lit up on the map: the selected card, or every card of the selected device.
     fn selected_cards(&self) -> Vec<CardId> {
-        match self.selected {
-            Some(Selection::Card(card)) => vec![card],
-            Some(Selection::Device(id)) => {
-                let cards = self
-                    .network
-                    .device(id)
-                    .map(|d| d.cards.iter().map(|c| c.id));
-                cards.into_iter().flatten().collect()
-            }
-            None => Vec::new(),
+        if let Some(card) = self.selected_card() {
+            return vec![card];
         }
+        let cards = self
+            .selected_device()
+            .and_then(|id| self.network.device(id))
+            .map(|d| d.cards.iter().map(|c| c.id));
+        cards.into_iter().flatten().collect()
     }
 
     /// While a device is selected, the dotted ties between its cards as shown on the map.
     fn ties(&self) -> Vec<[Point; 2]> {
-        let Some(Selection::Device(id)) = self.selected else {
+        if self.selected_card().is_some() {
+            return Vec::new();
+        }
+        let Some(id) = self.selected_device() else {
             return Vec::new();
         };
         let device = self.network.device(id);
@@ -246,6 +246,7 @@ mod tests {
     use super::*;
     use crate::mock_data;
     use crate::model::DeviceId;
+    use crate::ui_bridge::Selection;
 
     #[test]
     fn a_row_makes_room_for_a_device_dragged_over_it_and_closes_after() {
@@ -303,5 +304,16 @@ mod tests {
         assert_eq!(state.ties().len(), 1, "LAN to WAN");
         state.selected = Some(Selection::Device(DeviceId(5)));
         assert!(state.ties().is_empty(), "the PC has one card");
+    }
+
+    #[test]
+    fn a_map_card_selects_its_device_without_opening_the_card_editor() {
+        let mut state = AppState::new(mock_data::network());
+        state.selected = Some(Selection::MapCard(CardId(101)));
+        assert_eq!(state.selected_device(), Some(DeviceId(1)));
+        assert_eq!(state.selected_card(), None);
+        assert_eq!(state.featured_card(), Some(CardId(101)));
+        assert_eq!(state.selected_cards(), [CardId(1), CardId(101)]);
+        assert_eq!(state.ties().len(), 1, "the owning device is selected");
     }
 }

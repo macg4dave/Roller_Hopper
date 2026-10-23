@@ -990,6 +990,15 @@ msgstr "Games console"
 msgid "kind.camera"
 msgstr "Camera"
 
+msgid "kind.thermostat"
+msgstr "Thermostat"
+
+msgid "kind.smart-display"
+msgstr "Smart display"
+
+msgid "kind.voice-assistant"
+msgstr "Voice assistant"
+
 msgid "kind.smart"
 msgstr "Smart device"
 

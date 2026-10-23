@@ -18,11 +18,11 @@ export component DetailsPanel inherits Rectangle {
     // Showing the editor rather than the details; ends when nothing is selected.
     property <bool> editing;
     property <int> selected-id: Bridge.selected-id;
-    changed selected-id => {
-        if selected-id < 0 {
-            editing = false;
-        }
-    }
+    property <int> selected-card: Bridge.selected-card;
+    property <int> featured-card: Bridge.featured-card;
+    changed selected-id => { editing = false; }
+    changed selected-card => { editing = false; }
+    changed featured-card => { editing = false; }
 
     // Opens the editor on the selected device, as the pencil does.
     public function edit() {
@@ -49,7 +49,9 @@ export component DetailsPanel inherits Rectangle {
 
     if Bridge.selected-id >= 0 && editing: edit-scroll := ScrollView {
         VerticalLayout {
-            width: edit-scroll.visible-width;
+            // Padding is inside the layout's width. Leave it out of the content width so the
+            // editor cannot grow underneath a horizontal scroll area.
+            width: max(0px, edit-scroll.visible-width - 2 * Theme.space-l);
             alignment: start;
             padding: Theme.space-l;
             spacing: Theme.space-s;

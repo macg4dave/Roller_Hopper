@@ -41,12 +41,13 @@ use crate::ui::{AppWindow, Bridge};
 use icons::Icons;
 use map::Motion;
 
-/// What is selected: a device, picked in the lists, or one of its network cards, picked in
-/// the lists or on the map.
+/// What is selected: a device, a card opened for editing from a list, or a map card whose
+/// owning device is shown with that card first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Selection {
     Device(DeviceId),
     Card(CardId),
+    MapCard(CardId),
 }
 
 /// Everything the window shows, owned by `main` and shared with the callbacks.
@@ -127,14 +128,23 @@ impl AppState {
     fn selected_device(&self) -> Option<DeviceId> {
         match self.selected? {
             Selection::Device(id) => Some(id),
-            Selection::Card(card) => self.network.card_owner(card).map(|d| d.id),
+            Selection::Card(card) | Selection::MapCard(card) => {
+                self.network.card_owner(card).map(|d| d.id)
+            }
         }
     }
 
     fn selected_card(&self) -> Option<CardId> {
         match self.selected? {
             Selection::Card(card) => Some(card),
-            Selection::Device(_) => None,
+            Selection::Device(_) | Selection::MapCard(_) => None,
+        }
+    }
+
+    fn featured_card(&self) -> Option<CardId> {
+        match self.selected? {
+            Selection::MapCard(card) => Some(card),
+            Selection::Device(_) | Selection::Card(_) => None,
         }
     }
 
@@ -177,6 +187,9 @@ pub(crate) fn connect(
     }));
     bridge.on_select_card(handler(ui, state, |st, id| {
         st.selected = convert::card_id(id).map(Selection::Card);
+    }));
+    bridge.on_select_map_card(handler(ui, state, |st, id| {
+        st.selected = convert::card_id(id).map(Selection::MapCard);
     }));
     bridge.on_toggle_group(handler(ui, state, |st, id| {
         if let Some(id) = convert::device_id(id) {

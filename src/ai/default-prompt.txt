@@ -40,7 +40,7 @@ CLASSIFICATION
 Choose the device's PRIMARY role, not merely a service it provides.
 
 Allowed types:
-Router, Switch, AccessPoint, Nas, Desktop, Laptop, Server, Printer, Phone, Tv, Console, Camera, Smart, Unknown.
+Router, Switch, AccessPoint, Nas, Desktop, Laptop, Server, Printer, Phone, Tv, Console, Camera, Thermostat, SmartDisplay, VoiceAssistant, Smart, Unknown.
 
 Router: routing or gateway evidence, or recognised router software with supporting clues.
 Switch: managed network switching.
@@ -53,6 +53,9 @@ Phone: smartphone or tablet identification.
 Tv: television or streaming device.
 Console: gaming console identification.
 Camera: camera identification or characteristic video services.
+Thermostat: a connected heating or climate controller.
+SmartDisplay: a connected display centred on home control or an assistant, such as Google Nest Hub or Amazon Echo Show.
+VoiceAssistant: a voice-first assistant device, such as Google Nest or Amazon Echo.
 Smart: IoT or home automation device.
 Unknown: no convincing primary role.
 

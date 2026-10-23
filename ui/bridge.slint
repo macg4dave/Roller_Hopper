@@ -2,7 +2,7 @@
 // Rust owns this state; components only read it and call the callbacks.
 // Rust sends data, not wording: user-visible text is produced in Slint (see labels.slint).
 
-export enum DeviceKind { router, switch, access-point, nas, desktop, laptop, server, printer, phone, tv, console, camera, smart, unknown }
+export enum DeviceKind { router, switch, access-point, nas, desktop, laptop, server, printer, phone, tv, console, camera, thermostat, smart-display, voice-assistant, smart, unknown }
 
 /// An icon from the icon folder. `id` is its path there, which identifies it to Rust; `label` is
 /// its file name. `image` is empty when the file is gone, and is then shown as Unknown. `group`
@@ -406,6 +406,8 @@ export global Bridge {
     in property <[GuestView]> guests;
     // The selected network card, -1 for none, and its view.
     in property <int> selected-card: -1;
+    // A card picked on the map: its device is selected, and this card is listed first.
+    in property <int> featured-card: -1;
     in property <CardView> card;
     // What the selected card can be plugged into: first none, then the cards of the devices
     // away from its own, in device order; and where it is plugged in now.
@@ -467,9 +469,11 @@ export global Bridge {
     in-out property <string> notes-draft;
     in-out property <int> role-index;
 
-    // Selects a device by its id, or nothing on -1; select-card selects a network card.
+    // Selects a device by its id, or nothing on -1; select-card opens a card of its own, while
+    // select-map-card shows its device with that card first.
     callback select(int);
     callback select-card(int);
+    callback select-map-card(int);
     // Gives the card with this id the icon with this id (see IconChoice).
     callback set-card-icon(int, string);
     // Folds a device's group up in the lists, or opens it again.

@@ -17,7 +17,8 @@
     },
     "type": {
       "enum": ["Router", "Switch", "AccessPoint", "Nas", "Desktop", "Laptop", "Server", "Printer",
-               "Phone", "Tv", "Console", "Camera", "Smart", "Unknown"]
+               "Phone", "Tv", "Console", "Camera", "Thermostat", "SmartDisplay",
+               "VoiceAssistant", "Smart", "Unknown"]
     },
     "type_confidence": { "enum": ["high", "medium", "low"] },
     "os_family": {

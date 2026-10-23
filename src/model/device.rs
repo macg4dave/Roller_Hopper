@@ -40,6 +40,9 @@ pub(crate) enum DeviceKind {
     Tv,
     Console,
     Camera,
+    Thermostat,
+    SmartDisplay,
+    VoiceAssistant,
     Smart,
     Unknown,
 }
@@ -60,6 +63,9 @@ impl DeviceKind {
             Self::Tv => "Entertainment/Smart TV",
             Self::Console => "Entertainment/Games console",
             Self::Camera => "Smart home/Camera",
+            Self::Thermostat => "Smart home/Thermostat",
+            Self::SmartDisplay => "Smart home/Smart display",
+            Self::VoiceAssistant => "Smart home/Voice assistant",
             Self::Smart => "Smart home/Smart device",
             Self::Unknown => "Other/Unknown",
         })
@@ -79,7 +85,12 @@ impl DeviceKind {
             Self::Phone => Role::Phone,
             Self::Camera => Role::Camera,
             Self::Smart => Role::Iot,
-            Self::Tv | Self::Console | Self::Unknown => Role::Other,
+            Self::Tv
+            | Self::Console
+            | Self::Thermostat
+            | Self::SmartDisplay
+            | Self::VoiceAssistant
+            | Self::Unknown => Role::Other,
         }
     }
 }
@@ -264,7 +275,7 @@ mod tests {
         assert!(!d.matches("printer"));
     }
 
-    const KINDS: [DeviceKind; 14] = [
+    const KINDS: [DeviceKind; 17] = [
         DeviceKind::Router,
         DeviceKind::Switch,
         DeviceKind::AccessPoint,
@@ -277,6 +288,9 @@ mod tests {
         DeviceKind::Tv,
         DeviceKind::Console,
         DeviceKind::Camera,
+        DeviceKind::Thermostat,
+        DeviceKind::SmartDisplay,
+        DeviceKind::VoiceAssistant,
         DeviceKind::Smart,
         DeviceKind::Unknown,
     ];

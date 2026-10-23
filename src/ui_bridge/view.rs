@@ -171,7 +171,7 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_role_index(i32::try_from(index).unwrap_or_default());
     }
     let cards = selected
-        .map(|d| cards::card_views(&state.network, &state.icons, d))
+        .map(|d| cards::card_views(&state.network, &state.icons, d, state.featured_card()))
         .unwrap_or_default();
     if let Some(model) = sync(&bridge.get_cards(), cards) {
         bridge.set_cards(model);
@@ -192,7 +192,7 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let id = card.map_or(-1, convert::ui_card_id);
     let view = card.and_then(|card| {
         let device = network.card_owner(card)?;
-        let mut views = cards::card_views(network, &state.icons, device).into_iter();
+        let mut views = cards::card_views(network, &state.icons, device, None).into_iter();
         views.find(|v| v.id == id)
     });
     bridge.set_card(view.unwrap_or_default());
@@ -209,6 +209,7 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     bridge.set_card_plug_index(i32::try_from(state.plug_choice()).unwrap_or_default());
     push_card_parents(bridge, labels, state);
     bridge.set_selected_card(id);
+    bridge.set_featured_card(state.featured_card().map_or(-1, convert::ui_card_id));
 }
 
 /// The devices the selected card can be a child of, and the one it is a child of now.

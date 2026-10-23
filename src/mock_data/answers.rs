@@ -28,7 +28,13 @@ fn evidence(kind: DeviceKind) -> &'static [Method] {
     match kind {
         DeviceKind::Nas | DeviceKind::Printer => &[Arp, Ping, Mdns],
         DeviceKind::Laptop | DeviceKind::Phone => &[Arp, Mdns],
-        DeviceKind::Tv | DeviceKind::Console | DeviceKind::Smart | DeviceKind::Camera => &[Arp],
+        DeviceKind::Tv
+        | DeviceKind::Console
+        | DeviceKind::Camera
+        | DeviceKind::Thermostat
+        | DeviceKind::SmartDisplay
+        | DeviceKind::VoiceAssistant
+        | DeviceKind::Smart => &[Arp],
         DeviceKind::Router
         | DeviceKind::Switch
         | DeviceKind::AccessPoint

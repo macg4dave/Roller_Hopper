@@ -194,7 +194,7 @@ export component TopologyCanvas inherits Rectangle {
             selected: root.is-selected(device);
             x: (Bridge.places[i].x - Bridge.bounds.x) * 1px - self.width / 2;
             y: (Bridge.places[i].y - Bridge.bounds.y) * 1px - (self.icon-size + 14px) / 2;
-            clicked => { Bridge.select-card(device.card-id); }
+            clicked => { Bridge.select-map-card(device.card-id); }
             // The pointer offset arrives already in map units, as the node sits inside the scale.
             dragged(dx, dy) => {
                 Bridge.move-card(device.card-id, Bridge.places[i].x + dx / 1px, Bridge.places[i].y + dy / 1px);

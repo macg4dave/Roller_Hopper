@@ -151,6 +151,9 @@ pub(super) fn kind(kind: DeviceKind) -> ui::DeviceKind {
         DeviceKind::Tv => ui::DeviceKind::Tv,
         DeviceKind::Console => ui::DeviceKind::Console,
         DeviceKind::Camera => ui::DeviceKind::Camera,
+        DeviceKind::Thermostat => ui::DeviceKind::Thermostat,
+        DeviceKind::SmartDisplay => ui::DeviceKind::SmartDisplay,
+        DeviceKind::VoiceAssistant => ui::DeviceKind::VoiceAssistant,
         DeviceKind::Smart => ui::DeviceKind::Smart,
         DeviceKind::Unknown => ui::DeviceKind::Unknown,
     }

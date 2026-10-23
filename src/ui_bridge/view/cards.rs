@@ -54,9 +54,17 @@ pub(super) fn socket_name(labels: &Labels<'_>, network: &Network, socket: CardId
     labels.invoke_card_of(device.name.trim().into(), name.into(), index)
 }
 
-/// The network cards of `device`, each with where it is plugged in.
-pub(super) fn card_views(network: &Network, icons: &Icons, device: &Device) -> Vec<ui::CardView> {
-    let views = device.cards.iter().map(|card| {
+/// The network cards of `device`, each with where it is plugged in. `first` is promoted without
+/// changing its real index, so a card picked on the map heads the device details.
+pub(super) fn card_views(
+    network: &Network,
+    icons: &Icons,
+    device: &Device,
+    first: Option<CardId>,
+) -> Vec<ui::CardView> {
+    let promoted = device.cards.iter().filter(|card| Some(card.id) == first);
+    let rest = device.cards.iter().filter(|card| Some(card.id) != first);
+    let views = promoted.chain(rest).map(|card| {
         let link = network.link(card.id);
         let via = link.and_then(|l| Some((l.upstream, network.card_owner(l.upstream)?)));
         let via_card = via.and_then(|(id, d)| d.cards.iter().find(|c| c.id == id));
@@ -108,6 +116,15 @@ mod tests {
 
     const PC: DeviceId = DeviceId(5);
     const DOCKER_HOST: DeviceId = DeviceId(19);
+
+    #[test]
+    fn a_featured_card_is_first_without_changing_its_device_index() {
+        let network = mock_data::network();
+        let device = network.device(DeviceId(1)).unwrap();
+        let views = card_views(&network, &Icons::default(), device, Some(CardId(101)));
+        let order: Vec<_> = views.iter().map(|view| (view.id, view.index)).collect();
+        assert_eq!(order, [(101, 1), (1, 0)]);
+    }
 
     #[test]
     fn a_hosts_guests_are_those_running_straight_on_it() {
