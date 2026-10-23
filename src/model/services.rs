@@ -10,12 +10,23 @@ pub(crate) enum ServiceProtocol {
     Udp,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum ServiceSource {
+    #[default]
+    Manual,
+    Detected,
+    Registry,
+    Open,
+}
+
 /// An open port and what runs on it, such as a protocol name; the description may be empty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Service {
     pub(crate) port: u16,
     pub(crate) protocol: ServiceProtocol,
     pub(crate) description: String,
+    #[serde(default)]
+    pub(crate) source: ServiceSource,
 }
 
 impl fmt::Display for Service {
@@ -69,6 +80,16 @@ impl Services {
         protocol: ServiceProtocol,
         description: &str,
     ) -> bool {
+        self.add_sourced(port, protocol, description, ServiceSource::Manual)
+    }
+
+    pub(crate) fn add_sourced(
+        &mut self,
+        port: u16,
+        protocol: ServiceProtocol,
+        description: &str,
+        source: ServiceSource,
+    ) -> bool {
         let Err(at) = self.position(port, protocol) else {
             return false;
         };
@@ -79,6 +100,7 @@ impl Services {
                 port,
                 protocol,
                 description,
+                source,
             },
         );
         true
@@ -94,6 +116,7 @@ impl Services {
         }
         if let Some(service) = self.0.get_mut(index) {
             service.port = port;
+            service.source = ServiceSource::Manual;
             self.0.sort_by_key(|s| (s.port, s.protocol));
         }
     }
@@ -101,6 +124,7 @@ impl Services {
     pub(crate) fn set_description(&mut self, index: usize, description: &str) {
         if let Some(service) = self.0.get_mut(index) {
             description.trim().clone_into(&mut service.description);
+            service.source = ServiceSource::Manual;
         }
     }
 
@@ -163,5 +187,24 @@ mod tests {
         services.remove(99);
         services.set_description(99, "ignored");
         assert_eq!(services.to_string(), "80 (HTTP), 443 (HTTPS)");
+        assert!(
+            services
+                .iter()
+                .all(|service| service.source == ServiceSource::Manual)
+        );
+    }
+
+    #[test]
+    fn scanned_provenance_survives_loading_but_an_edit_becomes_manual() {
+        let mut services = Services::default();
+        services.add_sourced(22, ServiceProtocol::Tcp, "OpenSSH", ServiceSource::Detected);
+        let json = serde_json::to_string(&services).unwrap();
+        let mut loaded: Services = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            loaded.iter().next().unwrap().source,
+            ServiceSource::Detected
+        );
+        loaded.set_description(0, "SSH");
+        assert_eq!(loaded.iter().next().unwrap().source, ServiceSource::Manual);
     }
 }

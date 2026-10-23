@@ -28,12 +28,20 @@ export component PortList inherits VerticalLayout {
             }
         }
         Text {
-            text: port.description;
+            text: port.description == "" ? @tr("port.source.open") : port.description;
             font-size: Theme.font-body;
             color: Theme.text;
             vertical-alignment: center;
             wrap: word-wrap;
             horizontal-stretch: 1;
+        }
+        Text {
+            text: port.source == "detected" ? @tr("port.source.detected")
+                : port.source == "registry" ? @tr("port.source.registry")
+                : port.source == "manual" ? @tr("port.source.manual") : "";
+            font-size: Theme.font-small;
+            color: Theme.text-muted;
+            vertical-alignment: center;
         }
     }
 }

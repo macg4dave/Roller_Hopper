@@ -9,8 +9,8 @@ use slint::SharedString;
 use super::icons::Icons;
 use crate::model::{
     CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, GuestKind, Icon, LineStyle,
-    Network, NetworkCard, OsClue, OsFamily, Point, Role, Snap, StandardGroup, Status, StatusFilter,
-    TargetError,
+    Network, NetworkCard, OsClue, OsFamily, Point, Role, ServiceSource, Snap, StandardGroup,
+    Status, StatusFilter, TargetError,
 };
 use crate::ui::{self, Labels};
 
@@ -340,6 +340,13 @@ pub(super) fn port_views(card: &NetworkCard) -> Vec<ui::PortView> {
         port: i32::from(s.port),
         udp: s.protocol == crate::model::ServiceProtocol::Udp,
         description: s.description.as_str().into(),
+        source: match s.source {
+            ServiceSource::Manual => "manual",
+            ServiceSource::Detected => "detected",
+            ServiceSource::Registry => "registry",
+            ServiceSource::Open => "open",
+        }
+        .into(),
     });
     views.collect()
 }

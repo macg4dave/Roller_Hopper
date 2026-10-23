@@ -7,7 +7,9 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::response;
-use crate::model::{Device, DeviceKind, NetworkCard, OsClue, OsFamily, OsHint, ServiceProtocol};
+use crate::model::{
+    Device, DeviceKind, NetworkCard, OsClue, OsFamily, OsHint, ServiceProtocol, ServiceSource,
+};
 
 /// The most open ports listed for one card, so a host with thousands open still fits the
 /// model's context.
@@ -87,20 +89,30 @@ fn card_fact(card: &NetworkCard) -> Value {
     Value::Object(fact)
 }
 
-/// The card's open ports, each with what runs on it when known, such as `443/tcp nginx`.
-fn open_ports(card: &NetworkCard) -> Vec<String> {
+/// The card's open ports and whether their descriptions were observed, looked up, or edited.
+fn open_ports(card: &NetworkCard) -> Vec<Value> {
     card.services
         .iter()
         .take(MAX_PORTS)
         .map(|service| {
-            let port = match service.protocol {
-                ServiceProtocol::Tcp => format!("{}/tcp", service.port),
-                ServiceProtocol::Udp => format!("{}/udp", service.port),
+            let protocol = match service.protocol {
+                ServiceProtocol::Tcp => "tcp",
+                ServiceProtocol::Udp => "udp",
             };
-            match service.description.trim() {
-                "" => port,
-                what => format!("{port} {what}"),
+            let source = match service.source {
+                ServiceSource::Manual => "manual",
+                ServiceSource::Detected => "detected",
+                ServiceSource::Registry => "registry",
+                ServiceSource::Open => "open",
+            };
+            let mut fact = Map::new();
+            fact.insert("port".into(), json!(service.port));
+            fact.insert("protocol".into(), json!(protocol));
+            fact.insert("source".into(), json!(source));
+            if !service.description.trim().is_empty() {
+                fact.insert("description".into(), json!(service.description.trim()));
             }
+            Value::Object(fact)
         })
         .collect()
 }
@@ -247,7 +259,7 @@ impl Identity {
     /// Puts the model's answer in place of what the scan made of `device`: its type (with the
     /// role and icon that follow it, unless another role was picked), OS family, notes and
     /// name. A field the answer left Unknown keeps the scan's value, and so does a name the
-    /// device's full hostname gave it (such as `pc` from `pc.local`).
+    /// device's hostname gave it (such as `pc` from `pc.local`).
     pub(crate) fn fill(&self, device: &mut Device) {
         if let Some(kind) = self.kind {
             if device.role == device.kind.default_role() {
@@ -265,20 +277,19 @@ impl Identity {
         if let Some(text) = &self.description {
             device.notes.clone_from(text);
         }
-        if let Some(name) = self.name.as_ref().filter(|_| !has_full_hostname(device)) {
+        if let Some(name) = self.name.as_ref().filter(|_| !has_hostname(device)) {
             device.name.clone_from(name);
         }
     }
 }
 
-/// The device has a hostname with a domain, such as `pc.local` or `xbox.lan`, which its name
-/// comes from.
-fn has_full_hostname(device: &Device) -> bool {
+/// The scan already made the hostname's host label the device name, so an AI suggestion must
+/// not replace it.
+fn has_hostname(device: &Device) -> bool {
     device
         .hostname
         .as_deref()
-        .and_then(|h| h.split_once('.'))
-        .is_some_and(|(host, domain)| !host.is_empty() && !domain.is_empty())
+        .is_some_and(|hostname| !hostname.trim_matches('.').trim().is_empty())
 }
 
 /// Text fit for a device field: not empty, at most `max` characters, one line, and citing no
@@ -367,7 +378,10 @@ mod tests {
                     "address": "192.168.20.30/24",
                     "mac": "00:11:32:0A:0B:0C",
                     "mac_vendor": "Synology Incorporated",
-                    "open": ["445/tcp SMB", "5001/tcp"]
+                    "open": [
+                        { "port": 445, "protocol": "tcp", "source": "manual", "description": "SMB" },
+                        { "port": 5001, "protocol": "tcp", "source": "manual" }
+                    ]
                 }],
                 "os_fingerprint": {
                     "scanner_guess": "Linux",
@@ -547,16 +561,20 @@ mod tests {
     }
 
     #[test]
-    fn a_name_from_a_full_hostname_stays() {
+    fn a_name_from_any_hostname_stays() {
         let mut named = found();
         nas_named("Synology NAS").fill(&mut named);
         assert_eq!(named.name, "diskstation", "from diskstation.home.arpa");
-        for hostname in [None, Some("NAS"), Some("nas.")] {
+        for hostname in [Some("NAS"), Some("nas.")] {
             let mut device = found();
             device.hostname = hostname.map(str::to_owned);
             nas_named("Synology NAS").fill(&mut device);
-            assert_eq!(device.name, "Synology NAS", "{hostname:?}");
+            assert_eq!(device.name, "diskstation", "{hostname:?}");
         }
+        let mut unnamed = found();
+        unnamed.hostname = None;
+        nas_named("Synology NAS").fill(&mut unnamed);
+        assert_eq!(unnamed.name, "Synology NAS", "without a hostname");
     }
 
     #[test]

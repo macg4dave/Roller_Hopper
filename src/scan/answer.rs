@@ -13,7 +13,7 @@ use super::mdns;
 use super::ports::PortNames;
 use crate::model::{
     Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
-    ScanOptions, ServiceProtocol, Services, Status,
+    ScanOptions, ServiceProtocol, ServiceSource, Services, Status,
 };
 
 /// The longest name kept, a DNS name's limit.
@@ -51,11 +51,7 @@ pub(super) fn answer(
     }
     let host = &probed.host;
     let detect = options.service_detection;
-    let announced = if options.mdns_services {
-        &probed.mdns[..]
-    } else {
-        &[]
-    };
+    let announced = announced(options.mdns_services, &probed.mdns);
     let mdns_name = host
         .hostname
         .as_deref()
@@ -93,6 +89,7 @@ pub(super) fn answer(
         DeviceKind::Unknown
     };
     let os = options.os_family.then(|| identify::os(&evidence)).flatten();
+    let (hostname, suggested_name) = name_from(mdns_name, reverse_name, model.as_deref(), mac, ip);
     let device = Device {
         kind,
         role: kind.default_role(),
@@ -100,9 +97,25 @@ pub(super) fn answer(
         model,
         os,
         mdns_services,
-        ..device(mdns_name.or(reverse_name), card)
+        ..device(hostname, suggested_name, card)
     };
     Some(Answer { device, methods })
+}
+
+fn announced(enabled: bool, services: &[MdnsService]) -> &[MdnsService] {
+    if enabled { services } else { &[] }
+}
+
+fn name_from(
+    mdns: Option<String>,
+    reverse: Option<String>,
+    model: Option<&str>,
+    mac: Option<MacAddr>,
+    ip: std::net::Ipv4Addr,
+) -> (Option<String>, String) {
+    let hostname = mdns.or(reverse);
+    let name = suggested_name(hostname.as_deref(), model, mac, ip);
+    (hostname, name)
 }
 
 /// How a host was found: its MAC known from the neighbour table, a ping reply, mDNS.
@@ -121,11 +134,10 @@ fn methods(mac: bool, found_by: FoundBy, mdns: bool) -> Vec<Method> {
 
 /// A newly found device of unknown kind with `card`, named after the first part of its
 /// `hostname`. Its ids are placeholders: it gets real ones when it is added to the map.
-fn device(hostname: Option<String>, card: NetworkCard) -> Device {
-    let name = hostname.as_deref().and_then(|h| h.split('.').next());
+fn device(hostname: Option<String>, name: String, card: NetworkCard) -> Device {
     Device {
         id: DeviceId(0),
-        name: name.unwrap_or_default().to_owned(),
+        name,
         kind: DeviceKind::Unknown,
         role: DeviceKind::Unknown.default_role(),
         icon: None,
@@ -142,6 +154,27 @@ fn device(hostname: Option<String>, card: NetworkCard) -> Device {
     }
 }
 
+fn suggested_name(
+    hostname: Option<&str>,
+    model: Option<&str>,
+    mac: Option<MacAddr>,
+    ip: std::net::Ipv4Addr,
+) -> String {
+    if let Some(name) = hostname
+        .and_then(|h| h.split('.').next())
+        .filter(|n| !n.is_empty())
+    {
+        return name.to_owned();
+    }
+    if let Some(model) = model.filter(|m| !m.is_empty()) {
+        return model.to_owned();
+    }
+    if let Some(mac) = mac {
+        return format!("device-{:02X}{:02X}", mac.0[4], mac.0[5]);
+    }
+    format!("host-{}", ip.to_string().replace('.', "-"))
+}
+
 /// The open ports, each described by the software that named itself on it when `identify`
 /// allows, or else by the service usual on that port: the scanner's name for it, or IANA's.
 fn services(ports: &[PortResult], identify: bool, names: &PortNames) -> Services {
@@ -156,12 +189,20 @@ fn services(ports: &[PortResult], identify: bool, names: &PortNames) -> Services
             .service
             .as_deref()
             .or_else(|| names.get(protocol, port.port));
+        let source = if software.is_some() {
+            ServiceSource::Detected
+        } else if usual.is_some() {
+            ServiceSource::Registry
+        } else {
+            ServiceSource::Open
+        };
         let description = software.or_else(|| usual.map(str::to_owned));
         let description = description.and_then(|d| clean(&d, MAX_DESCRIPTION));
-        services.add_protocol(
+        services.add_sourced(
             port.port,
             protocol,
             description.as_deref().unwrap_or_default(),
+            source,
         );
     }
     services
@@ -319,7 +360,10 @@ mod tests {
         let answer = answer(&brother, home(), bare(), &none()).unwrap();
         assert_eq!(answer.methods, [Method::Arp, Method::Ping]);
         let device = &answer.device;
-        assert_eq!((device.name.as_str(), &device.hostname), ("", &None));
+        assert_eq!(
+            (device.name.as_str(), &device.hostname),
+            ("device-6C5C", &None)
+        );
         assert_eq!((&device.model, &device.manufacturer), (&None, &None));
         assert_eq!((device.kind, &device.os), (DeviceKind::Unknown, &None));
         assert_eq!(device.mdns_services, Vec::<String>::new());
@@ -383,5 +427,27 @@ mod tests {
         let answer = answer(&host, home(), all(), &PortNames::load()).unwrap();
         let services = answer.device.cards[0].services.to_string();
         assert_eq!(services, "5432 (postgres)");
+        assert_eq!(
+            answer.device.cards[0]
+                .services
+                .iter()
+                .next()
+                .unwrap()
+                .source,
+            ServiceSource::Registry
+        );
+    }
+
+    #[test]
+    fn names_and_port_sources_preserve_what_the_scan_actually_knew() {
+        let unnamed = probed(host(FoundBy::Probe, None), None);
+        let answer = answer(&unnamed, home(), all(), &none()).unwrap();
+        assert_eq!(answer.device.name, "device-6C5C");
+        let sources: Vec<_> = answer.device.cards[0]
+            .services
+            .iter()
+            .map(|service| service.source)
+            .collect();
+        assert_eq!(sources, [ServiceSource::Detected, ServiceSource::Registry]);
     }
 }

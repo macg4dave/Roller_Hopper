@@ -648,6 +648,18 @@ msgstr "Last seen"
 msgid "details.open-ports"
 msgstr "Open ports"
 
+msgid "port.source.detected"
+msgstr "Detected"
+
+msgid "port.source.registry"
+msgstr "Registry"
+
+msgid "port.source.manual"
+msgstr "Manual"
+
+msgid "port.source.open"
+msgstr "Open service"
+
 msgid "details.notes"
 msgstr "Notes"
 

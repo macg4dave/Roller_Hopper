@@ -38,6 +38,11 @@ impl Evidence<'_> {
         prefixes.iter().any(|p| model.starts_with(p))
     }
 
+    fn model_mentions(&self, words: &[&str]) -> bool {
+        let model = self.model.unwrap_or_default().to_ascii_lowercase();
+        words.iter().any(|word| model.contains(word))
+    }
+
     fn apple_mobile(&self) -> bool {
         self.model_is(&["iphone", "ipad"])
     }
@@ -49,9 +54,39 @@ impl Evidence<'_> {
 
 type Rule = fn(&Evidence<'_>) -> bool;
 
+fn thermostat(e: &Evidence<'_>) -> bool {
+    e.model_mentions(&["thermostat", "ecobee", "tado"])
+}
+
+fn smart_display(e: &Evidence<'_>) -> bool {
+    e.model_mentions(&["echo show", "nest hub", "smart display"])
+}
+
+fn voice_assistant(e: &Evidence<'_>) -> bool {
+    e.model_mentions(&[
+        "amazon echo",
+        "echo dot",
+        "homepod",
+        "google home",
+        "nest audio",
+    ])
+}
+
+fn smart_device(e: &Evidence<'_>) -> bool {
+    e.announces(&[
+        "hap",
+        "homekit",
+        "home-assistant",
+        "mqtt",
+        "raop",
+        "spotify-connect",
+    ]) || e.model_mentions(&["hue", "tuya", "shelly", "sonos", "esp32", "esp8266"])
+        || e.open(1400)
+}
+
 /// The kind each rule points to, in order: the first that holds wins. Printers and Apple
 /// models first, being the most certain; port-only rules last.
-fn kind_rules() -> [(Rule, DeviceKind); 11] {
+fn kind_rules() -> [(Rule, DeviceKind); 14] {
     [
         (
             |e| {
@@ -63,6 +98,9 @@ fn kind_rules() -> [(Rule, DeviceKind); 11] {
         (|e| e.apple_mobile() || e.open(62078), DeviceKind::Phone),
         (|e| e.model_is(&["macbook"]), DeviceKind::Laptop),
         (|e| e.mac(), DeviceKind::Desktop),
+        (thermostat, DeviceKind::Thermostat),
+        (smart_display, DeviceKind::SmartDisplay),
+        (voice_assistant, DeviceKind::VoiceAssistant),
         (
             |e| {
                 e.model_is(&["appletv"])
@@ -71,10 +109,7 @@ fn kind_rules() -> [(Rule, DeviceKind); 11] {
             },
             DeviceKind::Tv,
         ),
-        (
-            |e| e.announces(&["hap", "homekit", "raop", "spotify-connect"]) || e.open(1400),
-            DeviceKind::Smart,
-        ),
+        (smart_device, DeviceKind::Smart),
         (|e| e.any_open(&[554, 8554, 37777]), DeviceKind::Camera),
         (|e| e.open(8291), DeviceKind::Router),
         (
@@ -287,6 +322,22 @@ mod tests {
                 (hint.family, hint.clues),
                 (family, vec![OsClue::DeviceModel])
             );
+        }
+    }
+
+    #[test]
+    fn advertised_models_distinguish_specific_smart_devices() {
+        for (model, kind) in [
+            ("Ecobee SmartThermostat", DeviceKind::Thermostat),
+            ("Google Nest Hub Max", DeviceKind::SmartDisplay),
+            ("Amazon Echo Dot", DeviceKind::VoiceAssistant),
+            ("Shelly Plus 1", DeviceKind::Smart),
+        ] {
+            let evidence = Evidence {
+                model: Some(model),
+                ..evidence(&[], &[])
+            };
+            assert_eq!(super::kind(&evidence), kind, "{model}");
         }
     }
 
