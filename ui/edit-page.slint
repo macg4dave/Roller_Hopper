@@ -1,15 +1,11 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { DeviceEditor } from "device-editor.slint";
 import { GroupEditor } from "group-editor.slint";
 import { RoleEditor } from "role-editor.slint";
-import { Splitter } from "components/splitter.slint";
 
-// The edit page that replaces the map view: devices on the left, groups and roles on the right.
+// Role and group management. Device editing stays on the map, where its context remains visible.
 export component EditPage inherits Rectangle {
     callback back();
-    in-out property <length> list-width <=> devices.list-width;
-    in-out property <length> roles-width;
 
     background: Theme.surface;
 
@@ -33,29 +29,13 @@ export component EditPage inherits Rectangle {
             }
         }
 
-        row := HorizontalLayout {
+        VerticalLayout {
+            horizontal-stretch: 1;
             vertical-stretch: 1;
+            spacing: Theme.space-l;
 
-            devices := DeviceEditor { horizontal-stretch: 1; }
-
-            Splitter {
-                width: Theme.space-l;
-                size <=> root.roles-width;
-                pane-width: roles.width;
-                min-size: Theme.edit-roles-min-width;
-                max-size: row.width - root.list-width - 2 * Theme.space-l - Theme.edit-fields-min-width;
-                pane-after: true;
-            }
-
-            roles := VerticalLayout {
-                preferred-width: root.roles-width;
-                min-width: Theme.edit-roles-min-width;
-                horizontal-stretch: 0;
-                spacing: Theme.space-l;
-
-                GroupEditor { vertical-stretch: 0; }
-                RoleEditor { vertical-stretch: 1; }
-            }
+            GroupEditor { vertical-stretch: 0; }
+            RoleEditor { vertical-stretch: 1; }
         }
     }
 }

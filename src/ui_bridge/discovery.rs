@@ -389,7 +389,7 @@ mod tests {
     fn a_scan_refreshes_a_dhcp_cards_address_before_matching_the_host() {
         let mut state = AppState::new(mock_data::network());
         let device = state.network.devices()[0].id;
-        let (card, mac) = {
+        let (card_id, mac) = {
             let card = &state.network.device(device).unwrap().cards[0];
             (card.id, card.mac.unwrap())
         };
@@ -411,7 +411,7 @@ mod tests {
         assert!(state.begin_discovery().is_some());
         assert!(state.take_scan(swept(1), [Event::Host(Box::new(answer))]));
 
-        assert_eq!(state.network.card(card).unwrap().address, Some(address));
+        assert_eq!(state.network.card(card_id).unwrap().address, Some(address));
         assert_eq!(state.discovery.found()[0].on_map(), Some(device));
     }
 

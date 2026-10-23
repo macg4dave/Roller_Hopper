@@ -128,7 +128,7 @@ export struct GuestView {
     colour: GroupColour,
 }
 
-/// A setting of the selected network card, typed on the edit page.
+/// A setting of the selected network card, typed in map edit mode.
 export enum CardField { name, address, mask, gateway, mac }
 
 // A scan's guess at a device's operating system; unknown when it made none.
@@ -391,8 +391,6 @@ export global Bridge {
     in property <[NodePlace]> places;
     // The devices the search and filter let through, each followed by its network cards.
     in property <[DeviceView]> list;
-    // Every device, each followed by its network cards, for the edit page.
-    in property <[DeviceView]> rows;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
     in property <Strand> strand;
@@ -476,7 +474,7 @@ export global Bridge {
     callback toggle-group(int);
     // A card's id as a drag payload, and back again: -1 when the payload is not a card. The
     // flag marks the card's own row, rather than its device's, which can also be dropped on
-    // another device's group on the edit page.
+    // another device's group in map edit mode.
     pure callback card-transfer(int, bool) -> data-transfer;
     pure callback transfer-card(data-transfer) -> int;
     callback search(string);

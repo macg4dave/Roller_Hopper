@@ -40,9 +40,9 @@ component CardSetting inherits VerticalLayout {
     }
 }
 
-// Edit page, right side, while a network card is selected: its name (edited in its heading) and
-// IPv4 settings, the device it is a child of, what it is plugged into, its open ports, and
-// removing it. A card is a child of its device, which it leads back to.
+// While a network card is selected in map edit mode: its name (edited in its heading), IPv4
+// settings, parent device, upstream connection, open ports, and removal. A card is a child of
+// its device, which it leads back to.
 export component CardEditor inherits VerticalLayout {
     alignment: start;
     spacing: Theme.space-xs;

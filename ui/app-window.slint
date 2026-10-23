@@ -1,5 +1,5 @@
 import { Button, Palette, ProgressIndicator, Spinner } from "std-widgets.slint";
-import { Bridge, FileProblemKind, GuestKind, InstallOutcome } from "bridge.slint";
+import { Bridge, FileProblemKind, InstallOutcome } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { Header } from "header.slint";
 import { Labels } from "labels.slint";
@@ -34,12 +34,10 @@ export component AppWindow inherits Window {
     // The edit and discovery pages cover the map view rather than replacing it, so the map keeps
     // its zoom and pan while a page is open.
     property <Page> page: Page.map;
-    // Panel widths the user dragged to; kept here so they survive leaving and reopening the
-    // edit page.
+    // Panel widths the user dragged to; kept here so they survive page changes.
     property <length> list-width: Theme.list-width;
     property <length> details-width: Theme.details-width;
-    property <length> edit-list-width: Theme.list-width;
-    property <length> edit-roles-width: Theme.edit-roles-width;
+    property <bool> edit-mode;
 
     // The AI settings window is wanted; Rust opens it, since a .slint file cannot.
     callback open-ai-settings();
@@ -66,13 +64,9 @@ export component AppWindow inherits Window {
                         preferred-width: root.list-width;
                         min-width: Theme.panel-min-width;
                         horizontal-stretch: 0;
+                        edit-mode <=> root.edit-mode;
                         show-on-map(device) => { canvas.centre-on(device.x, device.y); }
-                        edit => { page = Page.edit; }
-                        // The new device is selected; its details open ready to fill in.
-                        add => {
-                            Bridge.add-device(GuestKind.none);
-                            details.edit();
-                        }
+                        manage-roles => { page = Page.edit; }
                     }
                     canvas := TopologyCanvas {
                         min-width: Theme.canvas-min-width;
@@ -82,6 +76,7 @@ export component AppWindow inherits Window {
                         preferred-width: root.details-width;
                         min-width: Theme.panel-min-width;
                         horizontal-stretch: 0;
+                        edit-mode: root.edit-mode;
                     }
                 }
 
@@ -104,8 +99,6 @@ export component AppWindow inherits Window {
             }
 
             if page == Page.edit: EditPage {
-                list-width <=> root.edit-list-width;
-                roles-width <=> root.edit-roles-width;
                 back => { page = Page.map; }
             }
 

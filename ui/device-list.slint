@@ -2,16 +2,17 @@ import { Button, LineEdit, ListView } from "std-widgets.slint";
 import { Bridge, DeviceView } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
+import { AddMenu } from "add-menu.slint";
 
-// Left panel: search, the way to the edit page, the matching devices with their network cards,
-// and a button to add a device.
+// Left panel: map edit mode, search, the matching devices with their network cards, and access
+// to role and group management. Edit mode also allows adding devices and moving cards between
+// devices; the selected item is edited in the details panel.
 export component DeviceList inherits Rectangle {
+    in-out property <bool> edit-mode;
     // A device was double-clicked: bring it into view on the map.
     callback show-on-map(DeviceView);
-    // Opens the edit page.
-    callback edit();
-    // The add button under the list was clicked: a new device is wanted.
-    callback add();
+    // Opens role and group management.
+    callback manage-roles();
 
     background: Theme.surface;
 
@@ -30,10 +31,15 @@ export component DeviceList inherits Rectangle {
             edited(text) => { Bridge.search(text); }
         }
         Button {
-            text: @tr("list.edit-devices");
+            text: root.edit-mode ? @tr("list.finish-editing") : @tr("list.edit-mode");
             icon: @image-url("icons/edit.svg");
             colorize-icon: true;
-            clicked => { root.edit(); }
+            primary: root.edit-mode;
+            clicked => { root.edit-mode = !root.edit-mode; }
+        }
+        if root.edit-mode: Button {
+            text: @tr("list.roles-groups");
+            clicked => { root.manage-roles(); }
         }
 
         if Bridge.list.length == 0: Text {
@@ -49,18 +55,14 @@ export component DeviceList inherits Rectangle {
             vertical-stretch: 1;
             for device in Bridge.list: DeviceRow {
                 device: device;
+                accepts-cards: root.edit-mode;
                 double-clicked => { root.show-on-map(device); }
             }
         }
 
-        HorizontalLayout {
+        if root.edit-mode: HorizontalLayout {
             alignment: start;
-            Button {
-                icon: @image-url("icons/plus.svg");
-                colorize-icon: true;
-                accessible-label: @tr("list.add-device");
-                clicked => { root.add(); }
-            }
+            AddMenu { }
         }
     }
 }

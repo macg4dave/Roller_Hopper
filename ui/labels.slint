@@ -105,7 +105,7 @@ export global Labels {
         return @tr("guest.virtual-machine");
     }
 
-    // A guest's line under its name on the edit page: what it runs as, and its address.
+    // A guest's line under its name in map edit mode: what it runs as, and its address.
     public pure function guest-summary(kind: GuestKind, ip: string) -> string {
         return ip == "" ? guest-kind(kind) : @tr("edit.guest-summary", guest-kind(kind), ip);
     }

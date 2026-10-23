@@ -12,22 +12,10 @@ import { SelectableText } from "components/selectable-text.slint";
 
 // Right panel: everything known about the selected device, followed by each of its network
 // cards in full and a way to forget it, or about the selected card (its addresses and open
-// ports) under its device's name. The pencil turns it into the same editor as the edit page's,
-// for the device or card, until Done.
+// ports) under its device's name. Map edit mode replaces those details with the complete device
+// or card editor.
 export component DetailsPanel inherits Rectangle {
-    // Showing the editor rather than the details; ends when nothing is selected.
-    property <bool> editing;
-    property <int> selected-id: Bridge.selected-id;
-    property <int> selected-card: Bridge.selected-card;
-    property <int> featured-card: Bridge.featured-card;
-    changed selected-id => { editing = false; }
-    changed selected-card => { editing = false; }
-    changed featured-card => { editing = false; }
-
-    // Opens the editor on the selected device, as the pencil does.
-    public function edit() {
-        editing = true;
-    }
+    in property <bool> edit-mode;
 
     background: Theme.surface;
 
@@ -47,7 +35,7 @@ export component DetailsPanel inherits Rectangle {
         width: parent.width - 4 * Theme.space-l;
     }
 
-    if Bridge.selected-id >= 0 && editing: edit-scroll := ScrollView {
+    if Bridge.selected-id >= 0 && root.edit-mode: edit-scroll := ScrollView {
         VerticalLayout {
             // Padding is inside the layout's width. Leave it out of the content width so the
             // editor cannot grow underneath a horizontal scroll area.
@@ -56,20 +44,12 @@ export component DetailsPanel inherits Rectangle {
             padding: Theme.space-l;
             spacing: Theme.space-s;
 
-            HorizontalLayout {
-                alignment: end;
-                Button {
-                    text: @tr("details.done");
-                    primary: true;
-                    clicked => { root.editing = false; }
-                }
-            }
             if Bridge.selected-card >= 0: CardEditor { }
             if Bridge.selected-card < 0: DeviceForm { }
         }
     }
 
-    if Bridge.selected-id >= 0 && !editing: scroll := ScrollView {
+    if Bridge.selected-id >= 0 && !root.edit-mode: scroll := ScrollView {
         VerticalLayout {
             width: scroll.visible-width;
             alignment: start;
@@ -99,12 +79,6 @@ export component DetailsPanel inherits Rectangle {
                 HorizontalLayout {
                     alignment: start;
                     spacing: Theme.space-xs;
-                    Button {
-                        icon: @image-url("icons/edit.svg");
-                        colorize-icon: true;
-                        accessible-label: @tr("details.edit");
-                        clicked => { root.editing = true; }
-                    }
                     Button {
                         icon: @image-url("icons/close.svg");
                         colorize-icon: true;

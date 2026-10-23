@@ -33,10 +33,6 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     if let Some(model) = sync(&bridge.get_list(), list) {
         bridge.set_list(model);
     }
-    let rows = views.rows(network.devices().iter());
-    if let Some(model) = sync(&bridge.get_rows(), rows) {
-        bridge.set_rows(model);
-    }
     push_roles(&bridge, &labels, state);
     bridge.set_count_all(i32::try_from(network.devices().len()).unwrap_or(i32::MAX));
     discovery::push(&bridge, &labels, state);

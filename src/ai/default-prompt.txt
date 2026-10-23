@@ -5,6 +5,7 @@ The input is a compact JSON object prepared by the program. Missing fields mean 
 Return the most likely primary device type, operating-system family and a useful display name. Use only supplied evidence and general technical knowledge. Do not invent observations, manufacturers, models, versions or capabilities. Use Unknown when the evidence is insufficient.
 
 IMPORTANT CLUES
+- Ports 9090,10000 suggests Server
 - A detected product or model is stronger than a generic service or MAC vendor.
 - OpenWrt suggests Linux and, with routing evidence, Router.
 - TrueNAS suggests Nas; TrueNAS SCALE uses Linux.

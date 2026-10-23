@@ -391,19 +391,21 @@ msgstr "Adds new hosts the AI identifies with confidence to the map. Unclear hos
 msgid "list.search-placeholder"
 msgstr "Search by name, IP or MAC address"
 
-# Opens the page for editing devices, roles and groups.
-msgid "list.edit-devices"
-msgstr "Edit devices"
+# Switches the map sidebar into its device and network-card editing mode.
+msgid "list.edit-mode"
+msgstr "Edit mode"
+
+msgid "list.finish-editing"
+msgstr "Finish editing"
+
+msgid "list.roles-groups"
+msgstr "Roles and groups"
 
 msgid "filter.button"
 msgstr "{0}  {1}"
 
 msgid "list.no-match"
 msgstr "No devices match."
-
-# The + button under the list: adds a blank device and opens it for editing.
-msgid "list.add-device"
-msgstr "Add device"
 
 # Each device in the list heads a group of its network cards, which can be folded away.
 msgid "list.group-collapse"
@@ -467,14 +469,6 @@ msgstr "Select a device on the map or in the list to see its details."
 
 msgid "details.close"
 msgstr "Close details"
-
-# The pencil in the details panel: edits the selected device or network card in the panel.
-msgid "details.edit"
-msgstr "Edit"
-
-# Ends editing in the details panel and shows the details again.
-msgid "details.done"
-msgstr "Done"
 
 msgid "details.name"
 msgstr "Name"
@@ -674,13 +668,10 @@ msgstr "Cancel"
 
 # Edit page
 msgid "edit.title"
-msgstr "Devices, roles and groups"
+msgstr "Roles and groups"
 
 msgid "edit.back"
 msgstr "Back to map"
-
-msgid "edit.choose-device"
-msgstr "Choose a device to edit it."
 
 msgid "edit.icon-from-role"
 msgstr "Use the role's icon"
