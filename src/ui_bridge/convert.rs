@@ -10,7 +10,7 @@ use super::icons::Icons;
 use crate::model::{
     CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, GuestKind, Icon, LineStyle,
     Network, NetworkCard, OsClue, OsFamily, Point, Role, ServiceSource, Snap, StandardGroup,
-    Status, StatusFilter, TargetError,
+    TargetError,
 };
 use crate::ui::{self, Labels};
 
@@ -121,22 +121,6 @@ pub(super) fn mac(card: &NetworkCard) -> SharedString {
     mac.unwrap_or_default().into()
 }
 
-pub(super) fn filter_from_ui(filter: ui::StatusFilter) -> StatusFilter {
-    match filter {
-        ui::StatusFilter::All => StatusFilter::All,
-        ui::StatusFilter::Online => StatusFilter::Online,
-        ui::StatusFilter::Offline => StatusFilter::Offline,
-    }
-}
-
-pub(super) fn filter_to_ui(filter: StatusFilter) -> ui::StatusFilter {
-    match filter {
-        StatusFilter::All => ui::StatusFilter::All,
-        StatusFilter::Online => ui::StatusFilter::Online,
-        StatusFilter::Offline => ui::StatusFilter::Offline,
-    }
-}
-
 pub(super) fn kind(kind: DeviceKind) -> ui::DeviceKind {
     match kind {
         DeviceKind::Router => ui::DeviceKind::Router,
@@ -165,14 +149,6 @@ pub(super) fn icon_from_ui(id: &str) -> Icon {
         DeviceKind::Unknown.icon()
     } else {
         Icon::new(id)
-    }
-}
-
-fn status(status: Status) -> ui::DeviceStatus {
-    match status {
-        Status::Online => ui::DeviceStatus::Online,
-        Status::Offline => ui::DeviceStatus::Offline,
-        Status::Unknown => ui::DeviceStatus::Unknown,
     }
 }
 
@@ -254,7 +230,6 @@ pub(super) fn device_view(
         role,
         icon: icons.image(&network.icon(device)),
         colour: colour(network.colour(device)),
-        status: status(device.status),
         x: at.x,
         y: at.y,
         dimmed: false,
@@ -317,7 +292,6 @@ pub(super) fn details(
         icon: icons.choice(&network.icon(device)),
         custom_icon: device.icon.is_some(),
         colour: colour(network.colour(device)),
-        status: status(device.status),
         name: device.name.trim().into(),
         role,
         notes: device.notes.as_str().into(),

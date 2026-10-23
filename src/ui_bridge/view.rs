@@ -11,7 +11,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use super::edit::CardMove;
 use super::{AppState, convert, map};
-use crate::model::{CardId, Device, Network, Parent, Role, StatusFilter};
+use crate::model::{CardId, Device, Parent, Role};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
@@ -29,7 +29,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         bridge.set_nodes(model);
     }
     map::push(&bridge, state);
-    let list = views.rows(network.filtered(state.filter, &state.query));
+    let list = views.rows(network.filtered(&state.query));
     if let Some(model) = sync(&bridge.get_list(), list) {
         bridge.set_list(model);
     }
@@ -38,10 +38,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         bridge.set_rows(model);
     }
     push_roles(&bridge, &labels, state);
-    bridge.set_filter(convert::filter_to_ui(state.filter));
-    bridge.set_count_all(count(network, StatusFilter::All));
-    bridge.set_count_online(count(network, StatusFilter::Online));
-    bridge.set_count_offline(count(network, StatusFilter::Offline));
+    bridge.set_count_all(i32::try_from(network.devices().len()).unwrap_or(i32::MAX));
     discovery::push(&bridge, &labels, state);
     bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
     push_selection(&bridge, &labels, state);
@@ -79,11 +76,11 @@ impl Views<'_> {
     }
 
     /// The map's nodes, one per card in the order of [`crate::model::Network::nodes`], faded
-    /// where the search or filter hides their device.
+    /// where the search hides their device.
     fn nodes(&self) -> Vec<ui::DeviceView> {
         let state = self.state;
         let nodes = state.network.devices().iter().flat_map(|device| {
-            let shown = state.filter.admits(device.status) && device.matches(&state.query);
+            let shown = device.matches(&state.query);
             let rows = self.card_rows(device).into_iter();
             rows.map(move |row| ui::DeviceView {
                 dimmed: !shown,
@@ -256,10 +253,6 @@ fn push_move_question(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState
         }
     });
     bridge.set_move_question(question.unwrap_or_default());
-}
-
-fn count(network: &Network, filter: StatusFilter) -> i32 {
-    i32::try_from(network.count(filter)).unwrap_or(i32::MAX)
 }
 
 /// Updates a `VecModel` in place, touching only rows that changed. Returns a new model to set

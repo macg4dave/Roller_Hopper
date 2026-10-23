@@ -1,10 +1,10 @@
 import { Button, LineEdit, ListView } from "std-widgets.slint";
-import { Bridge, DeviceView, StatusFilter } from "bridge.slint";
+import { Bridge, DeviceView } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { DeviceRow } from "components/device-row.slint";
 
-// Left panel: search, the way to the edit page, All / Online / Offline filters, the matching
-// devices, each with its network cards, and a button to add a device.
+// Left panel: search, the way to the edit page, the matching devices with their network cards,
+// and a button to add a device.
 export component DeviceList inherits Rectangle {
     // A device was double-clicked: bring it into view on the map.
     callback show-on-map(DeviceView);
@@ -34,19 +34,6 @@ export component DeviceList inherits Rectangle {
             icon: @image-url("icons/edit.svg");
             colorize-icon: true;
             clicked => { root.edit(); }
-        }
-
-        HorizontalLayout {
-            spacing: Theme.space-xs;
-            for tab in [
-                { filter: StatusFilter.all, label: @tr("filter.all"), count: Bridge.count-all },
-                { filter: StatusFilter.online, label: @tr("filter.online"), count: Bridge.count-online },
-                { filter: StatusFilter.offline, label: @tr("filter.offline"), count: Bridge.count-offline },
-            ]: Button {
-                text: @tr("filter.button", tab.label, tab.count);
-                primary: Bridge.filter == tab.filter;
-                clicked => { Bridge.set-filter(tab.filter); }
-            }
         }
 
         if Bridge.list.length == 0: Text {

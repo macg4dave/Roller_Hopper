@@ -5,7 +5,6 @@ import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
 import { DeviceIcon } from "components/device-icon.slint";
 import { ForgetDevice } from "components/forget-device.slint";
-import { StatusDot } from "components/status-dot.slint";
 import { CardDetails } from "card-details.slint";
 import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
@@ -95,19 +94,6 @@ export component DetailsPanel inherits Rectangle {
                         font-weight: 600;
                         color: Theme.text;
                         overflow: elide;
-                    }
-                    HorizontalLayout {
-                        spacing: Theme.space-s;
-                        alignment: start;
-                        VerticalLayout {
-                            alignment: center;
-                            StatusDot { status: Bridge.details.status; }
-                        }
-                        Text {
-                            text: Labels.status(Bridge.details.status);
-                            font-size: Theme.font-body;
-                            color: Theme.text-muted;
-                        }
                     }
                 }
                 HorizontalLayout {

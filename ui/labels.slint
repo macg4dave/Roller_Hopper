@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { AiImportPhase, DeviceKind, DeviceStatus, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, StandardGroup, TargetError } from "bridge.slint";
+import { AiImportPhase, DeviceKind, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, GuestKind, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, StandardGroup, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -43,12 +43,6 @@ export global Labels {
         if role == RoleKind.camera { return @tr("role.camera"); }
         if role == RoleKind.iot { return @tr("role.iot"); }
         return @tr("role.other");
-    }
-
-    public pure function status(status: DeviceStatus) -> string {
-        if status == DeviceStatus.online { return @tr("status.online"); }
-        if status == DeviceStatus.offline { return @tr("status.offline"); }
-        return @tr("status.unknown");
     }
 
     // A cleared name still leaves something to read and click.
@@ -273,11 +267,11 @@ export global Labels {
     }
 
     // The status bar: how far a running scan has got, or else the outcome of the last one.
-    public pure function scan-status(run: DiscoveryView, scans: int, devices: int, offline: int) -> string {
+    public pure function scan-status(run: DiscoveryView, scans: int, devices: int) -> string {
         if run.phase == DiscoveryPhase.running {
             return run.probes > 0 ? @tr("scan.ports", run.probed, run.probes) : @tr("scan.addresses", run.swept, run.addresses);
         }
         let summary = @tr("scan.devices" | "scan.devices.plural" % devices);
-        return scans == 0 ? @tr("scan.loaded", summary, offline) : @tr("scan.complete", summary, offline);
+        return scans == 0 ? summary : @tr("scan.complete", summary);
     }
 }

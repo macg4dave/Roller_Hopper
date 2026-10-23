@@ -11,7 +11,7 @@ pub(crate) use tree::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::card::CardId;
-use super::device::{Device, DeviceId, Icon, Role, Status};
+use super::device::{Device, DeviceId, Icon, Role};
 use super::groups::{GroupColour, GroupId, Groups, LineStyle, StandardGroup};
 use super::roles::Roles;
 
@@ -28,25 +28,6 @@ pub(crate) struct CardLink {
     pub(crate) upstream: CardId,
     pub(crate) card: CardId,
     pub(crate) kind: ConnectionKind,
-}
-
-/// The device list filter tabs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub(crate) enum StatusFilter {
-    #[default]
-    All,
-    Online,
-    Offline,
-}
-
-impl StatusFilter {
-    pub(crate) fn admits(self, status: Status) -> bool {
-        match self {
-            Self::All => true,
-            Self::Online => status == Status::Online,
-            Self::Offline => status == Status::Offline,
-        }
-    }
 }
 
 /// Read from a file, it is only used once [`Self::checked`].
@@ -97,19 +78,10 @@ impl Network {
         self.devices.iter_mut().find(|d| d.id == id)
     }
 
-    pub(crate) fn filtered<'a>(
-        &'a self,
-        filter: StatusFilter,
-        query: &'a str,
-    ) -> impl Iterator<Item = &'a Device> {
+    pub(crate) fn filtered<'a>(&'a self, query: &'a str) -> impl Iterator<Item = &'a Device> {
         self.devices
             .iter()
-            .filter(move |d| filter.admits(d.status) && d.matches(query))
-    }
-
-    /// How many devices, virtual machines and containers the filter lets through.
-    pub(crate) fn count(&self, filter: StatusFilter) -> usize {
-        self.filtered(filter, "").count()
+            .filter(move |device| device.matches(query))
     }
 
     /// Standard roles followed by the custom ones, in the order they were added.
@@ -251,21 +223,9 @@ mod tests {
     use crate::model::{DeviceKind, Guest, GuestKind};
 
     #[test]
-    fn filters_combine_status_and_search() {
+    fn search_filters_devices() {
         let network = mock_data::network();
-        let offline: Vec<_> = network.filtered(StatusFilter::Offline, "").collect();
-        assert_ne!(offline, [] as [&Device; 0]);
-        assert!(offline.iter().all(|d| d.status == Status::Offline));
-
-        let total = network.count(StatusFilter::All);
-        assert_eq!(total, network.devices().len());
-        assert!(
-            network.count(StatusFilter::Online) + network.count(StatusFilter::Offline) <= total
-        );
-
-        let routers: Vec<_> = network
-            .filtered(StatusFilter::Online, "192.168.1.1")
-            .collect();
+        let routers: Vec<_> = network.filtered("192.168.1.1").collect();
         assert_ne!(routers, [] as [&Device; 0]);
         assert!(routers.iter().all(|d| d.matches("192.168.1.1")));
     }
@@ -283,7 +243,7 @@ mod tests {
         assert_eq!(edited.name, "Gateway");
         assert_eq!(edited.role, Role::Server);
         assert_eq!(edited.notes, "Replace in spring");
-        assert_eq!(network.filtered(StatusFilter::All, "gateway").count(), 1);
+        assert_eq!(network.filtered("gateway").count(), 1);
     }
 
     #[test]

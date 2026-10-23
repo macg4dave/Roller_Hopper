@@ -33,8 +33,7 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::ai::{Worker, WorkerEvent};
 use crate::model::{
-    Arrangement, CardId, Device, DeviceId, Discovery, Network, NetworkCard, Positions,
-    StatusFilter, tree_layout,
+    Arrangement, CardId, Device, DeviceId, Discovery, Network, NetworkCard, Positions, tree_layout,
 };
 use crate::project::Project;
 use crate::ui::{AppWindow, Bridge};
@@ -66,7 +65,6 @@ pub(crate) struct AppState {
     pending_move: Option<edit::CardMove>,
     /// Devices whose group is folded up in the lists, hiding their cards.
     collapsed: HashSet<DeviceId>,
-    filter: StatusFilter,
     query: String,
     /// The discovery page's run; runs that finish or are stopped count as scans.
     discovery: Discovery,
@@ -112,7 +110,6 @@ impl AppState {
             selected: None,
             pending_move: None,
             collapsed: HashSet::new(),
-            filter: StatusFilter::All,
             query: String::new(),
             discovery: Discovery::default(),
             scans: 0,
@@ -198,9 +195,6 @@ pub(crate) fn connect(
     }));
     bridge.on_search(handler(ui, state, |st, text: SharedString| {
         st.query = text.into();
-    }));
-    bridge.on_set_filter(handler(ui, state, |st, f| {
-        st.filter = convert::filter_from_ui(f);
     }));
     edit::connect(ui, state);
     map::connect(ui, state);

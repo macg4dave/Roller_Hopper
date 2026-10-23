@@ -20,10 +20,6 @@ export struct IconGroup {
     icons: [IconChoice],
 }
 
-export enum DeviceStatus { online, offline, unknown }
-
-export enum StatusFilter { all, online, offline }
-
 // The standard roles; custom roles are sent as the user typed them.
 export enum RoleKind { router, switch, access-point, server, nas, desktop, laptop, phone, printer, camera, iot, other }
 
@@ -62,7 +58,6 @@ export struct DeviceView {
     icon: image,
     // The colour of the role's group.
     colour: GroupColour,
-    status: DeviceStatus,
     // Its settled spot on the map, which the list centres the map on; for a device, that of its
     // first card. Where it is drawn while it moves is in Bridge.places.
     x: float,
@@ -151,7 +146,6 @@ export struct DeviceDetails {
     custom-icon: bool,
     // The colour of the role's group, as on the map and in the list.
     colour: GroupColour,
-    status: DeviceStatus,
     name: string,
     // Already translated, like DeviceView.role.
     role: string,
@@ -435,10 +429,7 @@ export global Bridge {
     in property <bool> groups-restorable;
     // A preview of each line style, in the order of the group line style dropdown.
     in property <[LineSet]> line-styles;
-    in property <StatusFilter> filter;
     in property <int> count-all;
-    in property <int> count-online;
-    in property <int> count-offline;
     // A discovery run is running.
     in property <bool> scanning;
     // Discovery runs finished or stopped.
@@ -485,7 +476,6 @@ export global Bridge {
     pure callback card-transfer(int, bool) -> data-transfer;
     pure callback transfer-card(data-transfer) -> int;
     callback search(string);
-    callback set-filter(StatusFilter);
     callback rename(string);
     callback choose-role(int);
     // Reads the icon folder again, so icons added since appear. Icons are passed by their id;
@@ -619,5 +609,4 @@ export global MapSettings {
     in-out property <bool> show-addresses: true;
     in-out property <bool> show-macs;
     in-out property <bool> show-hostnames;
-    in-out property <bool> show-status: true;
 }

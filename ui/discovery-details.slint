@@ -38,7 +38,9 @@ export component DiscoveryDetails inherits Rectangle {
 
     if Bridge.selected-found >= 0 && on-map: map-scroll := ScrollView {
         VerticalLayout {
-            width: map-scroll.visible-width;
+            // Padding is inside the layout's width. Leave it out of the content width so the
+            // editor fills the sidebar without creating horizontal overflow.
+            width: max(0px, map-scroll.visible-width - 2 * Theme.space-l);
             alignment: start;
             padding: Theme.space-l;
             spacing: Theme.space-s;
@@ -76,7 +78,7 @@ export component DiscoveryDetails inherits Rectangle {
 
     if Bridge.selected-found >= 0 && !on-map: scroll := ScrollView {
         VerticalLayout {
-            width: scroll.visible-width;
+            width: max(0px, scroll.visible-width - 2 * Theme.space-l);
             alignment: start;
             padding: Theme.space-l;
 

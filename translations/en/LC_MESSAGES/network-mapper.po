@@ -395,15 +395,6 @@ msgstr "Search by name, IP or MAC address"
 msgid "list.edit-devices"
 msgstr "Edit devices"
 
-msgid "filter.all"
-msgstr "All"
-
-msgid "filter.online"
-msgstr "Online"
-
-msgid "filter.offline"
-msgstr "Offline"
-
 msgid "filter.button"
 msgstr "{0}  {1}"
 
@@ -469,9 +460,6 @@ msgstr "MAC addresses"
 
 msgid "view.hostnames"
 msgstr "Hostnames"
-
-msgid "view.status"
-msgstr "Status dots"
 
 # Details panel
 msgid "details.empty"
@@ -1055,15 +1043,6 @@ msgid "role.other"
 msgstr "Other"
 
 # Device status and history
-msgid "status.online"
-msgstr "Online"
-
-msgid "status.offline"
-msgstr "Offline"
-
-msgid "status.unknown"
-msgstr "Unknown"
-
 msgid "device.unnamed"
 msgstr "Unnamed device"
 
@@ -1107,7 +1086,7 @@ msgid "uplink.inferred"
 msgstr "{} (inferred link)"
 
 # Status bar. While a scan runs: addresses checked {0} of {1}, then port probes done {0} of
-# {1}. scan.loaded / scan.complete: {0} is scan.devices, {1} the number offline.
+# scan.complete: {0} is scan.devices.
 msgid "scan.addresses"
 msgstr "Scanning addresses {0}/{1}"
 
@@ -1119,11 +1098,8 @@ msgid_plural "scan.devices.plural"
 msgstr[0] "{n} device"
 msgstr[1] "{n} devices"
 
-msgid "scan.loaded"
-msgstr "{0}, {1} offline"
-
 msgid "scan.complete"
-msgstr "Scan complete · {0}, {1} offline"
+msgstr "Scan complete · {0}"
 
 # Discovery page, opened by the Scan button. The scan probes the real network.
 msgid "discovery.title"

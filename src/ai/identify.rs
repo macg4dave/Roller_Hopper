@@ -18,75 +18,69 @@ const MAX_PORTS: usize = 64;
 const MAX_DESCRIPTION: usize = 120;
 const MAX_NAME: usize = 35;
 
-/// What the default prompt is given for a device the scan found no name for: the name the
-/// model is to suggest.
-const NO_NAME: &str = "suggested_name";
-
-/// The evidence about `device` for the default prompt: one JSON object with its name (or
-/// [`NO_NAME`]), hostname (from mDNS or reverse DNS), what it announced over mDNS, its network
-/// cards each with its open ports, and the scanner's OS fingerprint, holding only what was found.
+/// Compact identity evidence for the model. Rust has already discarded raw addressing and
+/// converted generated names into an unnamed state, leaving the model only ambiguous facts.
 pub(crate) fn evidence(device: &Device) -> String {
     let mut fact = Map::new();
     let name = device.name.trim();
-    let name = if name.is_empty() { NO_NAME } else { name };
-    fact.insert("name".into(), json!(name));
+    if !name.is_empty() && !generated_name(name) {
+        fact.insert("current_name".into(), json!(name));
+    }
     if let Some(hostname) = &device.hostname {
         fact.insert("hostname".into(), json!(hostname));
     }
-    if let Some(announced) = announced(device) {
-        fact.insert("mdns".into(), announced);
+    if let Some(model) = &device.model {
+        fact.insert("model".into(), json!(model));
     }
-    let cards: Vec<Value> = device.cards.iter().map(card_fact).collect();
-    fact.insert("network_cards".into(), json!(cards));
+    if let Some(manufacturer) = &device.manufacturer {
+        fact.insert("manufacturer".into(), json!(manufacturer));
+    }
+    if !device.mdns_services.is_empty() {
+        fact.insert("mdns_services".into(), json!(device.mdns_services));
+    }
+    add_card_evidence(&mut fact, &device.cards);
     if let Some(os) = os_clues(device) {
-        fact.insert("os_fingerprint".into(), os);
+        fact.insert("fingerprint".into(), os);
     }
     // Plain values always serialise; an empty object is still evidence of nothing.
     serde_json::to_string_pretty(&fact).unwrap_or_else(|_| "{}".to_owned())
 }
 
-/// What the device said about itself over mDNS, if anything.
-fn announced(device: &Device) -> Option<Value> {
-    let mut fact = Map::new();
-    if !device.mdns_services.is_empty() {
-        fact.insert("services".into(), json!(device.mdns_services));
-    }
-    if let Some(model) = &device.model {
-        fact.insert("model".into(), json!(model));
-    }
-    if let Some(maker) = &device.manufacturer {
-        fact.insert("manufacturer".into(), json!(maker));
-    }
-    (!fact.is_empty()).then_some(Value::Object(fact))
+/// `device-XXXX` is a stable Rust-generated placeholder, not identity evidence.
+fn generated_name(name: &str) -> bool {
+    name.get(..7)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("device-"))
+        .and_then(|_| name.get(7..))
+        .is_some_and(|suffix| suffix.len() == 4 && suffix.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
-/// A network card's address, link details and open ports, leaving out what is unknown. A
-/// locally administered MAC is usually a phone's or laptop's private (randomised) address.
-fn card_fact(card: &NetworkCard) -> Value {
-    let mut fact = Map::new();
-    if !card.name.trim().is_empty() {
-        fact.insert("name".into(), json!(card.name.trim()));
+fn add_card_evidence(fact: &mut Map<String, Value>, cards: &[NetworkCard]) {
+    let mut vendors: Vec<&str> = cards
+        .iter()
+        .filter_map(|card| card.vendor.as_deref())
+        .collect();
+    vendors.sort_unstable();
+    vendors.dedup();
+    if !vendors.is_empty() {
+        fact.insert("mac_vendors".into(), json!(vendors));
     }
-    if let Some(address) = card.address {
-        fact.insert("address".into(), json!(address.to_string()));
+    if cards
+        .iter()
+        .filter_map(|card| card.mac)
+        .any(|mac| mac.0[0] & 0x02 != 0)
+    {
+        fact.insert("randomised_mac".into(), json!(true));
     }
-    if let Some(gateway) = card.gateway {
-        fact.insert("gateway".into(), json!(gateway.to_string()));
+    let gateway = cards.iter().any(|card| {
+        card.address
+            .zip(card.gateway)
+            .is_some_and(|(address, gateway)| address.addr() == gateway)
+    });
+    fact.insert("gateway_evidence".into(), json!(gateway));
+    let services: Vec<Value> = cards.iter().flat_map(open_ports).take(MAX_PORTS).collect();
+    if !services.is_empty() {
+        fact.insert("services".into(), json!(services));
     }
-    if let Some(mac) = card.mac {
-        fact.insert("mac".into(), json!(mac.to_string()));
-        if mac.0[0] & 0x02 != 0 {
-            fact.insert("mac_randomised".into(), json!(true));
-        }
-    }
-    if let Some(vendor) = &card.vendor {
-        fact.insert("mac_vendor".into(), json!(vendor));
-    }
-    let open = open_ports(card);
-    if !open.is_empty() {
-        fact.insert("open".into(), json!(open));
-    }
-    Value::Object(fact)
 }
 
 /// The card's open ports and whether their descriptions were observed, looked up, or edited.
@@ -371,19 +365,16 @@ mod tests {
         assert_eq!(
             evidence_of(&device),
             json!({
-                "name": "diskstation",
+                "current_name": "diskstation",
                 "hostname": "diskstation.home.arpa",
-                "mdns": { "services": ["smb"] },
-                "network_cards": [{
-                    "address": "192.168.20.30/24",
-                    "mac": "00:11:32:0A:0B:0C",
-                    "mac_vendor": "Synology Incorporated",
-                    "open": [
-                        { "port": 445, "protocol": "tcp", "source": "manual", "description": "SMB" },
-                        { "port": 5001, "protocol": "tcp", "source": "manual" }
-                    ]
-                }],
-                "os_fingerprint": {
+                "mdns_services": ["smb"],
+                "mac_vendors": ["Synology Incorporated"],
+                "gateway_evidence": false,
+                "services": [
+                    { "port": 445, "protocol": "tcp", "source": "manual", "description": "SMB" },
+                    { "port": 5001, "protocol": "tcp", "source": "manual" }
+                ],
+                "fingerprint": {
                     "scanner_guess": "Linux",
                     "detail": "Ubuntu",
                     "clues": ["SSH greeting", "ping TTL 64"]
@@ -411,14 +402,21 @@ mod tests {
         assert_eq!(
             evidence_of(&device),
             json!({
-                "name": "suggested_name",
-                "network_cards": [{
-                    "address": "192.168.20.30/24",
-                    "mac": "DA:11:32:0A:0B:0C",
-                    "mac_randomised": true
-                }]
+                "randomised_mac": true,
+                "gateway_evidence": false
             })
         );
+    }
+
+    #[test]
+    fn generated_names_are_not_sent_as_identity_evidence() {
+        for name in ["device-4A2B", "DEVICE-ab12"] {
+            let mut device = found();
+            device.name = name.into();
+            device.hostname = None;
+            assert_eq!(evidence_of(&device).get("current_name"), None, "{name}");
+        }
+        assert!(!generated_name("device-lamp"));
     }
 
     /// A NAS answer with `name` as its suggested name.

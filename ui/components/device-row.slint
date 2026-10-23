@@ -1,9 +1,8 @@
-import { Bridge, DeviceStatus, DeviceView } from "../bridge.slint";
+import { Bridge, DeviceView } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
 import { GuideLine } from "guide-line.slint";
-import { StatusDot } from "status-dot.slint";
 
 // One entry in a device list. A device heads a group: a chevron folds its network cards away,
 // and a line under its name says how many it holds. Each card follows inside the group, on an
@@ -123,7 +122,7 @@ export component DeviceRow inherits Rectangle {
         DeviceIcon {
             icon: card ? device.card-icon.image : device.icon;
             width: card ? 20px : icon-width;
-            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline || card ? Theme.icon-faded : Theme.icon);
+            colorize: Theme.group-colour(device.colour, selected ? Theme.accent : card ? Theme.icon-faded : Theme.icon);
         }
 
         VerticalLayout {
@@ -159,10 +158,6 @@ export component DeviceRow inherits Rectangle {
             max-width: 90px;
         }
 
-        if !card: VerticalLayout {
-            alignment: center;
-            StatusDot { status: device.status; }
-        }
     }
 
     if card && device.last: Rectangle {

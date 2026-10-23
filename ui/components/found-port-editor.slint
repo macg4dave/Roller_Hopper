@@ -14,9 +14,11 @@ export component FoundPortEditor inherits VerticalLayout {
     property <bool> adding;
 
     spacing: Theme.space-xs;
+    min-width: 0px;
     horizontal-stretch: 1;
 
     for port[i] in Bridge.found-ports: HorizontalLayout {
+        min-width: 0px;
         spacing: Theme.space-s;
         HorizontalLayout {
             width: Theme.port-number-width;

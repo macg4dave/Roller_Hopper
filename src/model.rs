@@ -25,7 +25,7 @@ pub(crate) use groups::{GroupColour, GroupId, GroupName, LineStyle, StandardGrou
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};
 #[cfg(test)]
 pub(crate) use network::CardLink;
-pub(crate) use network::{Connection, ConnectionKind, Network, StatusFilter};
+pub(crate) use network::{Connection, ConnectionKind, Network};
 pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use services::{ServiceProtocol, ServiceSource, Services};
 pub(crate) use snap::{Snap, snap_target};

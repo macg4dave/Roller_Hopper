@@ -1,8 +1,7 @@
-import { DeviceStatus, DeviceView, MapSettings } from "../bridge.slint";
+import { DeviceView, MapSettings } from "../bridge.slint";
 import { Labels } from "../labels.slint";
 import { Theme } from "../theme.slint";
 import { DeviceIcon } from "device-icon.slint";
-import { StatusDot } from "status-dot.slint";
 
 // One line of a device's label, centred under it. Its backing hides the line running down from
 // the device, which passes behind the label when several lines are shown.
@@ -87,13 +86,7 @@ export component MapNode inherits Rectangle {
                     height: icon-size * detail;
                     transform-origin: { x: 0, y: 0 };
                     transform-scale: 1 / detail;
-                    colorize: Theme.group-colour(device.colour, selected ? Theme.accent : device.status == DeviceStatus.offline ? Theme.icon-faded : Theme.icon);
-                }
-
-                if MapSettings.show-status: StatusDot {
-                    status: device.status;
-                    x: parent.width - self.width - 3px;
-                    y: 3px;
+                    colorize: Theme.group-colour(device.colour, selected ? Theme.accent : Theme.icon);
                 }
 
                 // The card's own icon (Ethernet, Wi-Fi, 5G…) as a badge in the corner.
