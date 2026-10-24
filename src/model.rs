@@ -53,7 +53,9 @@ pub(crate) use groups::{GroupColour, GroupId, GroupName, LineStyle, StandardGrou
 #[cfg(test)]
 pub(crate) use layout::trunk;
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunks};
-pub(crate) use network::{Connection, ConnectionKind, Network};
+pub(crate) use network::{
+    AutoMapConfidence, AutoMapProposal, AutoMapReason, Connection, ConnectionKind, Network,
+};
 pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use services::{ServiceProtocol, ServiceSource, Services};
 pub(crate) use snap::{Snap, SnapKind, snap_target};

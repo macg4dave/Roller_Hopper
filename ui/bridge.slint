@@ -83,6 +83,15 @@ export struct NodePlace {
     root-y: float,
 }
 
+export enum AutoMapConfidence { strong, likely, tentative }
+export enum AutoMapReason { gateway, wireless, wired, subnet }
+export struct AutoMapSuggestion {
+    downstream: string,
+    upstream: string,
+    confidence: AutoMapConfidence,
+    reason: AutoMapReason,
+}
+
 /// An open port of a network card, in port order.
 export struct PortView {
     port: int,
@@ -378,6 +387,12 @@ export global Bridge {
     in property <[LineSet]> lines;
     in property <Strand> strand;
     in property <MapBounds> bounds;
+    // A deterministic proposal waiting for review. An empty model with auto-map-open set is a
+    // valid proposal where every eligible card was unresolved.
+    in property <bool> auto-map-open;
+    in property <[AutoMapSuggestion]> auto-map-suggestions;
+    in property <int> auto-map-unresolved;
+    in property <bool> can-undo-auto-map;
     // The selected device, also while one of its cards is selected.
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
@@ -531,6 +546,10 @@ export global Bridge {
     callback move-card(int, float, float);
     callback drop-card();
     callback cancel-drag();
+    callback preview-auto-map();
+    callback apply-auto-map();
+    callback cancel-auto-map();
+    callback undo-auto-map();
     // The discovery run: start (again), and stop where it got to. Its network (as typed) and
     // options can be changed while it is not running.
     callback start-discovery();

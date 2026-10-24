@@ -441,6 +441,57 @@ msgstr "{}%"
 msgid "map.fit"
 msgstr "Fit to view"
 
+msgid "auto-map.button"
+msgstr "Auto map"
+
+msgid "auto-map.undo"
+msgstr "Undo auto map"
+
+msgid "auto-map.title"
+msgstr "Review automatic map"
+
+# {0} is the number of proposed links; {1} is the number of cards left unresolved.
+msgid "auto-map.summary"
+msgstr "{0} inferred links are ready. {1} cards were left unresolved."
+
+msgid "auto-map.explanation"
+msgstr "Manual links will stay unchanged. Applying replaces only inferred links, and can be undone once."
+
+# {0} is a downstream device name; {1} is its proposed upstream device name.
+msgid "auto-map.link"
+msgstr "{0} → {1}"
+
+# {0} is a confidence label; {1} is the reason for the suggestion.
+msgid "auto-map.detail"
+msgstr "{0} · {1}"
+
+msgid "auto-map.confidence-strong"
+msgstr "Strong"
+
+msgid "auto-map.confidence-likely"
+msgstr "Likely"
+
+msgid "auto-map.confidence-tentative"
+msgstr "Tentative"
+
+msgid "auto-map.reason-gateway"
+msgstr "default gateway matches the router"
+
+msgid "auto-map.reason-wireless"
+msgstr "wireless device and one matching access point"
+
+msgid "auto-map.reason-wired"
+msgstr "wired device and one matching switch"
+
+msgid "auto-map.reason-subnet"
+msgstr "only one router shares the subnet"
+
+msgid "auto-map.none"
+msgstr "No safe links could be suggested."
+
+msgid "auto-map.apply"
+msgstr "Apply inferred links"
+
 # The View button at the top right of the map, and the switches it opens.
 msgid "view.button"
 msgstr "View"

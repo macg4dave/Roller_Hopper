@@ -11,7 +11,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use super::edit::CardMove;
 use super::{AppState, convert, map};
-use crate::model::{CardId, Device, Parent, Role};
+use crate::model::{AutoMapConfidence, AutoMapReason, CardId, Device, Parent, Role};
 use crate::ui::{self, AppWindow, Bridge, Labels};
 
 /// Sends the whole state to the `Bridge` global. Cheap for a home network, and keeps every view
@@ -29,6 +29,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         bridge.set_nodes(model);
     }
     map::push(&bridge, state);
+    push_auto_map(&bridge, state);
     let list = views.rows(network.filtered(&state.query));
     if let Some(model) = sync(&bridge.get_list(), list) {
         bridge.set_list(model);
@@ -41,6 +42,45 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     push_card(&bridge, &labels, state);
     push_move_question(&bridge, &labels, state);
     super::project::push(&bridge, state);
+}
+
+fn push_auto_map(bridge: &Bridge<'_>, state: &AppState) {
+    let suggestions = state.auto_map.as_ref().map_or_else(Vec::new, |proposal| {
+        proposal
+            .suggestions
+            .iter()
+            .map(|suggestion| ui::AutoMapSuggestion {
+                downstream: card_owner_name(state, suggestion.downstream).into(),
+                upstream: card_owner_name(state, suggestion.upstream).into(),
+                confidence: match suggestion.confidence {
+                    AutoMapConfidence::Strong => ui::AutoMapConfidence::Strong,
+                    AutoMapConfidence::Likely => ui::AutoMapConfidence::Likely,
+                    AutoMapConfidence::Tentative => ui::AutoMapConfidence::Tentative,
+                },
+                reason: match suggestion.reason {
+                    AutoMapReason::Gateway => ui::AutoMapReason::Gateway,
+                    AutoMapReason::Wireless => ui::AutoMapReason::Wireless,
+                    AutoMapReason::Wired => ui::AutoMapReason::Wired,
+                    AutoMapReason::Subnet => ui::AutoMapReason::Subnet,
+                },
+            })
+            .collect()
+    });
+    if let Some(model) = sync(&bridge.get_auto_map_suggestions(), suggestions) {
+        bridge.set_auto_map_suggestions(model);
+    }
+    bridge.set_auto_map_open(state.auto_map.is_some());
+    bridge.set_auto_map_unresolved(state.auto_map.as_ref().map_or(0, |proposal| {
+        i32::try_from(proposal.unresolved).unwrap_or(i32::MAX)
+    }));
+    bridge.set_can_undo_auto_map(state.auto_map_undo.is_some());
+}
+
+fn card_owner_name(state: &AppState, card: CardId) -> &str {
+    state
+        .network
+        .card_owner(card)
+        .map_or("", |device| device.name.as_str())
 }
 
 /// Builds the rows of the lists and the nodes of the map.

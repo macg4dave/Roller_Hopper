@@ -201,6 +201,31 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         settle();
     });
 
+    let preview_auto_map = handler(ui, state, |st, ()| {
+        st.auto_map = Some(st.network.auto_map_proposal());
+    });
+    bridge.on_preview_auto_map(move || preview_auto_map(()));
+    let cancel_auto_map = handler(ui, state, |st, ()| {
+        st.auto_map = None;
+    });
+    bridge.on_cancel_auto_map(move || cancel_auto_map(()));
+    let apply_auto_map = handler(ui, state, |st, ()| {
+        let Some(proposal) = st.auto_map.take() else {
+            return;
+        };
+        st.auto_map_undo = Some(st.network.apply_auto_map(&proposal));
+        st.lay_out_at_rest();
+    });
+    bridge.on_apply_auto_map(move || apply_auto_map(()));
+    let undo_auto_map = handler(ui, state, |st, ()| {
+        let Some(previous) = st.auto_map_undo.take() else {
+            return;
+        };
+        st.network.restore_inferred(&previous);
+        st.lay_out_at_rest();
+    });
+    bridge.on_undo_auto_map(move || undo_auto_map(()));
+
     // A card dragged out of the lists carries its id as text, as Slint's drag payload is
     // opaque to Slint code. The prefix keeps text dragged in from other apps from passing for
     // a card.

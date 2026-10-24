@@ -33,7 +33,8 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::ai::{Worker, WorkerEvent};
 use crate::model::{
-    Arrangement, CardId, Device, DeviceId, Discovery, Network, NetworkCard, Positions, tree_layout,
+    Arrangement, AutoMapProposal, CardId, Connection, Device, DeviceId, Discovery, Network,
+    NetworkCard, Positions, tree_layout,
 };
 use crate::project::Project;
 use crate::ui::{AppWindow, Bridge};
@@ -60,6 +61,10 @@ pub(crate) struct AppState {
     arrangement: Arrangement,
     /// The card being dragged on the map, until it is dropped.
     dragging: Option<CardId>,
+    /// A deterministic topology proposal waiting for the user to review.
+    auto_map: Option<AutoMapProposal>,
+    /// The inferred links replaced by the latest applied proposal, for one-step undo.
+    auto_map_undo: Option<Vec<Connection>>,
     selected: Option<Selection>,
     /// A card move that would remove the parent it leaves, until the user confirms it.
     pending_move: Option<edit::CardMove>,
@@ -108,6 +113,8 @@ impl AppState {
             positions,
             arrangement,
             dragging: None,
+            auto_map: None,
+            auto_map_undo: None,
             selected: None,
             pending_move: None,
             collapsed: HashSet::new(),

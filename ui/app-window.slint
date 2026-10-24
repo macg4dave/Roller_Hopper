@@ -10,6 +10,7 @@ import { EditPage } from "edit-page.slint";
 import { DiscoveryPage } from "discovery-page.slint";
 import { Splitter } from "components/splitter.slint";
 import { MoveDialog } from "move-dialog.slint";
+import { AutoMapDialog } from "auto-map-dialog.slint";
 import { FileProblemDialog, UnsavedDialog } from "project-dialogs.slint";
 import { AiDownloadOutcomeDialog, AiDownloadQuestion, GpuUnsupportedDialog } from "ai-dialogs.slint";
 import { AiSettingsWindow, AnswerEnd, GenerationSettings, GpuCheck, ModelState } from "ai-settings-window.slint";
@@ -165,6 +166,10 @@ export component AppWindow inherits Window {
     }
 
     if Bridge.move-question.shown: MoveDialog {
+        width: root.width;
+        height: root.height;
+    }
+    if Bridge.auto-map-open: AutoMapDialog {
         width: root.width;
         height: root.height;
     }

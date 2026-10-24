@@ -1,11 +1,13 @@
 //! The network as a whole: devices, how their network cards are plugged into each other, the
 //! roles on offer and their groups.
 
+mod auto_map;
 mod cards;
 mod check;
 mod children;
 mod tree;
 
+pub(crate) use auto_map::{AutoMapConfidence, AutoMapProposal, AutoMapReason};
 pub(crate) use tree::Connection;
 
 use serde::{Deserialize, Serialize};

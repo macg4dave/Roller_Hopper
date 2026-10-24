@@ -1,0 +1,108 @@
+import { Button, ScrollView } from "std-widgets.slint";
+import { AutoMapConfidence, AutoMapReason, AutoMapSuggestion, Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+
+// Reviews deterministic inferred links before they replace the map's existing inferred links.
+export component AutoMapDialog inherits Rectangle {
+    background: Theme.scrim;
+
+    pure function confidence(value: AutoMapConfidence) -> string {
+        if value == AutoMapConfidence.strong { return @tr("auto-map.confidence-strong"); }
+        if value == AutoMapConfidence.likely { return @tr("auto-map.confidence-likely"); }
+        return @tr("auto-map.confidence-tentative");
+    }
+
+    pure function reason(value: AutoMapReason) -> string {
+        if value == AutoMapReason.gateway { return @tr("auto-map.reason-gateway"); }
+        if value == AutoMapReason.wireless { return @tr("auto-map.reason-wireless"); }
+        if value == AutoMapReason.wired { return @tr("auto-map.reason-wired"); }
+        return @tr("auto-map.reason-subnet");
+    }
+
+    TouchArea { }
+
+    Rectangle {
+        width: min(620px, parent.width - 2 * Theme.space-l);
+        height: min(560px, parent.height - 2 * Theme.space-l);
+        background: Theme.surface;
+        border-radius: Theme.radius;
+        border-color: Theme.border;
+        border-width: 1px;
+        drop-shadow-blur: 12px;
+        drop-shadow-color: Theme.scrim;
+        accessible-role: groupbox;
+        accessible-label: @tr("auto-map.title");
+
+        VerticalLayout {
+            padding: Theme.space-l;
+            spacing: Theme.space-m;
+
+            Text {
+                text: @tr("auto-map.title");
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+            }
+            Text {
+                text: @tr("auto-map.summary", Bridge.auto-map-suggestions.length, Bridge.auto-map-unresolved);
+                font-size: Theme.font-body;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: @tr("auto-map.explanation");
+                font-size: Theme.font-small;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+            suggestions := ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    width: suggestions.visible-width;
+                    spacing: 1px;
+                    for suggestion[i] in Bridge.auto-map-suggestions: Rectangle {
+                        height: 54px;
+                        background: Math.mod(i, 2) == 0 ? Theme.surface : Theme.stripe;
+                        VerticalLayout {
+                            padding-left: Theme.space-s;
+                            padding-right: Theme.space-s;
+                            alignment: center;
+                            Text {
+                                text: @tr("auto-map.link", suggestion.downstream, suggestion.upstream);
+                                font-size: Theme.font-body;
+                                color: Theme.text;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: @tr("auto-map.detail", root.confidence(suggestion.confidence), root.reason(suggestion.reason));
+                                font-size: Theme.font-small;
+                                color: Theme.text-muted;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                    if Bridge.auto-map-suggestions.length == 0: Text {
+                        text: @tr("auto-map.none");
+                        font-size: Theme.font-body;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-s;
+                Button {
+                    text: @tr("edit.cancel");
+                    clicked => { Bridge.cancel-auto-map(); }
+                }
+                Button {
+                    text: @tr("auto-map.apply");
+                    primary: true;
+                    enabled: Bridge.auto-map-suggestions.length > 0;
+                    clicked => { Bridge.apply-auto-map(); }
+                }
+            }
+        }
+    }
+}
