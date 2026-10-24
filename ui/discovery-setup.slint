@@ -14,6 +14,9 @@ export component DiscoverySetup inherits VerticalLayout {
 
     spacing: Theme.space-m;
 
+    // The page is built each time it opens, so a cable or VPN change since shows up here.
+    init => { Bridge.refresh-discovery-adapters(); }
+
     HorizontalLayout {
         spacing: Theme.space-m;
 

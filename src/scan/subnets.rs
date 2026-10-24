@@ -38,8 +38,8 @@ impl Adapter {
 /// Active non-loopback adapters with usable IPv4 subnets. The adapter used by the default route
 /// is first, so it is the initial primary adapter.
 pub(crate) fn adapters() -> Vec<Adapter> {
-    let routed = routed_address();
-    adapter_list(routed, &router_adapters(), NetworkManager::get_interfaces())
+    let (routers, interfaces) = interfaces();
+    adapter_list(routed_address(), &routers, interfaces)
 }
 
 pub(crate) fn local_subnet() -> Option<Ipv4Net> {
@@ -79,30 +79,73 @@ fn adapter_list(
     found
 }
 
-/// Windows exposes each adapter's gateway addresses directly. Elsewhere the routed local
-/// address remains the portable default-route signal.
+/// The names of the adapters with a router (gateway) address, and every adapter with its
+/// addresses. Windows exposes gateways directly; elsewhere the routed local address remains
+/// the portable default-route signal.
+///
+/// On Windows the adapters are read here rather than through netscli-core, which gives each
+/// address the longest prefix Windows lists for it: always the address's own /32 host route,
+/// which no subnet can be derived from.
 #[cfg(windows)]
-fn router_adapters() -> HashSet<String> {
-    ipconfig::get_adapters().map_or_else(
-        |_| HashSet::new(),
-        |adapters| {
-            adapters
-                .into_iter()
-                .filter(|adapter| {
-                    adapter
-                        .gateways()
-                        .iter()
-                        .any(|gateway| matches!(gateway, IpAddr::V4(ip) if !ip.is_unspecified()))
+fn interfaces() -> (HashSet<String>, Vec<netscli_core::InterfaceInfo>) {
+    use ipconfig::{IfType, OperStatus};
+
+    // Without the adapter list there is nothing to offer; the network can still be typed.
+    let Ok(adapters) = ipconfig::get_adapters() else {
+        return (HashSet::new(), Vec::new());
+    };
+    let routers = adapters
+        .iter()
+        .filter(|adapter| {
+            adapter
+                .gateways()
+                .iter()
+                .any(|gateway| matches!(gateway, IpAddr::V4(ip) if !ip.is_unspecified()))
+        })
+        .map(|adapter| adapter.friendly_name().to_owned())
+        .collect();
+    let interfaces = adapters
+        .iter()
+        .map(|adapter| netscli_core::InterfaceInfo {
+            name: adapter.friendly_name().to_owned(),
+            mac: None,
+            ips: adapter
+                .ip_addresses()
+                .iter()
+                .filter_map(|ip| match ip {
+                    IpAddr::V4(ip) => with_prefix(*ip, adapter.prefixes()).map(IpNet::V4),
+                    IpAddr::V6(_) => None,
                 })
-                .map(|adapter| adapter.friendly_name().to_owned())
-                .collect()
-        },
-    )
+                .collect(),
+            is_up: adapter.oper_status() == OperStatus::IfOperStatusUp,
+            is_loopback: adapter.if_type() == IfType::SoftwareLoopback,
+        })
+        .collect();
+    (routers, interfaces)
 }
 
 #[cfg(not(windows))]
-fn router_adapters() -> HashSet<String> {
-    HashSet::new()
+fn interfaces() -> (HashSet<String>, Vec<netscli_core::InterfaceInfo>) {
+    (HashSet::new(), NetworkManager::get_interfaces())
+}
+
+/// `ip` with the prefix of the subnet it is on. Windows lists, for each address, its subnet,
+/// its own /32 host route and its subnet's broadcast address, so the subnet is the longest
+/// listed prefix short of a host route that holds it. One with no such prefix stays a /32.
+#[cfg(windows)]
+fn with_prefix(ip: Ipv4Addr, prefixes: &[(IpAddr, u32)]) -> Option<Ipv4Net> {
+    let subnet = prefixes
+        .iter()
+        .filter_map(|(net, len)| match net {
+            IpAddr::V4(net) => Some((*net, u8::try_from(*len).ok()?)),
+            IpAddr::V6(_) => None,
+        })
+        .filter(|(net, len)| {
+            (1..32).contains(len) && Ipv4Net::new(*net, *len).is_ok_and(|n| n.contains(&ip))
+        })
+        .map(|(_, len)| len)
+        .max();
+    Ipv4Net::new(ip, subnet.unwrap_or(32)).ok()
 }
 
 /// This computer's own addresses, each with the MAC address of the connection it is on.
@@ -232,6 +275,25 @@ mod tests {
                 ],
             )],
         );
-        assert!(found.is_empty());
+        assert_eq!(found, Vec::<Adapter>::new());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_address_takes_its_subnet_not_its_own_host_route() {
+        let prefix = |net: &str, len| (net.parse().unwrap(), len);
+        let listed = [
+            prefix("192.168.20.0", 24),
+            prefix("192.168.20.105", 32),
+            prefix("192.168.20.255", 32),
+            prefix("224.0.0.0", 4),
+            prefix("255.255.255.255", 32),
+            prefix("0.0.0.0", 0),
+        ];
+        let lan = "192.168.20.105".parse().unwrap();
+        assert_eq!(with_prefix(lan, &listed), "192.168.20.105/24".parse().ok());
+        let tunnel = "10.9.0.2".parse().unwrap();
+        let alone = [prefix("10.9.0.2", 32)];
+        assert_eq!(with_prefix(tunnel, &alone), "10.9.0.2/32".parse().ok());
     }
 }

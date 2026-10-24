@@ -15,20 +15,7 @@ use crate::ui_bridge::{AppState, convert};
 
 pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let discovery = &state.discovery;
-    let adapters = state
-        .discovery_adapters
-        .iter()
-        .map(|adapter| SharedString::from(adapter.label()))
-        .collect();
-    if let Some(model) = sync(&bridge.get_discovery_adapters(), adapters) {
-        bridge.set_discovery_adapters(model);
-    }
-    bridge.set_discovery_adapter_index(
-        state
-            .primary_adapter
-            .and_then(|index| i32::try_from(index).ok())
-            .unwrap_or(-1),
-    );
+    push_adapters(bridge, state);
     let draft = SharedString::from(discovery.target_text.as_str());
     if bridge.get_discovery_target_draft() != draft {
         bridge.set_discovery_target_draft(draft);
@@ -78,6 +65,24 @@ pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_discovery_log(model);
     }
     bridge.set_scanning(discovery.busy());
+}
+
+/// The adapters that were up when last read, with the primary one selected.
+fn push_adapters(bridge: &Bridge<'_>, state: &AppState) {
+    let adapters = state
+        .discovery_adapters
+        .iter()
+        .map(|adapter| SharedString::from(adapter.label()))
+        .collect();
+    if let Some(model) = sync(&bridge.get_discovery_adapters(), adapters) {
+        bridge.set_discovery_adapters(model);
+    }
+    bridge.set_discovery_adapter_index(
+        state
+            .primary_adapter
+            .and_then(|index| i32::try_from(index).ok())
+            .unwrap_or(-1),
+    );
 }
 
 /// The results, each host followed by its cards, and the host or card shown in the details.

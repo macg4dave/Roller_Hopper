@@ -566,6 +566,8 @@ export global Bridge {
     callback start-discovery();
     callback stop-discovery();
     callback select-discovery-adapter(int);
+    // Re-reads the adapters that are up, as the discovery page opens.
+    callback refresh-discovery-adapters();
     callback set-discovery-target(string);
     callback set-scan-mode(ScanMode);
     callback set-found-filter(FoundFilter);

@@ -45,6 +45,27 @@ impl AppState {
         true
     }
 
+    /// Takes in the adapters that are up now, keeping the primary one while it is still there.
+    /// When it has gone, the first (router) adapter becomes primary and fills the network box,
+    /// unless the box holds a network the user typed.
+    fn refresh_discovery_adapters(&mut self, adapters: Vec<scan::Adapter>) {
+        if self.discovery.busy() || adapters == self.discovery_adapters {
+            return;
+        }
+        let old = self
+            .primary_adapter
+            .and_then(|index| self.discovery_adapters.get(index));
+        let kept = old.and_then(|old| adapters.iter().position(|adapter| adapter == old));
+        let filled = old.map(|adapter| adapter.subnet.to_string());
+        let text = &self.discovery.target_text;
+        let typed = !text.is_empty() && filled.as_ref() != Some(text);
+        self.discovery_adapters = adapters;
+        self.primary_adapter = kept.or_else(|| (!self.discovery_adapters.is_empty()).then_some(0));
+        if let (None, false, Some(first)) = (kept, typed, self.discovery_adapters.first()) {
+            self.discovery.target_text = first.subnet.to_string();
+        }
+    }
+
     fn add_found_port(&mut self, host: usize, card: usize, port: &str, description: &str) -> bool {
         let Some(port) = convert::port(port) else {
             return false;
@@ -149,24 +170,14 @@ fn scan_mode_from_ui(mode: ui::ScanMode) -> ScanMode {
 }
 
 /// The run's controls and options, the result filter, and the found hosts. The network box
-/// starts with this computer's own subnet, when one is found; after that it holds what the
-/// user types, and Rust never rewrites it.
+/// starts with the primary adapter's subnet, when one is found; after that it holds what the
+/// user types, rewritten only when they choose an adapter or the primary one goes away.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
-    let primary_subnet = {
-        let mut state = state.borrow_mut();
-        state.discovery_adapters = scan::adapters();
-        state.primary_adapter = (!state.discovery_adapters.is_empty()).then_some(0);
-        state
-            .discovery_adapters
-            .first()
-            .map(|adapter| adapter.subnet)
-    };
-    let own = primary_subnet
-        .map(|subnet| subnet.to_string())
-        .unwrap_or_default();
-    bridge.set_discovery_target_draft(own.as_str().into());
-    state.borrow_mut().discovery.target_text = own;
+    state
+        .borrow_mut()
+        .refresh_discovery_adapters(scan::adapters());
+    bridge.set_discovery_target_draft(state.borrow().discovery.target_text.as_str().into());
     let running = Rc::new(Running::default());
 
     let (start_ui, start_state, start_running) =
@@ -210,6 +221,10 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         };
         st.select_discovery_adapter(index);
     }));
+    let refresh = handler(ui, state, |st, ()| {
+        st.refresh_discovery_adapters(scan::adapters());
+    });
+    bridge.on_refresh_discovery_adapters(move || refresh(()));
     bridge.on_set_scan_mode(handler(ui, state, |st, mode| {
         st.discovery.options.mode = scan_mode_from_ui(mode);
     }));
@@ -423,27 +438,61 @@ mod tests {
         assert_eq!(state.scans, 1);
     }
 
+    fn adapter(name: &str, address: &str, subnet: &str) -> scan::Adapter {
+        scan::Adapter {
+            name: name.into(),
+            address: address.parse().unwrap(),
+            subnet: subnet.parse().unwrap(),
+        }
+    }
+
+    fn ethernet() -> scan::Adapter {
+        adapter("Ethernet", "192.168.1.20", "192.168.1.0/24")
+    }
+
+    fn lab() -> scan::Adapter {
+        adapter("Lab", "10.0.0.5", "10.0.0.0/24")
+    }
+
     #[test]
     fn choosing_an_adapter_makes_it_primary_and_fills_its_subnet() {
         let mut state = AppState::new(mock_data::network());
-        state.discovery_adapters = vec![
-            scan::Adapter {
-                name: "Ethernet".into(),
-                address: "192.168.1.20".parse().unwrap(),
-                subnet: "192.168.1.0/24".parse().unwrap(),
-            },
-            scan::Adapter {
-                name: "Lab".into(),
-                address: "10.0.0.5".parse().unwrap(),
-                subnet: "10.0.0.0/24".parse().unwrap(),
-            },
-        ];
-        state.primary_adapter = Some(0);
+        state.refresh_discovery_adapters(vec![ethernet(), lab()]);
+        assert_eq!(state.primary_adapter, Some(0));
+        assert_eq!(state.discovery.target_text, "192.168.1.0/24");
 
         assert!(state.select_discovery_adapter(1));
         assert_eq!(state.primary_adapter, Some(1));
         assert_eq!(state.discovery.target_text, "10.0.0.0/24");
         assert!(!state.select_discovery_adapter(2));
+    }
+
+    #[test]
+    fn a_refresh_keeps_the_chosen_adapter_while_it_is_still_up() {
+        let mut state = AppState::new(mock_data::network());
+        state.refresh_discovery_adapters(vec![ethernet(), lab()]);
+        state.select_discovery_adapter(1);
+        let vpn = adapter("VPN", "10.65.20.124", "10.65.20.0/24");
+        state.refresh_discovery_adapters(vec![ethernet(), vpn, lab()]);
+        assert_eq!(state.primary_adapter, Some(2));
+        assert_eq!(state.discovery.target_text, "10.0.0.0/24");
+    }
+
+    #[test]
+    fn when_the_chosen_adapter_goes_the_router_adapter_takes_over() {
+        let mut state = AppState::new(mock_data::network());
+        state.refresh_discovery_adapters(vec![lab()]);
+        state.refresh_discovery_adapters(vec![ethernet()]);
+        assert_eq!(state.primary_adapter, Some(0));
+        assert_eq!(state.discovery.target_text, "192.168.1.0/24");
+
+        state.discovery.target_text = "172.16.0.0/24".into();
+        state.refresh_discovery_adapters(vec![lab()]);
+        assert_eq!(state.primary_adapter, Some(0));
+        assert_eq!(
+            state.discovery.target_text, "172.16.0.0/24",
+            "a typed network is kept"
+        );
     }
 
     #[test]
