@@ -41,24 +41,8 @@ export component AppWindow inherits Window {
 
     // The AI settings window is wanted; Rust opens it, since a .slint file cannot.
     callback open-ai-settings();
-    // The hidden Ctrl+Shift+Settings shortcut asks Rust for its built-in sample network.
-    callback open-mock-data();
-    private property <bool> mock-data-modifiers;
-
-    keyboard := FocusScope {
-        capture-key-pressed(event) => {
-            root.mock-data-modifiers = event.modifiers.control && event.modifiers.shift;
-            reject
-        }
-        capture-key-released(event) => {
-            root.mock-data-modifiers = event.modifiers.control && event.modifiers.shift;
-            reject
-        }
-
     VerticalLayout {
         Header {
-            mock-data-modifiers: root.mock-data-modifiers;
-            mock-data => { root.open-mock-data(); }
             ai-settings => { root.open-ai-settings(); }
             // The selection may have moved on the map meanwhile: back on the found host's device.
             scan => {
@@ -203,6 +187,5 @@ export component AppWindow inherits Window {
     if Bridge.ai-download-outcome != InstallOutcome.none: AiDownloadOutcomeDialog {
         width: root.width;
         height: root.height;
-    }
     }
 }

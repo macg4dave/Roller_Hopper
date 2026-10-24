@@ -21,6 +21,16 @@ listed beside it.
 cargo run
 ```
 
+To start directly with the large checked-in stress-test project, use a release build:
+
+```sh
+cargo run --release -- --mock-data
+```
+
+This loads `mock-data/infrastructure.rhopper.json`. Use release mode when judging interaction
+performance on this fixture; debug builds are intentionally unoptimised and can make its large
+topology appear slow.
+
 The default build includes CUDA for running the AI on an NVIDIA graphics card. How to build,
 including a build without CUDA (and so without AI) and a portable folder, is in
 [docs/building.md](docs/building.md);

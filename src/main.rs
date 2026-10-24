@@ -18,14 +18,23 @@ use std::sync::mpsc;
 
 use slint::ComponentHandle;
 
-fn main() -> Result<(), slint::PlatformError> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = ui::AppWindow::new()?;
     ui_bridge::select_language(&ui);
-    let network = model::Network::default();
-    let state = Rc::new(RefCell::new(ui_bridge::AppState::new(network)));
+    let state = if std::env::args_os().any(|argument| argument == "--mock-data") {
+        let project = project::mock().map_err(|error| {
+            std::io::Error::other(format!(
+                "the built-in mock project could not be opened: {error:?}"
+            ))
+        })?;
+        ui_bridge::AppState::with_project(project, None)
+    } else {
+        ui_bridge::AppState::new(model::Network::default())
+    };
+    let state = Rc::new(RefCell::new(state));
     // One AI worker, started with the AI settings window and shared with Import with AI.
     let (ai_events, ai_inbox) = mpsc::channel();
     let worker = ai_settings::connect(&ui, ai_events)?;
     ui_bridge::connect(&ui, &state, worker, ai_inbox);
-    ui.run()
+    Ok(ui.run()?)
 }

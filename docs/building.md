@@ -33,6 +33,22 @@ cargo run
 Under `cargo run` the app reads device icons from the repository's `icons/` folder. UI text is
 compiled into the program from `translations/`.
 
+### Running the stress-test project
+
+Start the app with the checked-in `mock-data/infrastructure.rhopper.json` project already loaded:
+
+```sh
+cargo run --release -- --mock-data
+```
+
+The `--` passes `--mock-data` to Network Mapper instead of Cargo. Always use the release command
+when checking map interaction performance on this large fixture. A debug build can still be useful
+for diagnostics, but its unoptimised rendering is not a valid performance result:
+
+```sh
+cargo run -- --mock-data
+```
+
 ## Checking a change
 
 Every change passes the quality gate, in this order:
