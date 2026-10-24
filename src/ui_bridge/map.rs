@@ -11,12 +11,12 @@ pub(super) use motion::Motion;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel, Weak};
 
 use super::view::sync;
-use super::{AppState, convert, handler, update};
+use super::{AppState, convert, handler};
 use crate::model::{
     CardId, Connection, Level, Point, Positions, Snap, SnapKind, link_route, tree_layout, trunk,
 };
@@ -24,6 +24,9 @@ use crate::ui::{self, AppWindow, Bridge};
 
 /// One frame of the map's motion, at about 60 frames a second.
 const FRAME: Duration = Duration::from_millis(16);
+/// A delayed UI frame catches the animation up to real time, but a suspended window does not
+/// replay seconds of invisible motion when it resumes.
+const MAX_CATCH_UP: Duration = Duration::from_millis(250);
 
 impl AppState {
     /// The cards lit up on the map: the selected card, or every card of the selected device.
@@ -95,12 +98,17 @@ impl AppState {
     }
 
     /// Moves the map one frame on; true once everything has settled.
-    fn step_motion(&mut self) -> bool {
-        let dt = FRAME.as_secs_f32();
+    fn step_motion(&mut self, elapsed: Duration) -> bool {
         let strand = self.strand();
         let targets = self.making_room(strand.as_ref());
-        self.motion.step(&targets, dt);
-        self.motion.step_strand(strand.as_ref(), dt);
+        let mut remaining = elapsed.min(MAX_CATCH_UP).as_secs_f32();
+        let frame = FRAME.as_secs_f32();
+        while remaining > 0.0 {
+            let dt = remaining.min(frame);
+            self.motion.step(&targets, dt);
+            self.motion.step_strand(strand.as_ref(), dt);
+            remaining -= dt;
+        }
         self.motion.settled(&targets)
     }
 
@@ -163,15 +171,15 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
 
     // A card is dragged the same way on the map and from the lists. While dragging, the strand
     // swings after the pointer.
-    let move_card = handler(ui, state, |st, (id, x, y)| {
-        if let Some(card) = convert::card_id(id) {
-            st.drag_to(card, Point { x, y });
-        }
-    });
+    let move_state = Rc::clone(state);
     let move_settle = Rc::clone(&settle);
     bridge.on_move_card(move |id, x, y| {
-        move_card((id, x, y));
-        move_settle();
+        if let Some(card) = convert::card_id(id) {
+            move_state.borrow_mut().drag_to(card, Point { x, y });
+            // Pointer events can arrive much faster than the display can present them. The
+            // motion timer coalesces them into one map refresh per frame.
+            move_settle();
+        }
     });
     let drop_card = handler(ui, state, |st, ()| st.drop_dragged());
     let drop_settle = Rc::clone(&settle);
@@ -201,13 +209,25 @@ fn animate(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, timer: &Rc<Timer
         return;
     }
     let (ui, state, this) = (ui.clone(), Rc::clone(state), Rc::downgrade(timer));
+    let mut previous = Instant::now();
     timer.start(TimerMode::Repeated, FRAME, move || {
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(previous);
+        previous = now;
         let mut settled = true;
-        update(&ui, &state, |st| settled = st.step_motion());
+        update_map(&ui, &state, |st| settled = st.step_motion(elapsed));
         if let Some(running) = this.upgrade().filter(|_| settled) {
             running.stop();
         }
     });
+}
+
+/// Applies one animation step and refreshes only the map. Lists, editors, discovery results and
+/// project state cannot change during a frame and are deliberately left alone.
+fn update_map(ui: &Weak<AppWindow>, state: &RefCell<AppState>, change: impl FnOnce(&mut AppState)) {
+    let Some(ui) = ui.upgrade() else { return };
+    change(&mut state.borrow_mut());
+    push(&ui.global::<Bridge<'_>>(), &state.borrow());
 }
 
 /// Where each card is drawn right now, the lines between them, and the area they take up.
@@ -263,7 +283,7 @@ mod tests {
         };
         state.drag_to(nas, between);
         for _ in 0..60 {
-            state.step_motion();
+            state.step_motion(FRAME);
         }
         let moved = |st: &AppState, id| st.motion.shown()[&id].x - laid_out[&id].x;
         assert!(moved(&state, switch) < -1.0, "the switch moves left");
@@ -286,8 +306,31 @@ mod tests {
                 y: -5000.0,
             },
         );
-        assert!((0..600).any(|_| state.step_motion()));
+        assert!((0..600).any(|_| state.step_motion(FRAME)));
         assert!(moved(&state, switch).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_delayed_frame_catches_up_in_stable_substeps() {
+        let after_drop = || {
+            let mut state = AppState::new(mock_data::network());
+            let (switch, nas) = (CardId(2), CardId(4));
+            state.drag_to(nas, state.positions[&switch]);
+            state.drop_dragged();
+            state
+        };
+        let (mut delayed, mut regular) = (after_drop(), after_drop());
+
+        delayed.step_motion(Duration::from_millis(160));
+        for _ in 0..10 {
+            regular.step_motion(FRAME);
+        }
+
+        for (&id, delayed_at) in delayed.motion.shown() {
+            let regular_at = regular.motion.shown()[&id];
+            assert!((delayed_at.x - regular_at.x).abs() < 0.01);
+            assert!((delayed_at.y - regular_at.y).abs() < 0.01);
+        }
     }
 
     #[test]

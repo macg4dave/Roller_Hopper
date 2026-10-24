@@ -153,8 +153,11 @@ mod tests {
         assert!(x(&state, switch) < x(&state, nas) && x(&state, nas) < x(&state, access_point));
         assert!(gap(&state) > gap_before, "pushed apart");
 
-        assert!(!state.step_motion(), "glides into place");
-        assert!((0..600).any(|_| state.step_motion()), "and settles");
+        assert!(!state.step_motion(super::super::FRAME), "glides into place");
+        assert!(
+            (0..600).any(|_| state.step_motion(super::super::FRAME)),
+            "and settles"
+        );
         assert_eq!(state.motion.shown(), &state.positions);
     }
 
@@ -334,7 +337,10 @@ mod tests {
         assert_eq!(state.dragging, None);
         assert_eq!(state.network.uplink(container).map(|c| c.upstream), host);
         assert_eq!(state.positions, laid_out, "back in its spot");
-        assert!((0..600).any(|_| state.step_motion()), "and glides there");
+        assert!(
+            (0..600).any(|_| state.step_motion(super::super::FRAME)),
+            "and glides there"
+        );
 
         state.drag_to(container, on_root);
         state.drop_dragged();
