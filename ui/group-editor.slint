@@ -1,4 +1,4 @@
-import { Button, LineEdit, ListView } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { NameBox } from "components/name-box.slint";
@@ -24,52 +24,57 @@ export component GroupEditor inherits VerticalLayout {
         color: Theme.text-muted;
         wrap: word-wrap;
     }
-    ListView {
+    groups-scroll := ScrollView {
         // As tall as its rows, up to a few, so the roles below keep most of the height.
         height: min(Bridge.groups.length, 4) * Theme.row-height;
-        // Groups are identified to Rust by their index in Bridge.groups.
-        for group[i] in Bridge.groups: Rectangle {
-            height: Theme.row-height;
-            border-radius: Theme.radius;
-            background: Math.mod(i, 2) == 1 ? Theme.stripe : transparent;
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        VerticalLayout {
+            width: groups-scroll.visible-width;
+            // Groups are identified to Rust by their index in Bridge.groups.
+            for group[i] in Bridge.groups: Rectangle {
+                height: Theme.row-height;
+                border-radius: Theme.radius;
+                background: Math.mod(i, 2) == 1 ? Theme.stripe : transparent;
 
-            HorizontalLayout {
-                padding-left: Theme.space-s;
-                padding-right: Theme.space-s;
-                spacing: Theme.space-m;
-                VerticalLayout {
-                    alignment: center;
-                    width: 180px;
-                    NameBox {
-                        name: group.name;
-                        field-label: @tr("groups.name");
-                        commit(text) => { Bridge.rename-group(i, text); }
+                HorizontalLayout {
+                    padding-left: Theme.space-s;
+                    padding-right: Theme.space-s;
+                    spacing: Theme.space-m;
+                    VerticalLayout {
+                        alignment: center;
+                        width: 180px;
+                        NameBox {
+                            name: group.name;
+                            field-label: @tr("groups.name");
+                            commit(text) => { Bridge.rename-group(i, text); }
+                        }
                     }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    // Takes the spare width, so the delete button sits at the far right.
-                    horizontal-stretch: 1;
-                    ColourPicker {
-                        selected: group.colour;
-                        picked(colour) => { Bridge.set-group-colour(i, colour); }
+                    VerticalLayout {
+                        alignment: center;
+                        // Takes the spare width, so the delete button sits at the far right.
+                        horizontal-stretch: 1;
+                        ColourPicker {
+                            selected: group.colour;
+                            picked(colour) => { Bridge.set-group-colour(i, colour); }
+                        }
                     }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    LineStylePicker {
-                        selected: group.line-style;
-                        colour: group.colour;
-                        picked(style) => { Bridge.set-group-line-style(i, style); }
+                    VerticalLayout {
+                        alignment: center;
+                        LineStylePicker {
+                            selected: group.line-style;
+                            colour: group.colour;
+                            picked(style) => { Bridge.set-group-line-style(i, style); }
+                        }
                     }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    Button {
-                        icon: @image-url("icons/delete.svg");
-                        colorize-icon: true;
-                        accessible-label: @tr("groups.delete");
-                        clicked => { Bridge.delete-group(i); }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            icon: @image-url("icons/delete.svg");
+                            colorize-icon: true;
+                            accessible-label: @tr("groups.delete");
+                            clicked => { Bridge.delete-group(i); }
+                        }
                     }
                 }
             }

@@ -37,10 +37,12 @@ export component DiscoveryDetails inherits Rectangle {
     }
 
     if Bridge.selected-found >= 0 && on-map: map-scroll := ScrollView {
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         VerticalLayout {
-            // Padding is inside the layout's width. Leave it out of the content width so the
-            // editor fills the sidebar without creating horizontal overflow.
-            width: max(0px, map-scroll.visible-width - 2 * Theme.space-l);
+            // Padding is part of the layout's width, so the editor remains flush with the
+            // viewport and the inset is applied exactly once.
+            width: map-scroll.visible-width;
             alignment: start;
             padding: Theme.space-l;
             spacing: Theme.space-s;
@@ -77,8 +79,10 @@ export component DiscoveryDetails inherits Rectangle {
     }
 
     if Bridge.selected-found >= 0 && !on-map: scroll := ScrollView {
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         VerticalLayout {
-            width: max(0px, scroll.visible-width - 2 * Theme.space-l);
+            width: scroll.visible-width;
             alignment: start;
             padding: Theme.space-l;
 

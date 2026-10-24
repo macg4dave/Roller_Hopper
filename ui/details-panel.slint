@@ -36,10 +36,12 @@ export component DetailsPanel inherits Rectangle {
     }
 
     if Bridge.selected-id >= 0 && root.edit-mode: edit-scroll := ScrollView {
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         VerticalLayout {
-            // Padding is inside the layout's width. Leave it out of the content width so the
-            // editor cannot grow underneath a horizontal scroll area.
-            width: max(0px, edit-scroll.visible-width - 2 * Theme.space-l);
+            // Padding is part of the layout's width, so the editor remains flush with the
+            // viewport and the inset is applied exactly once.
+            width: edit-scroll.visible-width;
             alignment: start;
             padding: Theme.space-l;
             spacing: Theme.space-s;

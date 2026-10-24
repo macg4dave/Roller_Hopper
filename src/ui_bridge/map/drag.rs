@@ -2,7 +2,7 @@
 //! the line it would join, and on dropping is plugged in there, or unplugged away from every
 //! line. A drag taken off the map again is cancelled.
 
-use crate::model::{CardId, Point, Snap, snap_target};
+use crate::model::{CardId, Point, Snap, SnapKind, snap_target};
 use crate::ui_bridge::AppState;
 
 /// What a network card dragged out of the lists carries, before its id.
@@ -51,15 +51,19 @@ impl AppState {
             return;
         };
         let snap = self.snap(id);
-        self.network.connect(id, snap.map(|s| s.upstream));
+        if let Some(snap) = snap.filter(|snap| snap.kind == SnapKind::Head) {
+            self.network.connect_above(id, snap.upstream);
+        } else {
+            self.network.connect(id, snap.map(|snap| snap.upstream));
+        }
         match snap {
-            Some(snap) => {
+            Some(snap) if snap.kind == SnapKind::Child => {
                 let arrangement = &mut self.arrangement;
                 arrangement.place(&self.network, id, snap.upstream, snap.slot);
                 let others = self.network.behind(snap.upstream).filter(|&d| d != id);
                 self.motion.jiggle(others.chain([snap.upstream]));
             }
-            None => self.arrangement.remove(id),
+            Some(_) | None => self.arrangement.remove(id),
         }
         self.lay_out();
     }
@@ -169,6 +173,91 @@ mod tests {
         assert_eq!(state.strand(), None);
         state.drop_dragged();
         assert!(state.network.uplink(pc).is_none());
+    }
+
+    #[test]
+    fn a_device_dropped_above_its_tree_becomes_the_head() {
+        let mut state = AppState::new(mock_data::network());
+        let (router, switch, pc) = (CardId(1), CardId(2), CardId(5));
+        let above_router = Point {
+            x: state.positions[&router].x,
+            y: state.positions[&router].y - 50.0,
+        };
+        state.drag_to(pc, above_router);
+        assert!(
+            state
+                .strand()
+                .is_some_and(|snap| snap.kind == SnapKind::Head)
+        );
+
+        state.drop_dragged();
+
+        assert!(state.network.uplink(pc).is_none());
+        assert_eq!(
+            state.network.uplink(switch).map(|link| link.upstream),
+            Some(pc)
+        );
+        assert_eq!(
+            state.network.uplink(router).map(|link| link.upstream),
+            Some(switch)
+        );
+        assert!(state.positions[&pc].y < state.positions[&switch].y);
+        assert!(state.positions[&switch].y < state.positions[&router].y);
+    }
+
+    #[test]
+    fn a_separate_device_dropped_above_a_root_connects_on_top() {
+        let mut state = AppState::new(mock_data::network());
+        let (router, lab_root) = (CardId(1), CardId(22));
+        let above_router = Point {
+            x: state.positions[&router].x + 120.0,
+            y: state.positions[&router].y - 80.0,
+        };
+        state.drag_to(lab_root, above_router);
+        assert!(
+            state
+                .strand()
+                .is_some_and(|snap| snap.kind == SnapKind::Head && snap.upstream == router)
+        );
+
+        state.drop_dragged();
+
+        assert!(state.network.uplink(lab_root).is_none());
+        assert_eq!(
+            state.network.uplink(router).map(|link| link.upstream),
+            Some(lab_root)
+        );
+        assert!(state.positions[&lab_root].y < state.positions[&router].y);
+    }
+
+    #[test]
+    fn a_new_top_device_makes_the_lower_device_its_child_instead_of_swapping() {
+        let mut state = AppState::new(mock_data::network());
+        let (router, switch, lab_root) = (CardId(1), CardId(2), CardId(22));
+        let above_switch = Point {
+            x: state.positions[&switch].x,
+            y: state.positions[&switch].y - 70.0,
+        };
+        state.drag_to(lab_root, above_switch);
+        assert!(
+            state
+                .strand()
+                .is_some_and(|snap| { snap.kind == SnapKind::Head && snap.upstream == switch })
+        );
+
+        state.drop_dragged();
+
+        assert_eq!(
+            state.network.uplink(lab_root).map(|link| link.upstream),
+            Some(router)
+        );
+        assert_eq!(
+            state.network.uplink(switch).map(|link| link.upstream),
+            Some(lab_root),
+            "the device below is now the direct child"
+        );
+        assert!(state.positions[&router].y < state.positions[&lab_root].y);
+        assert!(state.positions[&lab_root].y < state.positions[&switch].y);
     }
 
     #[test]

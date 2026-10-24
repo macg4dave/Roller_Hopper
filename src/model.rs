@@ -56,4 +56,4 @@ pub(crate) use network::CardLink;
 pub(crate) use network::{Connection, ConnectionKind, Network};
 pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use services::{ServiceProtocol, ServiceSource, Services};
-pub(crate) use snap::{Snap, snap_target};
+pub(crate) use snap::{Snap, SnapKind, snap_target};

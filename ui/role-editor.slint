@@ -1,4 +1,4 @@
-import { Button, ListView } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { NewRole } from "components/new-role.slint";
@@ -50,11 +50,16 @@ export component RoleEditor inherits VerticalLayout {
             background: Theme.border;
         }
     }
-    ListView {
+    roles-scroll := ScrollView {
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         vertical-stretch: 1;
-        for role[i] in Bridge.role-list: RoleRow {
-            role: role;
-            index: i;
+        VerticalLayout {
+            width: roles-scroll.visible-width;
+            for role[i] in Bridge.role-list: RoleRow {
+                role: role;
+                index: i;
+            }
         }
     }
     if !adding: HorizontalLayout {

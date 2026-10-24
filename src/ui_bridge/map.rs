@@ -18,7 +18,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel, 
 use super::view::sync;
 use super::{AppState, convert, handler, update};
 use crate::model::{
-    CardId, Connection, Level, Point, Positions, Snap, link_route, tree_layout, trunk,
+    CardId, Connection, Level, Point, Positions, Snap, SnapKind, link_route, tree_layout, trunk,
 };
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -112,6 +112,9 @@ impl AppState {
         let (Some(dragged), Some(snap)) = (self.dragging, snap) else {
             return targets;
         };
+        if snap.kind == SnapKind::Head {
+            return targets;
+        }
         let (Level::Tier(index), Some(&pointer)) = (snap.slot.level, self.positions.get(&dragged))
         else {
             return targets;

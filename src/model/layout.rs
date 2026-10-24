@@ -13,8 +13,8 @@ use super::network::{Connection, Network};
 
 const COLUMN_WIDTH: f32 = 150.0;
 pub(super) const ROW_HEIGHT: f32 = 150.0;
-/// Lines stop short of the icon below a line and leave below the labels of the device above.
-pub(super) const LINE_TOP_GAP: f32 = 28.0;
+/// The radius of the map node's 50-unit icon circle: links meet its top edge.
+pub(super) const LINE_TOP_GAP: f32 = 25.0;
 const LINE_BOTTOM_GAP: f32 = 66.0;
 /// A line runs across just above the devices it leads to, well below the root circles of the
 /// tier above, so a line passing under a device never looks as if it hangs from that device.
@@ -312,8 +312,10 @@ mod tests {
 
     #[test]
     fn a_route_runs_across_just_above_a_device_then_down() {
-        let [a, b, c] = route(0.0, Point { x: 300.0, y: 140.0 });
+        let downstream = Point { x: 300.0, y: 140.0 };
+        let [a, b, c] = route(0.0, downstream);
         assert_eq!((a.x, a.y, b.x, c.x), (0.0, b.y, 300.0, 300.0));
-        assert!(b.y < c.y && c.y < 140.0);
+        assert!(b.y < c.y);
+        assert_eq!(c.y, downstream.y - LINE_TOP_GAP, "the node's top edge");
     }
 }

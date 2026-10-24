@@ -95,6 +95,71 @@ impl Network {
         }
     }
 
+    /// Whether `card` can be inserted directly above `below`: both exist on different devices,
+    /// and `below` is not already inside `card`'s branch unless it is an ancestor of `card`.
+    pub(crate) fn can_connect_above(&self, card: CardId, below: CardId) -> bool {
+        let owner = |id| self.card_owner(id).map(|device| device.id);
+        owner(card).is_some()
+            && owner(below).is_some()
+            && owner(card) != owner(below)
+            && (self.is_within(card, below) || !self.is_within(below, card))
+    }
+
+    /// Inserts `card` directly above `below`. A descendant moved above its own tree reverses its
+    /// ancestor chain. Otherwise `card` takes `below`'s old uplink and `below` becomes its child;
+    /// the rest of both branches stays attached.
+    pub(crate) fn connect_above(&mut self, card: CardId, below: CardId) -> bool {
+        if !self.can_connect_above(card, below) {
+            return false;
+        }
+        if self.is_within(card, below) {
+            return self.reroot(card);
+        }
+
+        let old_uplink = self.uplink(below);
+        self.links
+            .retain(|link| link.card != card && link.card != below);
+        if let Some(old) = old_uplink {
+            self.links.push(CardLink {
+                upstream: old.upstream,
+                card,
+                kind: old.kind,
+            });
+        }
+        self.links.push(CardLink {
+            upstream: card,
+            card: below,
+            kind: ConnectionKind::Known,
+        });
+        true
+    }
+
+    /// Makes `card` the head of its tree by reversing every link from it to the current head.
+    fn reroot(&mut self, card: CardId) -> bool {
+        let mut path = Vec::new();
+        let mut at = card;
+        for _ in 0..self.nodes().len() {
+            let Some(link) = self.link(at) else {
+                break;
+            };
+            path.push((link.card, link.upstream, link.kind));
+            at = link.upstream;
+        }
+        if path.is_empty() {
+            return false;
+        }
+
+        self.links
+            .retain(|link| !path.iter().any(|(child, _, _)| *child == link.card));
+        self.links
+            .extend(path.into_iter().map(|(child, parent, kind)| CardLink {
+                upstream: child,
+                card: parent,
+                kind,
+            }));
+        true
+    }
+
     /// Plugs `card` into `target`, or unplugs it on `None`, as a known link. Refused (false)
     /// where [`Self::can_plug`] does not allow it.
     pub(crate) fn plug_card(&mut self, card: CardId, target: Option<CardId>) -> bool {
@@ -206,6 +271,67 @@ mod tests {
         network.connect(SWITCH, None);
         assert!(network.uplink(SWITCH).is_none());
         assert!(network.is_within(PC, SWITCH));
+    }
+
+    #[test]
+    fn a_descendant_can_become_the_head_by_reversing_its_ancestor_chain() {
+        let mut network = mock_data::network();
+        assert_eq!(network.uplink(PC).map(|link| link.upstream), Some(SWITCH));
+        assert_eq!(
+            network.uplink(SWITCH).map(|link| link.upstream),
+            Some(ROUTER_LAN)
+        );
+
+        assert!(network.connect_above(PC, ROUTER_LAN));
+
+        assert!(network.uplink(PC).is_none());
+        assert_eq!(network.uplink(SWITCH).map(|link| link.upstream), Some(PC));
+        assert_eq!(
+            network.uplink(ROUTER_LAN).map(|link| link.upstream),
+            Some(SWITCH)
+        );
+        assert_eq!(
+            network.uplink(NAS).map(|link| link.upstream),
+            Some(ROUTER_LAN),
+            "the old head keeps its other children"
+        );
+        assert!(!network.connect_above(PC, PC), "already the head");
+    }
+
+    #[test]
+    fn a_separate_tree_can_be_attached_below_another_card() {
+        let mut network = mock_data::network();
+        assert!(network.connect_above(LAB_ROUTER, ROUTER_LAN));
+        assert!(network.uplink(LAB_ROUTER).is_none());
+        assert_eq!(
+            network.uplink(ROUTER_LAN).map(|link| link.upstream),
+            Some(LAB_ROUTER)
+        );
+        assert_eq!(
+            network.uplink(SWITCH).map(|link| link.upstream),
+            Some(ROUTER_LAN),
+            "the attached tree stays intact"
+        );
+    }
+
+    #[test]
+    fn a_separate_device_inserted_above_a_child_takes_its_old_uplink() {
+        let mut network = mock_data::network();
+        assert!(network.connect_above(LAB_ROUTER, SWITCH));
+        assert_eq!(
+            network.uplink(LAB_ROUTER).map(|link| link.upstream),
+            Some(ROUTER_LAN),
+            "the incoming device takes the lower device's parent"
+        );
+        assert_eq!(
+            network.uplink(SWITCH).map(|link| link.upstream),
+            Some(LAB_ROUTER),
+            "the lower device becomes its child"
+        );
+        assert!(
+            network.is_within(PC, SWITCH),
+            "the lower branch stays intact"
+        );
     }
 
     #[test]

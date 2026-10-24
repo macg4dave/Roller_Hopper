@@ -14,20 +14,31 @@ const SNAP_DISTANCE: f32 = 48.0;
 /// The same reach to either side, larger as columns are far apart: a device brought up beside
 /// a trunk joins it well before it covers it.
 const SNAP_REACH_SIDEWAYS: f32 = 110.0;
+/// A top connection is an intentional, open drop target, so it reaches farther than the denser
+/// lines within a tree.
+const HEAD_SNAP_DISTANCE: f32 = 96.0;
+const HEAD_REACH_SIDEWAYS: f32 = 180.0;
 
 /// Where a dragged device would join the map if dropped now.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Snap {
-    /// The card whose trunk it would hang from, which it would be plugged into.
+    /// The card whose trunk it would hang from, or the ancestor it would become head above.
     pub(crate) upstream: CardId,
+    pub(crate) kind: SnapKind,
     /// Where on that trunk.
     pub(crate) slot: Slot,
-    /// A short line showing the join: from the nearest point of the trunk or line it would join
-    /// to the top of its icon.
+    /// A short line from the existing tree's join point to the dragged icon's nearest edge.
     pub(crate) line: [Point; 2],
     /// How far that line is stretched towards the edge of the reach, from 0 (no gap) to 1 (about
     /// to let go).
     pub(crate) pull: f32,
+}
+
+/// Which side of the existing tree a dragged card will join.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SnapKind {
+    Child,
+    Head,
 }
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: on the trunk, root circle
@@ -40,6 +51,9 @@ pub(crate) fn snap_target(
     dragged: CardId,
     at: Point,
 ) -> Option<Snap> {
+    if let Some(snap) = head_target(network, positions, dragged, at) {
+        return Some(snap);
+    }
     // The map without the dragged branch, whose lines and trunks move with it.
     let others: Positions = positions
         .iter()
@@ -71,10 +85,49 @@ pub(crate) fn snap_target(
             let trunk_x = others.get(&upstream).map_or(at.x, |p| p.x);
             Snap {
                 upstream,
+                kind: SnapKind::Child,
                 slot: slot(&tiers, &others, trunk_x, at),
                 line: [joins, end],
                 pull: distance(end, joins) / SNAP_DISTANCE,
             }
+        })
+}
+
+/// A card held above another device is inserted directly above it.
+fn head_target(
+    network: &Network,
+    positions: &Positions,
+    dragged: CardId,
+    at: Point,
+) -> Option<Snap> {
+    let end = Point {
+        x: at.x,
+        y: at.y + LINE_TOP_GAP,
+    };
+    network
+        .nodes()
+        .into_iter()
+        .filter(|&candidate| network.can_connect_above(dragged, candidate))
+        .filter_map(|candidate| {
+            let ancestor = *positions.get(&candidate)?;
+            let joins = Point {
+                x: ancestor.x,
+                y: ancestor.y - LINE_TOP_GAP,
+            };
+            (end.y <= joins.y && head_distance(end, joins) <= HEAD_SNAP_DISTANCE)
+                .then_some((candidate, joins))
+        })
+        .min_by(|a, b| head_distance(end, a.1).total_cmp(&head_distance(end, b.1)))
+        .map(|(upstream, joins)| Snap {
+            upstream,
+            kind: SnapKind::Head,
+            slot: Slot {
+                level: Level::NewTier(0),
+                side: Side::Right,
+                before: None,
+            },
+            line: [joins, end],
+            pull: head_distance(end, joins) / HEAD_SNAP_DISTANCE,
         })
 }
 
@@ -151,7 +204,15 @@ fn nearest(point: Point, start: Point, end: Point) -> Point {
 /// (see [`SNAP_REACH_SIDEWAYS`]). The nearest point on a horizontal or vertical segment is the
 /// same under this measure as under the usual one.
 fn distance(a: Point, b: Point) -> f32 {
-    ((a.x - b.x) * SNAP_DISTANCE / SNAP_REACH_SIDEWAYS).hypot(a.y - b.y)
+    scaled_distance(a, b, SNAP_DISTANCE, SNAP_REACH_SIDEWAYS)
+}
+
+fn head_distance(a: Point, b: Point) -> f32 {
+    scaled_distance(a, b, HEAD_SNAP_DISTANCE, HEAD_REACH_SIDEWAYS)
+}
+
+fn scaled_distance(a: Point, b: Point, vertical: f32, sideways: f32) -> f32 {
+    ((a.x - b.x) * vertical / sideways).hypot(a.y - b.y)
 }
 
 #[cfg(test)]
@@ -190,6 +251,7 @@ mod tests {
             before: Some(ACCESS_POINT),
         };
         assert_eq!(snap.slot, expected);
+        assert_eq!(snap.kind, SnapKind::Child);
         // It joins the line straight above it, not back at the router.
         let [joins, end] = snap.line;
         assert_eq!((joins.x, end.x), (between.x, between.x));
@@ -253,6 +315,54 @@ mod tests {
                 "{device:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_descendant_held_above_an_ancestor_previews_becoming_the_head() {
+        let (network, arrangement, positions) = map();
+        let router = positions[&ROUTER];
+        let above = Point {
+            x: router.x,
+            y: router.y - 2.0 * LINE_TOP_GAP,
+        };
+        let snap = snap_target(&network, &arrangement, &positions, PC, above).unwrap();
+        assert_eq!(snap.upstream, ROUTER);
+        assert_eq!(snap.kind, SnapKind::Head);
+    }
+
+    #[test]
+    fn a_separate_device_can_reach_the_open_top_of_a_root_from_farther_away() {
+        let (network, arrangement, positions) = map();
+        let lab_root = CardId(22);
+        let router = positions[&ROUTER];
+        let above_and_to_the_side = Point {
+            x: router.x + 140.0,
+            y: router.y - 90.0,
+        };
+        let snap = snap_target(
+            &network,
+            &arrangement,
+            &positions,
+            lab_root,
+            above_and_to_the_side,
+        )
+        .unwrap();
+        assert_eq!((snap.upstream, snap.kind), (ROUTER, SnapKind::Head));
+        assert_eq!(snap.line[0].y, router.y - LINE_TOP_GAP);
+        assert_eq!(snap.line[1].y, above_and_to_the_side.y + LINE_TOP_GAP);
+    }
+
+    #[test]
+    fn a_separate_device_can_preview_insertion_above_a_non_root() {
+        let (network, arrangement, positions) = map();
+        let lab_root = CardId(22);
+        let switch = positions[&SWITCH];
+        let above = Point {
+            x: switch.x,
+            y: switch.y - 70.0,
+        };
+        let snap = snap_target(&network, &arrangement, &positions, lab_root, above).unwrap();
+        assert_eq!((snap.upstream, snap.kind), (SWITCH, SnapKind::Head));
     }
 
     #[test]
