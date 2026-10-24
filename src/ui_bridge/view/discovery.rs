@@ -217,7 +217,7 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         mdns_services: convert::mdns_services(device),
         ssdp_services: convert::ssdp_services(device),
         ssdp_server: device.ssdp_server.as_deref().unwrap_or_default().into(),
-        ssdp_responses: convert::ssdp_responses(device),
+        probe_log: convert::probe_log(device),
         unidentified: found.unidentified(),
         finding: finding(found.finding),
         duplicate_of: text(duplicate_of),

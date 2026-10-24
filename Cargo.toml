@@ -29,6 +29,8 @@ sha2 = { version = "0.11.1", default-features = false }
 # Skia draws the scaled map (text, lines, icons) more cleanly than the default FemtoVG renderer.
 # The window handle parents the file dialogs to the window.
 slint = { version = "1.18.1", features = ["renderer-skia", "raw-window-handle-06"] }
+# Sends the SSDP search out of the chosen adapter (IP_MULTICAST_IF), which std cannot set.
+socket2 = { version = "0.6.5", default-features = false }
 tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"] }
 # The runtime a scan runs on, off the UI thread; netscli-core is async on Tokio.
 tokio = { version = "1.54.0", default-features = false, features = ["rt-multi-thread"] }

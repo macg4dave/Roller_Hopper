@@ -3,15 +3,15 @@
 //! literal host is that reply's IPv4 address.
 
 use std::collections::HashSet;
-use std::io::{ErrorKind, Read};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
-use std::time::{Duration, Instant};
+use std::io::Read;
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
+use std::time::Duration;
 
-const GROUP: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 250)), 1900);
-const LISTEN: Duration = Duration::from_secs(3);
-const RECEIVE_SLICE: Duration = Duration::from_millis(200);
+use super::multicast;
+
+pub(super) const PORT: u16 = 1900;
+const GROUP: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(239, 255, 255, 250), PORT);
 const HTTP_TIMEOUT: Duration = Duration::from_millis(750);
-const MAX_REPLIES: usize = 128;
 const MAX_DESCRIPTIONS: usize = 16;
 const MAX_XML_BYTES: u64 = 256 * 1024;
 
@@ -49,38 +49,13 @@ pub(super) async fn browse(adapter: Option<Ipv4Addr>) -> Vec<(Ipv4Addr, Evidence
 
 fn browse_blocking(adapter: Option<Ipv4Addr>) -> Vec<(Ipv4Addr, Evidence)> {
     let local = adapter.unwrap_or(Ipv4Addr::UNSPECIFIED);
-    let Ok(socket) = UdpSocket::bind((local, 0)) else {
-        return Vec::new();
-    };
-    if socket.set_read_timeout(Some(RECEIVE_SLICE)).is_err()
-        || socket.set_multicast_ttl_v4(4).is_err()
-        || socket.send_to(SEARCH, GROUP).is_err()
-    {
-        return Vec::new();
-    }
-    let replies = receive(&socket);
-    combine(replies)
-}
-
-fn receive(socket: &UdpSocket) -> Vec<Reply> {
-    let started = Instant::now();
-    let mut replies = Vec::new();
-    let mut packet = [0_u8; 16 * 1024];
-    while started.elapsed() < LISTEN && replies.len() < MAX_REPLIES {
-        match socket.recv_from(&mut packet) {
-            Ok((size, source)) => {
-                let IpAddr::V4(ip) = source.ip() else {
-                    continue;
-                };
-                if let Some(reply) = packet.get(..size).and_then(|data| parse_reply(ip, data)) {
-                    replies.push(reply);
-                }
-            }
-            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
-            Err(_) => break,
-        }
-    }
-    replies
+    let replies = multicast::ask(local, GROUP, &[SEARCH]);
+    combine(
+        replies
+            .iter()
+            .filter_map(|(ip, packet)| parse_reply(*ip, packet))
+            .collect(),
+    )
 }
 
 fn parse_reply(ip: Ipv4Addr, packet: &[u8]) -> Option<Reply> {

@@ -119,9 +119,15 @@ pub(super) fn ssdp_services(device: &Device) -> SharedString {
     device.ssdp_services.join(", ").into()
 }
 
-/// Complete SSDP reply packets, separated for a readable debug view.
-pub(super) fn ssdp_responses(device: &Device) -> SharedString {
-    device.ssdp_responses.join("\n\n").into()
+/// Every protocol reply for the debug view, each under a heading naming the protocol and the
+/// device's port that answered. Protocol names and ports read the same in every language.
+pub(super) fn probe_log(device: &Device) -> SharedString {
+    let records = device.probe_log.iter().map(|record| {
+        let protocol = record.protocol;
+        let (name, transport) = (protocol.name(), protocol.transport());
+        format!("━━ {name} · {transport} {} ━━\n{}", record.port, record.text)
+    });
+    records.collect::<Vec<_>>().join("\n\n").into()
 }
 
 /// The MAC address as shown; empty when there is none.
@@ -296,7 +302,7 @@ pub(super) fn details(
         mdns_services: mdns_services(device),
         ssdp_services: ssdp_services(device),
         ssdp_server: text(device.ssdp_server.as_deref()),
-        ssdp_responses: ssdp_responses(device),
+        probe_log: probe_log(device),
         last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
     }
 }

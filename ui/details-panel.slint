@@ -121,9 +121,9 @@ export component DetailsPanel inherits Rectangle {
                 if Bridge.details.ssdp-services != "": DetailField { label: @tr("details.upnp-services"); value: Bridge.details.ssdp-services; }
                 if Bridge.details.ssdp-server != "": DetailField { label: @tr("details.ssdp-server"); value: Bridge.details.ssdp-server; }
                 DebugTextBox {
-                    label: @tr("details.ssdp-responses");
-                    text: Bridge.details.ssdp-responses;
-                    empty-text: @tr("details.ssdp-responses-empty");
+                    label: @tr("details.probe-log");
+                    text: Bridge.details.probe-log;
+                    empty-text: @tr("details.probe-log-empty");
                 }
                 DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
                 if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }

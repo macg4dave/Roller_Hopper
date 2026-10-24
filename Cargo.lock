@@ -3880,6 +3880,7 @@ dependencies = [
  "sha2 0.11.1",
  "slint",
  "slint-build",
+ "socket2",
  "tokenizers",
  "tokio",
  "ureq",

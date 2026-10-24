@@ -76,6 +76,7 @@ wherever they aren't needed. `Cargo.lock` fixes the full tree.
 | [netscli-core](https://crates.io/crates/netscli-core) | 0.3.4 | The scanner: ping sweep, neighbour table, mDNS names, TCP connect probes. Only the `mdns` feature; never `pcap` (needs a capture driver) or `db`. |
 | [roxmltree](https://crates.io/crates/roxmltree) | 0.21.1 | Parses bounded, untrusted UPnP device-description XML after SSDP discovery; no XML writing or DTD processing is needed. |
 | [ipconfig](https://crates.io/crates/ipconfig) | 0.3.4 | Windows only: enumerates adapters with their gateways and subnets, so discovery defaults to the LAN adapter carrying a router rather than a VPN or virtual adapter, and fills in its real subnet (netscli-core reports each Windows address as a /32). |
+| [socket2](https://crates.io/crates/socket2) | 0.6.5 | Sends the SSDP search out of the chosen adapter (`IP_MULTICAST_IF`), which std's `UdpSocket` cannot set; otherwise Windows sends it through the cheapest multicast route, often a VPN tunnel. Already in the tree through tokio. |
 | [tokio](https://crates.io/crates/tokio) | 1.54.0 | The runtime a scan runs on, off the UI thread. |
 | [candle-core, candle-nn, candle-transformers](https://github.com/huggingface/candle) | 0.11.0 | Runs the AI model with CUDA (the `cuda` feature), only on the GPU. |
 | [tokenizers](https://crates.io/crates/tokenizers) | 0.22.2 | Turns prompt text into the model's tokens. |

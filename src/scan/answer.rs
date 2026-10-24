@@ -196,7 +196,7 @@ fn device(hostname: Option<String>, name: String, card: NetworkCard) -> Device {
         mdns_services: Vec::new(),
         ssdp_services: Vec::new(),
         ssdp_server: None,
-        ssdp_responses: Vec::new(),
+        probe_log: Vec::new(),
         last_seen: LastSeen::default(),
         notes: String::new(),
     }

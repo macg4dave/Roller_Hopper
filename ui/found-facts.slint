@@ -34,9 +34,9 @@ export component FoundFacts inherits VerticalLayout {
     if found.ssdp-services != "": DetailField { label: @tr("details.upnp-services"); value: found.ssdp-services; }
     if found.ssdp-server != "": DetailField { label: @tr("details.ssdp-server"); value: found.ssdp-server; }
     DebugTextBox {
-        label: @tr("details.ssdp-responses");
-        text: found.ssdp-responses;
-        empty-text: @tr("details.ssdp-responses-empty");
+        label: @tr("details.probe-log");
+        text: found.probe-log;
+        empty-text: @tr("details.probe-log-empty");
     }
     DetailField {
         label: @tr("discovery.found-by");

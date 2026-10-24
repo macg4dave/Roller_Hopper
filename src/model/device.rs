@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::card::NetworkCard;
 use super::os::OsHint;
+use super::probe_log::ProbeRecord;
 
 /// Stable identifier of a device; not an index into any list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -188,9 +189,10 @@ pub(crate) struct Device {
     /// The responder's SSDP `SERVER` field, when it declared one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) ssdp_server: Option<String>,
-    /// Raw SSDP packets for the current session's debug view; never saved to a project.
+    /// What each protocol the last scan asked replied, for the current session's debug view;
+    /// never saved to a project.
     #[serde(skip)]
-    pub(crate) ssdp_responses: Vec<String>,
+    pub(crate) probe_log: Vec<ProbeRecord>,
     pub(crate) last_seen: LastSeen,
     pub(crate) notes: String,
 }
@@ -241,7 +243,7 @@ mod tests {
             mdns_services: Vec::new(),
             ssdp_services: Vec::new(),
             ssdp_server: None,
-            ssdp_responses: Vec::new(),
+            probe_log: Vec::new(),
             last_seen: LastSeen::default(),
             notes: String::new(),
         }
@@ -260,11 +262,15 @@ mod tests {
     }
 
     #[test]
-    fn ssdp_debug_packets_are_not_saved() {
+    fn the_debug_probe_log_is_not_saved() {
         let mut device = device();
-        device.ssdp_responses = vec!["HTTP/1.1 200 OK".into()];
+        device.probe_log = vec![ProbeRecord {
+            protocol: super::super::ProbeProtocol::Ssdp,
+            port: 1900,
+            text: "HTTP/1.1 200 OK".into(),
+        }];
         let saved = serde_json::to_value(device).unwrap();
-        assert_eq!(saved.get("ssdp_responses"), None);
+        assert_eq!(saved.get("probe_log"), None);
     }
 
     const KINDS: [DeviceKind; 17] = [

@@ -637,11 +637,11 @@ msgstr "UPnP capabilities"
 msgid "details.ssdp-server"
 msgstr "SSDP server"
 
-msgid "details.ssdp-responses"
-msgstr "SSDP responses (debug)"
+msgid "details.probe-log"
+msgstr "Protocol replies (debug)"
 
-msgid "details.ssdp-responses-empty"
-msgstr "No SSDP responses were captured for this device."
+msgid "details.probe-log-empty"
+msgstr "No protocol replies were captured for this device."
 
 # Who made a network card, from its MAC address; not necessarily the device's maker.
 msgid "details.card-vendor"

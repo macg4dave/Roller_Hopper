@@ -158,7 +158,8 @@ export struct DeviceDetails {
     mdns-services: string,
     ssdp-services: string,
     ssdp-server: string,
-    ssdp-responses: string,
+    // As in FoundView.
+    probe-log: string,
     last-seen-minutes: int,
 }
 
@@ -314,7 +315,8 @@ export struct FoundView {
     // Device/service types and implementation string declared through SSDP/UPnP.
     ssdp-services: string,
     ssdp-server: string,
-    ssdp-responses: string,
+    // Every protocol reply the scan captured, each under a protocol and port heading (debug).
+    probe-log: string,
     unidentified: bool,
     finding: FoundFinding,
     // For a duplicate: the name of the device on the map with the same MAC address.
