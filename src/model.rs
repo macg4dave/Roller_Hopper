@@ -50,7 +50,9 @@ pub(crate) use discovery::{
     LogEvent, Method, Parent, Phase, ScanMode, ScanOptions, ScanProgress, TargetError,
 };
 pub(crate) use groups::{GroupColour, GroupId, GroupName, LineStyle, StandardGroup};
-pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunk};
+#[cfg(test)]
+pub(crate) use layout::trunk;
+pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunks};
 pub(crate) use network::{Connection, ConnectionKind, Network};
 pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use services::{ServiceProtocol, ServiceSource, Services};

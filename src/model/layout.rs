@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use super::arrangement::{Arrangement, Side};
 use super::card::CardId;
-use super::network::{Connection, Network};
+use super::network::Network;
 
 const COLUMN_WIDTH: f32 = 150.0;
 pub(super) const ROW_HEIGHT: f32 = 150.0;
@@ -89,36 +89,64 @@ pub(crate) fn link_route(
 
 /// The trunk of `id`: from below its labels down to its root circle, which sits below the lowest
 /// node in its branch, so the trunk runs past every tier hanging off it.
+#[cfg(test)]
 pub(crate) fn trunk(network: &Network, positions: &Positions, id: CardId) -> Option<[Point; 2]> {
-    let top = positions.get(&id)?;
-    let start = Point {
-        x: top.x,
-        y: top.y + LINE_BOTTOM_GAP,
-    };
-    let root = Point {
-        x: top.x,
-        y: lowest(network, positions, id) + LINE_BOTTOM_GAP + ROOT_GAP,
-    };
-    Some([start, root])
+    trunks(network, positions).remove(&id)
 }
 
-/// How far down the branch of `id` reaches: the lowest of its nodes.
-fn lowest(network: &Network, positions: &Positions, id: CardId) -> f32 {
-    // Worked out once here rather than at every node of the branch: this runs every frame.
-    let lines = network.connections();
-    reach(&lines, positions, id, network.nodes().len())
+/// Every visible trunk, sharing one bottom-up branch walk. Calling [`trunk`] independently for
+/// every node repeats the same descendant searches and becomes cubic on a large map.
+pub(crate) fn trunks(network: &Network, positions: &Positions) -> HashMap<CardId, [Point; 2]> {
+    let mut children: HashMap<CardId, Vec<CardId>> = HashMap::new();
+    for connection in network.connections() {
+        children
+            .entry(connection.upstream)
+            .or_default()
+            .push(connection.downstream);
+    }
+    let mut bottoms = HashMap::new();
+    for &id in positions.keys() {
+        branch_bottom(id, positions, &children, &mut bottoms, positions.len());
+    }
+    positions
+        .iter()
+        .filter_map(|(&id, &top)| {
+            let bottom = *bottoms.get(&id)?;
+            let start = Point {
+                x: top.x,
+                y: top.y + LINE_BOTTOM_GAP,
+            };
+            let root = Point {
+                x: top.x,
+                y: bottom + LINE_BOTTOM_GAP + ROOT_GAP,
+            };
+            Some((id, [start, root]))
+        })
+        .collect()
 }
 
-/// [`lowest`] along the tree's `lines`, going no more than `depth` nodes deeper, which guards
-/// against cycles in the connection data: no real tree is deeper than its size.
-fn reach(lines: &[Connection], positions: &Positions, id: CardId, depth: usize) -> f32 {
-    let Some(top) = positions.get(&id) else {
+fn branch_bottom(
+    id: CardId,
+    positions: &Positions,
+    children: &HashMap<CardId, Vec<CardId>>,
+    bottoms: &mut HashMap<CardId, f32>,
+    remaining: usize,
+) -> f32 {
+    if let Some(&bottom) = bottoms.get(&id) {
+        return bottom;
+    }
+    let Some(at) = positions.get(&id) else {
         return f32::MIN;
     };
-    let behind = lines.iter().filter(|c| c.upstream == id && depth > 0);
-    behind
-        .map(|c| reach(lines, positions, c.downstream, depth - 1))
-        .fold(top.y, f32::max)
+    if remaining == 0 {
+        return at.y;
+    }
+    let descendants = children.get(&id).into_iter().flatten().copied();
+    let bottom = descendants
+        .map(|child| branch_bottom(child, positions, children, bottoms, remaining - 1))
+        .fold(at.y, f32::max);
+    bottoms.insert(id, bottom);
+    bottom
 }
 
 /// How far a device's branch reaches to each side of its trunk, in columns, and how many rows it

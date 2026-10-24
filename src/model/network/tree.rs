@@ -45,27 +45,23 @@ impl Network {
 
     /// The line leading from `card` to the card it is plugged into, if any.
     pub(crate) fn uplink(&self, card: CardId) -> Option<Connection> {
-        let link = self.link(card)?;
-        self.card_owner(link.upstream).map(|_| link.into())
+        self.link(card).map(Connection::from)
     }
 
     /// The lines of the map's tree, in the order the links were found or made, so a new link
     /// comes last.
     pub(crate) fn connections(&self) -> Vec<Connection> {
-        let exists = |card| self.card_owner(card).is_some();
-        let links = self
-            .links
-            .iter()
-            .filter(|l| exists(l.card) && exists(l.upstream));
-        links.map(Connection::from).collect()
+        // A Network reaches normal use only after `checked`, and every mutation removes links
+        // with their cards. Revalidating both ends here made each topology walk quadratic.
+        self.links.iter().map(Connection::from).collect()
     }
 
     /// The cards plugged straight into `card`, in the order of [`Self::connections`].
     pub(crate) fn behind(&self, card: CardId) -> impl Iterator<Item = CardId> {
-        let lines = self.connections().into_iter();
-        lines
-            .filter(move |c| c.upstream == card)
-            .map(|c| c.downstream)
+        self.links
+            .iter()
+            .filter(move |link| link.upstream == card)
+            .map(|link| link.card)
     }
 
     /// Whether `card` is `branch` itself or hangs somewhere behind it. A chain of links longer

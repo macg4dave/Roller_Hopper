@@ -18,7 +18,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel, 
 use super::view::sync;
 use super::{AppState, convert, handler};
 use crate::model::{
-    CardId, Connection, Level, Point, Positions, Snap, SnapKind, link_route, tree_layout, trunk,
+    CardId, Connection, Level, Point, Positions, Snap, SnapKind, link_route, tree_layout, trunks,
 };
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -64,8 +64,11 @@ impl AppState {
             .filter(|&(&id, _)| !dragged(id))
             .map(|(&id, &p)| (id, p))
             .collect();
-        let ids = self.network.nodes().into_iter();
-        ids.filter_map(|id| Some((id, trunk(&self.network, &still, id)?)))
+        let visible = trunks(&self.network, &still);
+        self.network
+            .nodes()
+            .into_iter()
+            .filter_map(|id| Some((id, *visible.get(&id)?)))
             .collect()
     }
 
@@ -98,7 +101,7 @@ impl AppState {
     }
 
     /// Moves the map one frame on; true once everything has settled.
-    fn step_motion(&mut self, elapsed: Duration) -> bool {
+    fn step_motion_preview(&mut self, elapsed: Duration) -> (bool, Option<Snap>) {
         let strand = self.strand();
         let targets = self.making_room(strand.as_ref());
         let mut remaining = elapsed.min(MAX_CATCH_UP).as_secs_f32();
@@ -109,7 +112,12 @@ impl AppState {
             self.motion.step_strand(strand.as_ref(), dt);
             remaining -= dt;
         }
-        self.motion.settled(&targets)
+        (self.motion.settled(&targets), strand)
+    }
+
+    #[cfg(test)]
+    fn step_motion(&mut self, elapsed: Duration) -> bool {
+        self.step_motion_preview(elapsed).0
     }
 
     /// Where the motion takes each device: its spot in the layout, except that while a dragged
@@ -215,7 +223,11 @@ fn animate(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, timer: &Rc<Timer
         let elapsed = now.saturating_duration_since(previous);
         previous = now;
         let mut settled = true;
-        update_map(&ui, &state, |st| settled = st.step_motion(elapsed));
+        update_map(&ui, &state, |st| {
+            let (at_rest, strand) = st.step_motion_preview(elapsed);
+            settled = at_rest;
+            strand
+        });
         if let Some(running) = this.upgrade().filter(|_| settled) {
             running.stop();
         }
@@ -224,14 +236,24 @@ fn animate(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, timer: &Rc<Timer
 
 /// Applies one animation step and refreshes only the map. Lists, editors, discovery results and
 /// project state cannot change during a frame and are deliberately left alone.
-fn update_map(ui: &Weak<AppWindow>, state: &RefCell<AppState>, change: impl FnOnce(&mut AppState)) {
+fn update_map(
+    ui: &Weak<AppWindow>,
+    state: &RefCell<AppState>,
+    change: impl FnOnce(&mut AppState) -> Option<Snap>,
+) {
     let Some(ui) = ui.upgrade() else { return };
-    change(&mut state.borrow_mut());
-    push(&ui.global::<Bridge<'_>>(), &state.borrow());
+    let strand = change(&mut state.borrow_mut());
+    push_preview(&ui.global::<Bridge<'_>>(), &state.borrow(), strand.as_ref());
 }
 
 /// Where each card is drawn right now, the lines between them, and the area they take up.
 pub(super) fn push(bridge: &Bridge<'_>, state: &AppState) {
+    let strand = state.strand();
+    push_preview(bridge, state, strand.as_ref());
+}
+
+/// Pushes a frame whose snap preview was already calculated while advancing its motion.
+fn push_preview(bridge: &Bridge<'_>, state: &AppState, strand: Option<&Snap>) {
     let on_map = state.motion.shown();
     let trunks = state.trunks();
     let places = state.network.nodes().into_iter().map(|node| {
@@ -255,10 +277,7 @@ pub(super) fn push(bridge: &Bridge<'_>, state: &AppState) {
         .dragging
         .map_or_else(|| state.selected_cards(), |card| vec![card]);
     let lines = lines::lines(&state.network, &state.links(), &trunks, &lit, &state.ties());
-    bridge.set_strand(convert::strand(
-        state.strand().as_ref(),
-        state.motion.bend(),
-    ));
+    bridge.set_strand(convert::strand(strand, state.motion.bend()));
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }

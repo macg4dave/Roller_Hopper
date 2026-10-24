@@ -1,11 +1,12 @@
 //! Where a dragged network card would join the map: the nearest trunk, root circle or line, and the
 //! place on that trunk it was dropped at.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::arrangement::{Arrangement, Level, Side, Slot, Tier};
 use super::card::CardId;
-use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, link_route, trunk};
+use super::device::DeviceId;
+use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, link_route, trunks};
 use super::network::Network;
 
 /// How near a line a dragged device's own line must end for it to join that line.
@@ -54,11 +55,12 @@ pub(crate) fn snap_target(
     dragged: CardId,
     at: Point,
 ) -> Option<Snap> {
-    let head = head_target(network, positions, dragged, at);
+    let topology = Topology::new(network, dragged);
+    let head = head_target(positions, dragged, at, &topology);
     // The map without the dragged branch, whose lines and trunks move with it.
     let others: Positions = positions
         .iter()
-        .filter(|&(&id, _)| !network.is_within(id, dragged))
+        .filter(|&(&id, _)| !topology.dragged_branch.contains(&id))
         .map(|(&id, &p)| (id, p))
         .collect();
     // Where the dragged card's own line would end.
@@ -67,16 +69,18 @@ pub(crate) fn snap_target(
         y: at.y - LINE_TOP_GAP,
     };
     let inner = arrangement.inner_neighbours(network, Some(dragged));
+    let trunks = trunks(network, &others);
     let current = network.uplink(dragged).map(|link| link.upstream);
     let candidates = others
         .keys()
         .copied()
-        .filter(|&id| network.can_plug(dragged, id));
+        .filter(|&id| topology.can_join(dragged, id));
     let near = candidates.filter_map(|id| {
         let lines = Lines {
-            network,
             positions: &others,
             inner: &inner,
+            trunks: &trunks,
+            children: &topology.children,
         };
         let joins = lines.nearest_on(id, end)?;
         let retained = current == Some(id);
@@ -120,19 +124,19 @@ fn closest(a: Option<Snap>, b: Option<Snap>) -> Option<Snap> {
 
 /// A card held above another device is inserted directly above it.
 fn head_target(
-    network: &Network,
     positions: &Positions,
     dragged: CardId,
     at: Point,
+    topology: &Topology,
 ) -> Option<Snap> {
     let end = Point {
         x: at.x,
         y: at.y + LINE_TOP_GAP,
     };
-    network
-        .nodes()
-        .into_iter()
-        .filter(|&candidate| network.can_connect_above(dragged, candidate))
+    positions
+        .keys()
+        .copied()
+        .filter(|&candidate| topology.can_join(dragged, candidate))
         .filter_map(|candidate| {
             let ancestor = *positions.get(&candidate)?;
             let joins = Point {
@@ -156,21 +160,70 @@ fn head_target(
         })
 }
 
+/// Topology facts shared by every candidate considered during one pointer frame.
+struct Topology {
+    owners: HashMap<CardId, DeviceId>,
+    children: HashMap<CardId, Vec<CardId>>,
+    dragged_branch: HashSet<CardId>,
+}
+
+impl Topology {
+    fn new(network: &Network, dragged: CardId) -> Self {
+        let owners = network
+            .devices()
+            .iter()
+            .flat_map(|device| device.cards.iter().map(move |card| (card.id, device.id)))
+            .collect();
+        let mut children: HashMap<CardId, Vec<CardId>> = HashMap::new();
+        for connection in network.connections() {
+            children
+                .entry(connection.upstream)
+                .or_default()
+                .push(connection.downstream);
+        }
+        let mut dragged_branch = HashSet::new();
+        let mut pending = vec![dragged];
+        while let Some(id) = pending.pop() {
+            if dragged_branch.insert(id) {
+                pending.extend(children.get(&id).into_iter().flatten().copied());
+            }
+        }
+        Self {
+            owners,
+            children,
+            dragged_branch,
+        }
+    }
+
+    fn can_join(&self, dragged: CardId, candidate: CardId) -> bool {
+        let different_devices = self
+            .owners
+            .get(&dragged)
+            .zip(self.owners.get(&candidate))
+            .is_some_and(|(dragged, candidate)| dragged != candidate);
+        different_devices && !self.dragged_branch.contains(&candidate)
+    }
+}
+
 /// The trunks and lines of the map without the dragged branch, as drawn.
 struct Lines<'a> {
-    network: &'a Network,
     positions: &'a Positions,
     inner: &'a HashMap<CardId, CardId>,
+    trunks: &'a HashMap<CardId, [Point; 2]>,
+    children: &'a HashMap<CardId, Vec<CardId>>,
 }
 
 impl Lines<'_> {
     /// The point nearest `end` on what belongs to `id`: its trunk down to its root circle, and
     /// its lines to the cards plugged into it.
     fn nearest_on(&self, id: CardId, end: Point) -> Option<Point> {
-        let [top, root] = trunk(self.network, self.positions, id)?;
+        let [top, root] = *self.trunks.get(&id)?;
         let lines = self
-            .network
-            .behind(id)
+            .children
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .copied()
             .filter_map(|other| link_route(self.positions, self.inner, id, other))
             .flat_map(|[a, b, c]| [(a, b), (b, c)]);
         let segments = lines.chain([(top, root)]);
@@ -244,7 +297,7 @@ fn scaled_distance(a: Point, b: Point, vertical: f32, sideways: f32) -> f32 {
 mod tests {
     use super::*;
     use crate::mock_data;
-    use crate::model::tree_layout;
+    use crate::model::{tree_layout, trunk};
 
     // Each sample device's first card has its id; the router's first is its LAN card.
     const ROUTER: CardId = CardId(1);
