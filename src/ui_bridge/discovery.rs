@@ -20,10 +20,29 @@ const POLL: Duration = Duration::from_millis(200);
 impl AppState {
     /// Starts recording a run of the subnet typed, unless it is not one or a run is busy: what
     /// to scan, and how.
-    fn begin_discovery(&mut self) -> Option<(Ipv4Net, ScanOptions)> {
+    fn begin_discovery(&mut self) -> Option<(Ipv4Net, Option<std::net::Ipv4Addr>, ScanOptions)> {
         let target = self.discovery.next_target().ok()?;
+        let adapter = self
+            .primary_adapter
+            .and_then(|index| self.discovery_adapters.get(index))
+            .map(|adapter| adapter.address);
         let options = self.discovery.options;
-        self.discovery.start(target).then_some((target, options))
+        self.discovery
+            .start(target)
+            .then_some((target, adapter, options))
+    }
+
+    /// Makes an adapter primary for later scans and fills its subnet into the editable target.
+    fn select_discovery_adapter(&mut self, index: usize) -> bool {
+        if self.discovery.busy() {
+            return false;
+        }
+        let Some(adapter) = self.discovery_adapters.get(index) else {
+            return false;
+        };
+        self.primary_adapter = Some(index);
+        self.discovery.target_text = adapter.subnet.to_string();
+        true
     }
 
     fn add_found_port(&mut self, host: usize, card: usize, port: &str, description: &str) -> bool {
@@ -134,8 +153,17 @@ fn scan_mode_from_ui(mode: ui::ScanMode) -> ScanMode {
 /// user types, and Rust never rewrites it.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
-    let own = scan::local_subnet()
-        .map(|s| s.to_string())
+    let primary_subnet = {
+        let mut state = state.borrow_mut();
+        state.discovery_adapters = scan::adapters();
+        state.primary_adapter = (!state.discovery_adapters.is_empty()).then_some(0);
+        state
+            .discovery_adapters
+            .first()
+            .map(|adapter| adapter.subnet)
+    };
+    let own = primary_subnet
+        .map(|subnet| subnet.to_string())
         .unwrap_or_default();
     bridge.set_discovery_target_draft(own.as_str().into());
     state.borrow_mut().discovery.target_text = own;
@@ -146,10 +174,10 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_start_discovery(move || {
         let mut started = None;
         update(&start_ui, &start_state, |st| {
-            let Some((target, options)) = st.begin_discovery() else {
+            let Some((target, adapter, options)) = st.begin_discovery() else {
                 return;
             };
-            match Scan::start(target, options) {
+            match Scan::start(target, adapter, options) {
                 Ok(scan) => started = Some(scan),
                 Err(error) => {
                     st.discovery.fail(error.to_string());
@@ -175,6 +203,12 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
 
     bridge.on_set_discovery_target(handler(ui, state, |st, text: SharedString| {
         st.discovery.target_text = text.into();
+    }));
+    bridge.on_select_discovery_adapter(handler(ui, state, |st, index| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        st.select_discovery_adapter(index);
     }));
     bridge.on_set_scan_mode(handler(ui, state, |st, mode| {
         st.discovery.options.mode = scan_mode_from_ui(mode);
@@ -368,7 +402,11 @@ mod tests {
         state.discovery.target_text = "192.168.1.0/8".into();
         assert_eq!(state.begin_discovery(), None, "too wide to scan");
         state.discovery.target_text = "192.168.1.0/24".into();
-        let run = Some((home(), ScanOptions::default()));
+        let adapter = state
+            .primary_adapter
+            .and_then(|index| state.discovery_adapters.get(index))
+            .map(|adapter| adapter.address);
+        let run = Some((home(), adapter, ScanOptions::default()));
         assert_eq!(state.begin_discovery(), run);
         assert_eq!(state.begin_discovery(), None, "a busy run is not restarted");
         let hosts = hosts(&state);
@@ -383,6 +421,29 @@ mod tests {
             "counted once"
         );
         assert_eq!(state.scans, 1);
+    }
+
+    #[test]
+    fn choosing_an_adapter_makes_it_primary_and_fills_its_subnet() {
+        let mut state = AppState::new(mock_data::network());
+        state.discovery_adapters = vec![
+            scan::Adapter {
+                name: "Ethernet".into(),
+                address: "192.168.1.20".parse().unwrap(),
+                subnet: "192.168.1.0/24".parse().unwrap(),
+            },
+            scan::Adapter {
+                name: "Lab".into(),
+                address: "10.0.0.5".parse().unwrap(),
+                subnet: "10.0.0.0/24".parse().unwrap(),
+            },
+        ];
+        state.primary_adapter = Some(0);
+
+        assert!(state.select_discovery_adapter(1));
+        assert_eq!(state.primary_adapter, Some(1));
+        assert_eq!(state.discovery.target_text, "10.0.0.0/24");
+        assert!(!state.select_discovery_adapter(2));
     }
 
     #[test]

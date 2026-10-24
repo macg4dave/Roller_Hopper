@@ -12,6 +12,8 @@ pub(super) struct Evidence<'a> {
     pub(super) ports: &'a [PortResult],
     /// The mDNS service types it announced, short (`ipp`).
     pub(super) mdns_services: &'a [String],
+    /// Device and service types it declared through SSDP/UPnP.
+    pub(super) ssdp_services: &'a [String],
     /// The model it announced over mDNS.
     pub(super) model: Option<&'a str>,
     /// The time-to-live of its ping reply.
@@ -31,6 +33,12 @@ impl Evidence<'_> {
         services
             .iter()
             .any(|s| self.mdns_services.iter().any(|m| m == s))
+    }
+
+    fn upnp_mentions(&self, value: &str) -> bool {
+        self.ssdp_services
+            .iter()
+            .any(|service| service.to_ascii_lowercase().contains(value))
     }
 
     fn model_is(&self, prefixes: &[&str]) -> bool {
@@ -111,7 +119,10 @@ fn kind_rules() -> [(Rule, DeviceKind); 14] {
         ),
         (smart_device, DeviceKind::Smart),
         (|e| e.any_open(&[554, 8554, 37777]), DeviceKind::Camera),
-        (|e| e.open(8291), DeviceKind::Router),
+        (
+            |e| e.open(8291) || e.upnp_mentions("internetgatewaydevice"),
+            DeviceKind::Router,
+        ),
         (
             |e| e.open(445) && (e.any_open(&[2049, 5000, 5001]) || e.announces(&["afpovertcp"])),
             DeviceKind::Nas,
@@ -273,6 +284,7 @@ mod tests {
         Evidence {
             ports,
             mdns_services: services,
+            ssdp_services: &[],
             model: None,
             ttl: None,
         }
@@ -339,6 +351,16 @@ mod tests {
             };
             assert_eq!(super::kind(&evidence), kind, "{model}");
         }
+    }
+
+    #[test]
+    fn an_upnp_gateway_declaration_identifies_a_router() {
+        let services = ["urn:schemas-upnp-org:device:InternetGatewayDevice:1".into()];
+        let evidence = Evidence {
+            ssdp_services: &services,
+            ..evidence(&[], &[])
+        };
+        assert_eq!(super::kind(&evidence), DeviceKind::Router);
     }
 
     #[test]

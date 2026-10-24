@@ -1,0 +1,46 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SelectableText } from "selectable-text.slint";
+
+// A labelled, read-only text box for verbose diagnostic data that remains selectable and
+// copyable without making it look editable.
+export component DebugTextBox inherits VerticalLayout {
+    in property <string> label;
+    in property <string> text;
+    in property <string> empty-text;
+
+    spacing: Theme.space-xs;
+    padding-top: Theme.space-xs;
+    padding-bottom: Theme.space-xs;
+
+    SelectableText {
+        text: root.label;
+        color: Theme.text-muted;
+        accessible-label: root.label;
+    }
+
+    Rectangle {
+        height: 160px;
+        border-width: 1px;
+        border-color: Theme.border;
+        border-radius: Theme.radius;
+        background: Theme.surface;
+
+        response-view := ScrollView {
+            x: Theme.space-s;
+            y: Theme.space-xs;
+            width: parent.width - 2 * Theme.space-s;
+            height: parent.height - 2 * Theme.space-xs;
+
+            TextInput {
+                text: root.text == "" ? root.empty-text : root.text;
+                width: response-view.visible-width;
+                read-only: true;
+                single-line: false;
+                wrap: word-wrap;
+                color: Theme.text;
+                accessible-label: root.label;
+            }
+        }
+    }
+}

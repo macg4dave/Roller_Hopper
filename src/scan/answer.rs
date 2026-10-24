@@ -11,6 +11,7 @@ use netscli_core::{FoundBy, Host, MdnsService, NameSource, PortResult, Protocol}
 use super::identify::{self, Evidence};
 use super::mdns;
 use super::ports::PortRegistry;
+use super::ssdp;
 use crate::model::{
     Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
     ScanOptions, ServiceProtocol, ServiceSource, Services, Status,
@@ -32,6 +33,8 @@ pub(super) struct Probed {
     pub(super) ttl: Option<u8>,
     /// What it announced over mDNS.
     pub(super) mdns: Vec<MdnsService>,
+    /// What it declared through SSDP and its `UPnP` description.
+    pub(super) ssdp: ssdp::Evidence,
 }
 
 /// The answer `probed` gives a scan of `subnet` with `options`: a device with one card, at its
@@ -62,24 +65,24 @@ pub(super) fn answer(
     let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
     let reverse_name = reverse_name.and_then(|name| clean(name, MAX_NAME));
     let mdns_services = mdns::service_names(announced);
+    let empty_ssdp = ssdp::Evidence::default();
+    let ssdp = selected_ssdp(options.mdns_services, &probed.ssdp, &empty_ssdp);
     let mac = host
         .mac
         .as_deref()
         .and_then(|mac| mac.parse::<MacAddr>().ok());
-    let heard = mdns_name.is_some() || !mdns_services.is_empty();
-    let methods = methods(mac.is_some(), host.found_by, heard);
-    let vendor = host.vendor.as_deref().filter(|_| options.card_vendor);
-    let card = NetworkCard {
-        address: Ipv4Net::new(ip, subnet.prefix_len()).ok(),
-        mac,
-        vendor: vendor.and_then(|v| clean(v, MAX_DESCRIPTION)),
-        services: services(&probed.ports, detect, names),
-        ..NetworkCard::blank(CardId(0))
-    };
-    let model = mdns::model(announced).and_then(|m| clean(m, MAX_DESCRIPTION));
+    let heard_mdns = mdns_name.is_some() || !mdns_services.is_empty();
+    let heard_ssdp = !ssdp.services.is_empty() || ssdp.server.is_some();
+    let methods = methods(mac.is_some(), host.found_by, heard_mdns, heard_ssdp);
+    let card = network_card(probed, subnet, options, names, mac);
+    let model = mdns::model(announced)
+        .or(ssdp.model.as_deref())
+        .and_then(|m| clean(m, MAX_DESCRIPTION));
+    let manufacturer = manufacturer(announced, ssdp);
     let evidence = Evidence {
         ports: &probed.ports,
         mdns_services: &mdns_services,
+        ssdp_services: &ssdp.services,
         model: model.as_deref(),
         ttl: probed.ttl,
     };
@@ -93,13 +96,55 @@ pub(super) fn answer(
     let device = Device {
         kind,
         role: kind.default_role(),
-        manufacturer: mdns::maker(announced).and_then(|m| clean(m, MAX_DESCRIPTION)),
+        manufacturer,
         model,
         os,
         mdns_services,
+        ssdp_services: ssdp.services.clone(),
+        ssdp_server: ssdp.server.clone(),
+        ssdp_responses: ssdp.responses.clone(),
         ..device(hostname, suggested_name, card)
     };
     Some(Answer { device, methods })
+}
+
+fn manufacturer(announced: &[MdnsService], ssdp: &ssdp::Evidence) -> Option<String> {
+    mdns::maker(announced)
+        .or(ssdp.manufacturer.as_deref())
+        .and_then(|maker| clean(maker, MAX_DESCRIPTION))
+}
+
+fn selected_ssdp<'a>(
+    enabled: bool,
+    evidence: &'a ssdp::Evidence,
+    empty: &'a ssdp::Evidence,
+) -> &'a ssdp::Evidence {
+    if enabled { evidence } else { empty }
+}
+
+fn network_card(
+    probed: &Probed,
+    subnet: Ipv4Net,
+    options: ScanOptions,
+    names: &PortRegistry,
+    mac: Option<MacAddr>,
+) -> NetworkCard {
+    let vendor = probed
+        .host
+        .vendor
+        .as_deref()
+        .filter(|_| options.card_vendor);
+    let address = match probed.host.ip {
+        IpAddr::V4(ip) => Ipv4Net::new(ip, subnet.prefix_len()).ok(),
+        IpAddr::V6(_) => None,
+    };
+    NetworkCard {
+        address,
+        mac,
+        vendor: vendor.and_then(|value| clean(value, MAX_DESCRIPTION)),
+        services: services(&probed.ports, options.service_detection, names),
+        ..NetworkCard::blank(CardId(0))
+    }
 }
 
 fn announced(enabled: bool, services: &[MdnsService]) -> &[MdnsService] {
@@ -119,11 +164,12 @@ fn name_from(
 }
 
 /// How a host was found: its MAC known from the neighbour table, a ping reply, mDNS.
-fn methods(mac: bool, found_by: FoundBy, mdns: bool) -> Vec<Method> {
+fn methods(mac: bool, found_by: FoundBy, mdns: bool, ssdp: bool) -> Vec<Method> {
     let found = [
         (mac, Method::Arp),
         (found_by == FoundBy::Probe, Method::Ping),
         (mdns, Method::Mdns),
+        (ssdp, Method::Ssdp),
     ];
     found
         .into_iter()
@@ -148,6 +194,9 @@ fn device(hostname: Option<String>, name: String, card: NetworkCard) -> Device {
         hostname,
         os: None,
         mdns_services: Vec::new(),
+        ssdp_services: Vec::new(),
+        ssdp_server: None,
+        ssdp_responses: Vec::new(),
         last_seen: LastSeen::default(),
         notes: String::new(),
     }
@@ -274,6 +323,7 @@ mod tests {
             ],
             ttl: None,
             mdns: Vec::new(),
+            ssdp: ssdp::Evidence::default(),
         }
     }
 
@@ -349,6 +399,29 @@ mod tests {
         assert_eq!(device.role, DeviceKind::Printer.default_role());
         let os = device.os.as_ref().map(|os| os.family);
         assert_eq!(os, Some(crate::model::OsFamily::Network), "TTL 255");
+    }
+
+    #[test]
+    fn ssdp_and_upnp_give_identity_capabilities_and_method() {
+        let mut router = probed(host(FoundBy::Probe, None), None);
+        router.ssdp = ssdp::Evidence {
+            services: vec!["urn:schemas-upnp-org:device:InternetGatewayDevice:1".into()],
+            server: Some("RouterOS UPnP/1.1".into()),
+            manufacturer: Some("Acme Networks".into()),
+            model: Some("Home Gateway".into()),
+            responses: vec!["HTTP/1.1 200 OK\r\nST: upnp:rootdevice".into()],
+        };
+        let answer = answer(&router, home(), all(), &none()).unwrap();
+        assert!(answer.methods.contains(&Method::Ssdp));
+        assert_eq!(answer.device.kind, DeviceKind::Router);
+        assert_eq!(answer.device.name, "Home Gateway");
+        assert_eq!(answer.device.manufacturer.as_deref(), Some("Acme Networks"));
+        assert_eq!(
+            answer.device.ssdp_server.as_deref(),
+            Some("RouterOS UPnP/1.1")
+        );
+        assert_eq!(answer.device.ssdp_services, router.ssdp.services);
+        assert_eq!(answer.device.ssdp_responses, router.ssdp.responses);
     }
 
     #[test]

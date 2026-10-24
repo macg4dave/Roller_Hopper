@@ -18,6 +18,8 @@ pub(crate) enum Method {
     Ping,
     /// It announced its name over mDNS.
     Mdns,
+    /// It answered SSDP or supplied a `UPnP` device description.
+    Ssdp,
 }
 
 /// A host that answered a scan, as the scanner reports it: the device it looks like, with only

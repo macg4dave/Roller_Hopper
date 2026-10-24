@@ -38,6 +38,12 @@ pub(crate) fn evidence(device: &Device) -> String {
     if !device.mdns_services.is_empty() {
         fact.insert("mdns_services".into(), json!(device.mdns_services));
     }
+    if !device.ssdp_services.is_empty() {
+        fact.insert("ssdp_upnp_services".into(), json!(device.ssdp_services));
+    }
+    if let Some(server) = &device.ssdp_server {
+        fact.insert("ssdp_server".into(), json!(server));
+    }
     add_card_evidence(&mut fact, &device.cards);
     if let Some(os) = os_clues(device) {
         fact.insert("fingerprint".into(), os);
@@ -329,6 +335,9 @@ mod tests {
             hostname: Some("diskstation.home.arpa".into()),
             os: None,
             mdns_services: vec!["smb".into()],
+            ssdp_services: Vec::new(),
+            ssdp_server: None,
+            ssdp_responses: Vec::new(),
             last_seen: LastSeen::default(),
             notes: String::new(),
         }
@@ -405,6 +414,19 @@ mod tests {
                 "gateway_evidence": false
             })
         );
+    }
+
+    #[test]
+    fn ssdp_and_upnp_declarations_are_identity_evidence() {
+        let mut device = found();
+        device.ssdp_services = vec!["urn:schemas-upnp-org:device:InternetGatewayDevice:1".into()];
+        device.ssdp_server = Some("RouterOS UPnP/1.1".into());
+        let evidence = evidence_of(&device);
+        assert_eq!(
+            evidence["ssdp_upnp_services"],
+            json!(["urn:schemas-upnp-org:device:InternetGatewayDevice:1"])
+        );
+        assert_eq!(evidence["ssdp_server"], json!("RouterOS UPnP/1.1"));
     }
 
     #[test]

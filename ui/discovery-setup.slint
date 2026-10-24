@@ -18,6 +18,25 @@ export component DiscoverySetup inherits VerticalLayout {
         spacing: Theme.space-m;
 
         Text {
+            text: @tr("discovery.adapter");
+            color: Theme.text-muted;
+            font-size: Theme.font-body;
+            vertical-alignment: center;
+        }
+        ComboBox {
+            horizontal-stretch: 1;
+            model: Bridge.discovery-adapters;
+            current-index: Bridge.discovery-adapter-index;
+            enabled: !busy && Bridge.discovery-adapters.length > 0;
+            accessible-label: @tr("discovery.adapter");
+            selected => { Bridge.select-discovery-adapter(self.current-index); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.space-m;
+
+        Text {
             text: @tr("discovery.network");
             color: Theme.text-muted;
             font-size: Theme.font-body;

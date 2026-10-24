@@ -2,6 +2,7 @@
 //! connection that is up, preferring the one the default route uses. And its own MAC addresses,
 //! which a scan that finds it cannot learn from the neighbour table.
 
+use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
 use ipnet::{IpNet, Ipv4Net};
@@ -14,15 +15,94 @@ const NARROWEST: u8 = 30;
 const WIDEST: u8 = 16;
 const NARROWED: u8 = 24;
 
+/// One usable IPv4 address on an active adapter and the safe subnet derived from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Adapter {
+    pub(crate) name: String,
+    pub(crate) address: Ipv4Addr,
+    pub(crate) subnet: Ipv4Net,
+}
+
+impl Adapter {
+    /// Adapter identity and address as one language-neutral dropdown value.
+    pub(crate) fn label(&self) -> String {
+        format!(
+            "{} — {}/{}",
+            self.name,
+            self.address,
+            self.subnet.prefix_len()
+        )
+    }
+}
+
+/// Active non-loopback adapters with usable IPv4 subnets. The adapter used by the default route
+/// is first, so it is the initial primary adapter.
+pub(crate) fn adapters() -> Vec<Adapter> {
+    let routed = routed_address();
+    adapter_list(routed, &router_adapters(), NetworkManager::get_interfaces())
+}
+
 pub(crate) fn local_subnet() -> Option<Ipv4Net> {
-    let interfaces = NetworkManager::get_interfaces();
-    let up = interfaces.iter().filter(|i| i.is_up && !i.is_loopback);
-    let addresses = up.flat_map(|i| &i.ips).filter_map(|ip| match ip {
-        IpNet::V4(v4) => Some(*v4),
-        IpNet::V6(_) => None,
+    adapters().first().map(|adapter| adapter.subnet)
+}
+
+fn adapter_list(
+    routed: Option<Ipv4Addr>,
+    router_adapters: &HashSet<String>,
+    interfaces: Vec<netscli_core::InterfaceInfo>,
+) -> Vec<Adapter> {
+    let mut found = Vec::new();
+    for interface in interfaces
+        .into_iter()
+        .filter(|interface| interface.is_up && !interface.is_loopback)
+    {
+        for address in interface.ips {
+            let IpNet::V4(address) = address else {
+                continue;
+            };
+            let Some(subnet) = subnet(address) else {
+                continue;
+            };
+            found.push(Adapter {
+                name: interface.name.clone(),
+                address: address.addr(),
+                subnet,
+            });
+        }
+    }
+    found.sort_by_key(|adapter| {
+        (
+            !router_adapters.contains(&adapter.name),
+            routed != Some(adapter.address),
+        )
     });
-    let default = netscli_core::detect_default_ipv4_subnet();
-    best(routed_address(), default, addresses)
+    found
+}
+
+/// Windows exposes each adapter's gateway addresses directly. Elsewhere the routed local
+/// address remains the portable default-route signal.
+#[cfg(windows)]
+fn router_adapters() -> HashSet<String> {
+    ipconfig::get_adapters().map_or_else(
+        |_| HashSet::new(),
+        |adapters| {
+            adapters
+                .into_iter()
+                .filter(|adapter| {
+                    adapter
+                        .gateways()
+                        .iter()
+                        .any(|gateway| matches!(gateway, IpAddr::V4(ip) if !ip.is_unspecified()))
+                })
+                .map(|adapter| adapter.friendly_name().to_owned())
+                .collect()
+        },
+    )
+}
+
+#[cfg(not(windows))]
+fn router_adapters() -> HashSet<String> {
+    HashSet::new()
 }
 
 /// This computer's own addresses, each with the MAC address of the connection it is on.
@@ -58,31 +138,6 @@ fn routed_address() -> Option<Ipv4Addr> {
     }
 }
 
-/// The subnet to suggest for this computer's `addresses` (each with its prefix length): that of
-/// the `routed` address, which outgoing traffic leaves from, else the first within the
-/// `default` subnet (the first connection's, which may be a virtual or VPN adapter), or else
-/// the first at all.
-fn best(
-    routed: Option<Ipv4Addr>,
-    default: Option<Ipv4Net>,
-    addresses: impl Iterator<Item = Ipv4Net>,
-) -> Option<Ipv4Net> {
-    let subnets: Vec<Ipv4Net> = addresses.filter_map(subnet).collect();
-    let on_route = subnets
-        .iter()
-        .find(|s| routed.is_some_and(|ip| s.contains(&ip)));
-    let in_default = || {
-        subnets
-            .iter()
-            .find(|s| default.is_some_and(|d| d.contains(*s)))
-    };
-    on_route
-        .or_else(in_default)
-        .or(subnets.first())
-        .copied()
-        .or_else(|| default.and_then(subnet))
-}
-
 /// The subnet to scan for one of this computer's addresses; none for a link-local address or a
 /// point-to-point link.
 fn subnet(address: Ipv4Net) -> Option<Ipv4Net> {
@@ -102,50 +157,41 @@ fn subnet(address: Ipv4Net) -> Option<Ipv4Net> {
 mod tests {
     use super::*;
 
-    fn nets(texts: &[&str]) -> Vec<Ipv4Net> {
-        texts.iter().map(|t| t.parse().unwrap()).collect()
+    fn interface(name: &str, addresses: &[&str]) -> netscli_core::InterfaceInfo {
+        netscli_core::InterfaceInfo {
+            name: name.into(),
+            mac: None,
+            ips: addresses.iter().map(|text| text.parse().unwrap()).collect(),
+            is_up: true,
+            is_loopback: false,
+        }
     }
 
     #[test]
-    fn the_subnet_traffic_leaves_from_is_suggested_before_virtual_and_vpn_ones() {
-        // As on the user's PC: Hyper-V, VPN and WSL adapters alongside the Ethernet one.
-        let addresses = nets(&[
-            "172.30.64.1/20",
-            "10.188.4.98/16",
-            "192.168.20.105/24",
-            "172.21.240.1/20",
-        ]);
-        let lan = "192.168.20.0/24".parse().ok();
-        let routed = "192.168.20.105".parse().ok();
-        let vpn = "10.188.0.0/16".parse().ok();
-        assert_eq!(best(routed, vpn, addresses.clone().into_iter()), lan);
-        assert_eq!(
-            best(None, lan, addresses.clone().into_iter()),
-            lan,
-            "no route: the default subnet"
-        );
-        let first = "172.30.64.0/20".parse().ok();
-        assert_eq!(
-            best(None, None, addresses.into_iter()),
-            first,
-            "neither found"
-        );
-    }
-
-    #[test]
-    fn the_default_route_is_the_fallback_when_interfaces_have_no_ipv4_address() {
-        let default = "192.168.20.0/24".parse().ok();
-        assert_eq!(best(None, default, std::iter::empty()), default);
+    fn the_default_route_adapter_is_first_and_every_adapter_remains_available() {
+        let interfaces = vec![
+            interface("Hyper-V", &["172.30.64.1/20"]),
+            interface("VPN", &["10.188.4.98/16"]),
+            interface("Ethernet", &["192.168.20.105/24"]),
+        ];
+        let routed = "10.188.4.98".parse().ok();
+        let routers = HashSet::from(["Ethernet".into()]);
+        let found = adapter_list(routed, &routers, interfaces);
+        assert_eq!(found.len(), 3);
+        assert_eq!(found[0].name, "Ethernet");
+        assert_eq!(found[0].subnet, "192.168.20.0/24".parse().unwrap());
+        assert!(found.iter().any(|adapter| adapter.name == "Hyper-V"));
+        assert!(found.iter().any(|adapter| adapter.name == "VPN"));
     }
 
     #[test]
     fn a_subnet_wider_than_a_16_narrows_to_the_24_around_this_computer() {
-        let addresses = nets(&["10.1.2.3/8"]);
-        let default = "10.0.0.0/8".parse().ok();
-        assert_eq!(
-            best(None, default, addresses.into_iter()),
-            "10.1.2.0/24".parse().ok()
+        let found = adapter_list(
+            None,
+            &HashSet::new(),
+            vec![interface("LAN", &["10.1.2.3/8"])],
         );
+        assert_eq!(found[0].subnet, "10.1.2.0/24".parse().unwrap());
     }
 
     #[test]
@@ -173,12 +219,19 @@ mod tests {
 
     #[test]
     fn link_local_loopback_and_point_to_point_addresses_suggest_nothing() {
-        let addresses = nets(&[
-            "169.254.7.1/16",
-            "127.0.0.1/8",
-            "10.9.0.2/32",
-            "10.9.0.4/31",
-        ]);
-        assert_eq!(best(None, None, addresses.into_iter()), None);
+        let found = adapter_list(
+            None,
+            &HashSet::new(),
+            vec![interface(
+                "Unusable",
+                &[
+                    "169.254.7.1/16",
+                    "127.0.0.1/8",
+                    "10.9.0.2/32",
+                    "10.9.0.4/31",
+                ],
+            )],
+        );
+        assert!(found.is_empty());
     }
 }

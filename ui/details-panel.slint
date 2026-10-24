@@ -9,6 +9,7 @@ import { CardDetails } from "card-details.slint";
 import { CardEditor } from "card-editor.slint";
 import { DeviceForm } from "device-form.slint";
 import { SelectableText } from "components/selectable-text.slint";
+import { DebugTextBox } from "components/debug-text-box.slint";
 
 // Right panel: everything known about the selected device, followed by each of its network
 // cards in full and a way to forget it, or about the selected card (its addresses and open
@@ -117,6 +118,13 @@ export component DetailsPanel inherits Rectangle {
                     value: Labels.os(Bridge.details.os-family, Bridge.details.os-detail);
                 }
                 if Bridge.details.mdns-services != "": DetailField { label: @tr("details.mdns-services"); value: Bridge.details.mdns-services; }
+                if Bridge.details.ssdp-services != "": DetailField { label: @tr("details.upnp-services"); value: Bridge.details.ssdp-services; }
+                if Bridge.details.ssdp-server != "": DetailField { label: @tr("details.ssdp-server"); value: Bridge.details.ssdp-server; }
+                DebugTextBox {
+                    label: @tr("details.ssdp-responses");
+                    text: Bridge.details.ssdp-responses;
+                    empty-text: @tr("details.ssdp-responses-empty");
+                }
                 DetailField { label: @tr("details.last-seen"); value: Labels.last-seen(Bridge.details.last-seen-minutes); }
                 if Bridge.details.notes != "": DetailField { label: @tr("details.notes"); value: Bridge.details.notes; }
 

@@ -110,7 +110,8 @@ impl Discovery {
     }
 
     /// Takes the model's answer for the host it has: `fill` puts it in that host's fields, then
-    /// it is added to the map as [`Discovery::add`] does. Returns the device added, if any.
+    /// it is added and the inferred topology is rebuilt with the same evidence as Auto Map.
+    /// Returns the device added, if any.
     pub(crate) fn identified(
         &mut self,
         fill: impl FnOnce(&mut Device),
@@ -120,7 +121,10 @@ impl Discovery {
         let index = import.current.take()?;
         import.done += 1;
         self.edit(index, fill);
-        self.add(index, network)
+        let added = self.add(index, network)?;
+        let proposal = network.auto_map_proposal();
+        drop(network.apply_auto_map(&proposal));
+        Some(added)
     }
 
     /// Ends a busy import as `phase` says, leaving the hosts not yet added for the user.
@@ -184,6 +188,25 @@ mod tests {
             (AiImportPhase::Finished, importable - 1, importable)
         );
         assert_eq!(discovery.importable(), 0);
+    }
+
+    #[test]
+    fn an_ai_imported_wireless_device_uses_the_auto_map_topology() {
+        let (mut discovery, mut network) = finished();
+        assert!(discovery.begin_ai_import());
+        discovery.next_for_ai().unwrap();
+        let id = discovery
+            .identified(
+                |device| device.role = crate::model::Role::Phone,
+                &mut network,
+            )
+            .unwrap();
+        let card = network.device(id).unwrap().primary_card().unwrap().id;
+        let upstream = network.uplink(card).unwrap().upstream;
+        assert_eq!(
+            network.card_owner(upstream).unwrap().role,
+            crate::model::Role::AccessPoint
+        );
     }
 
     #[test]

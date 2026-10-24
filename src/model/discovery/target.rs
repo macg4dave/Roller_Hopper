@@ -1,5 +1,5 @@
 //! What the user types as the network to scan: one IPv4 subnet, such as `192.168.1.0/24`, or
-//! one address. Lists, ranges and exclusions come later (roadmap BE-0051).
+//! one address. Lists, ranges and exclusions are not supported.
 
 use std::net::Ipv4Addr;
 

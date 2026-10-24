@@ -114,6 +114,16 @@ pub(super) fn mdns_services(device: &Device) -> SharedString {
     device.mdns_services.join(", ").into()
 }
 
+/// The SSDP/UPnP device and service types the device declared.
+pub(super) fn ssdp_services(device: &Device) -> SharedString {
+    device.ssdp_services.join(", ").into()
+}
+
+/// Complete SSDP reply packets, separated for a readable debug view.
+pub(super) fn ssdp_responses(device: &Device) -> SharedString {
+    device.ssdp_responses.join("\n\n").into()
+}
+
 /// The MAC address as shown; empty when there is none.
 pub(super) fn mac(card: &NetworkCard) -> SharedString {
     let mac = card.mac.map(|mac| mac.to_string());
@@ -284,6 +294,9 @@ pub(super) fn details(
         os_family,
         os_detail,
         mdns_services: mdns_services(device),
+        ssdp_services: ssdp_services(device),
+        ssdp_server: text(device.ssdp_server.as_deref()),
+        ssdp_responses: ssdp_responses(device),
         last_seen_minutes: i32::try_from(device.last_seen.minutes_ago).unwrap_or(i32::MAX),
     }
 }

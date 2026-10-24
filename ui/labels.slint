@@ -147,7 +147,8 @@ export global Labels {
     public pure function method(method: DiscoveryMethod) -> string {
         if method == DiscoveryMethod.arp { return @tr("method.arp"); }
         if method == DiscoveryMethod.ping { return @tr("method.ping"); }
-        return @tr("method.mdns");
+        if method == DiscoveryMethod.mdns { return @tr("method.mdns"); }
+        return @tr("method.ssdp");
     }
 
     // Minutes and seconds, as on a stopwatch.

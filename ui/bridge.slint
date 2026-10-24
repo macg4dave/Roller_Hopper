@@ -156,6 +156,9 @@ export struct DeviceDetails {
     os-family: OsFamily,
     os-detail: string,
     mdns-services: string,
+    ssdp-services: string,
+    ssdp-server: string,
+    ssdp-responses: string,
     last-seen-minutes: int,
 }
 
@@ -224,7 +227,7 @@ export enum FoundFinding { known, new, duplicate }
 export enum FoundDecision { pending, added, ignored }
 export enum FoundFilter { all, new, unidentified, duplicates }
 export enum FoundSort { name, ip, mac, role }
-export enum DiscoveryMethod { arp, ping, mdns }
+export enum DiscoveryMethod { arp, ping, mdns, ssdp }
 export enum LogEvent { started, sweep, discovered, unidentified, duplicate, failed, stopped, finished }
 
 /// The discovery run as a whole. `seconds` is how long it has been running.
@@ -308,6 +311,10 @@ export struct FoundView {
     os-clues: [OsClueView],
     // The mDNS service types it announced, such as "ipp, http"; empty when none.
     mdns-services: string,
+    // Device/service types and implementation string declared through SSDP/UPnP.
+    ssdp-services: string,
+    ssdp-server: string,
+    ssdp-responses: string,
     unidentified: bool,
     finding: FoundFinding,
     // For a duplicate: the name of the device on the map with the same MAC address.
@@ -433,7 +440,11 @@ export global Bridge {
     // Discovery runs finished or stopped.
     in property <int> scans;
     in property <DiscoveryView> discovery;
-    // The discovery page's network box, as typed; set by Rust once, at start.
+    // Active IPv4 adapters, with the primary adapter selected. Choosing one also fills the
+    // network box from that adapter.
+    in property <[string]> discovery-adapters;
+    in property <int> discovery-adapter-index: -1;
+    // The discovery page's network box, as typed or filled from the selected adapter.
     in-out property <string> discovery-target-draft;
     // The found hosts the result filter lets through, each followed by its cards' rows.
     in property <[FoundView]> found;
@@ -554,6 +565,7 @@ export global Bridge {
     // options can be changed while it is not running.
     callback start-discovery();
     callback stop-discovery();
+    callback select-discovery-adapter(int);
     callback set-discovery-target(string);
     callback set-scan-mode(ScanMode);
     callback set-found-filter(FoundFilter);

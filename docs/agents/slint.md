@@ -32,8 +32,8 @@ to the UI. Part of the agent rules indexed in [AGENTS.md](../../AGENTS.md).
 - Icons are SVG line art in one consistent style, same stroke width and viewBox, tinted with
   `colorize` rather than duplicated per colour. Icons that are part of the UI are compiled in;
   icons the user may add are read at run time, with a compiled-in fallback.
-- For UI changes, check the change visually against the design direction in
-  [product.md](product.md). The `slint` agent skill can see and drive the running app through
+- For UI changes, check the change visually against the existing design direction. The `slint`
+  agent skill can see and drive the running app through
   Slint's embedded MCP server (screenshots, clicks, drags, typing; the project's `.mcp.json`
   names it `network-mapper`). Start the app with the server on:
 

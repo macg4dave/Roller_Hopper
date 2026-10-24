@@ -175,6 +175,9 @@ impl Importing {
             .discovery
             .identified(|device| identity.fill(device), &mut st.network);
         if filled.is_some() {
+            // The inferred topology was rebuilt, so an older Auto Map undo snapshot no longer
+            // describes the current network.
+            st.auto_map_undo = None;
             st.lay_out_at_rest();
             // The host shown in the details is edited on the map once added.
             st.select_found(shown.0, shown.1);

@@ -182,6 +182,15 @@ pub(crate) struct Device {
     pub(crate) os: Option<OsHint>,
     /// The mDNS service types it announced, such as `ipp` or `airplay`, in order, each once.
     pub(crate) mdns_services: Vec<String>,
+    /// Device and service types declared over SSDP/UPnP.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) ssdp_services: Vec<String>,
+    /// The responder's SSDP `SERVER` field, when it declared one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) ssdp_server: Option<String>,
+    /// Raw SSDP packets for the current session's debug view; never saved to a project.
+    #[serde(skip)]
+    pub(crate) ssdp_responses: Vec<String>,
     pub(crate) last_seen: LastSeen,
     pub(crate) notes: String,
 }
@@ -230,6 +239,9 @@ mod tests {
             hostname: None,
             os: None,
             mdns_services: Vec::new(),
+            ssdp_services: Vec::new(),
+            ssdp_server: None,
+            ssdp_responses: Vec::new(),
             last_seen: LastSeen::default(),
             notes: String::new(),
         }
@@ -245,6 +257,14 @@ mod tests {
         assert!(!d.matches("/24"), "not the prefix");
         assert!(d.matches("  "));
         assert!(!d.matches("printer"));
+    }
+
+    #[test]
+    fn ssdp_debug_packets_are_not_saved() {
+        let mut device = device();
+        device.ssdp_responses = vec!["HTTP/1.1 200 OK".into()];
+        let saved = serde_json::to_value(device).unwrap();
+        assert_eq!(saved.get("ssdp_responses"), None);
     }
 
     const KINDS: [DeviceKind; 17] = [

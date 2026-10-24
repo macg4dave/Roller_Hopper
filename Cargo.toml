@@ -15,11 +15,13 @@ candle-nn = "0.11.0"
 candle-transformers = "0.11.0"
 dirs = "7.0.0"
 ipnet = { version = "2.12.2", default-features = false, features = ["std", "serde"] }
-# The scanner: ping sweep, neighbour table, mDNS names and TCP connect probes. Never `pcap`
+# The scanner: ping sweep, neighbour table, mDNS names and TCP/UDP probes. Never `pcap`
 # (needs a capture driver) or `db`.
 netscli-core = { version = "0.3.4", default-features = false, features = ["mdns"] }
 # The native Open and Save dialogs; on Linux through GTK3 (below), never a helper program.
 rfd = { version = "0.17.2", default-features = false }
+# Parses the bounded UPnP device descriptions that SSDP responders advertise.
+roxmltree = { version = "0.21.1", default-features = false, features = ["std"] }
 # The project file format.
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
@@ -34,6 +36,10 @@ ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rfd = { version = "0.17.2", default-features = false, features = ["gtk3"] }
+
+[target.'cfg(windows)'.dependencies]
+# Identifies which adapter has the router/default-gateway address on Windows.
+ipconfig = { version = "0.3.4", default-features = false }
 
 [build-dependencies]
 slint-build = "1.18.1"

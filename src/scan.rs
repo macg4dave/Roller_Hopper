@@ -13,10 +13,11 @@ mod answer;
 mod identify;
 mod mdns;
 mod ports;
+mod ssdp;
 mod subnets;
 mod sweep;
 
-pub(crate) use subnets::local_subnet;
+pub(crate) use subnets::{Adapter, adapters, local_subnet};
 
 use std::future::Future;
 use std::io;
@@ -71,7 +72,11 @@ struct Counts {
 
 impl Scan {
     /// Starts scanning `subnet` with `options`. Fails only if the threads cannot be started.
-    pub(crate) fn start(subnet: Ipv4Net, options: ScanOptions) -> io::Result<Self> {
+    pub(crate) fn start(
+        subnet: Ipv4Net,
+        adapter: Option<std::net::Ipv4Addr>,
+        options: ScanOptions,
+    ) -> io::Result<Self> {
         let runtime = Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("scan")
@@ -79,7 +84,7 @@ impl Scan {
             .build()?;
         let counts = Arc::new(Counts::default());
         let (sender, events) = mpsc::channel();
-        let task = runtime.spawn(run(subnet, options, Arc::clone(&counts), sender));
+        let task = runtime.spawn(run(subnet, adapter, options, Arc::clone(&counts), sender));
         Ok(Self {
             runtime: Some(runtime),
             task,
@@ -137,8 +142,17 @@ impl Drop for Scan {
     }
 }
 
-async fn run(subnet: Ipv4Net, options: ScanOptions, counts: Arc<Counts>, events: Sender<Event>) {
+async fn run(
+    subnet: Ipv4Net,
+    adapter: Option<std::net::Ipv4Addr>,
+    options: ScanOptions,
+    counts: Arc<Counts>,
+    events: Sender<Event>,
+) {
     let browse = options.mdns_services.then(|| tokio::spawn(mdns::browse()));
+    let ssdp = options
+        .mdns_services
+        .then(|| tokio::spawn(ssdp::browse(adapter)));
     let end = match sweep::hosts(subnet, &counts).await {
         Ok(hosts) => {
             let announced = match browse {
@@ -146,9 +160,14 @@ async fn run(subnet: Ipv4Net, options: ScanOptions, counts: Arc<Counts>, events:
                 Some(task) => task.await.unwrap_or_default(),
                 None => Vec::new(),
             };
+            let ssdp = match ssdp {
+                Some(task) => task.await.unwrap_or_default(),
+                None => Vec::new(),
+            };
             let registry = PortRegistry::load();
             let run = Run {
                 announced: &announced,
+                ssdp: &ssdp,
                 registry: &registry,
                 subnet,
                 options,
@@ -176,6 +195,8 @@ struct Probes {
 struct Run<'a> {
     /// Every service announced over mDNS during the sweep.
     announced: &'a [MdnsService],
+    /// Every SSDP/UPnP declaration heard during the sweep, grouped by responder address.
+    ssdp: &'a [(std::net::Ipv4Addr, ssdp::Evidence)],
     registry: &'a PortRegistry,
     subnet: Ipv4Net,
     options: ScanOptions,
@@ -206,14 +227,15 @@ async fn probe_all(
         .into_iter()
         .map(|host| {
             let own = mdns::of_host(run.announced, host.ip);
-            (host, own)
+            let ssdp = ssdp::of_host(run.ssdp, host.ip);
+            (host, own, ssdp)
         })
         .collect::<Vec<_>>();
     let mut failure = None;
     run_bounded(
         hosts,
         HOST_TASKS,
-        |(host, own)| probe(host, own, Arc::clone(&shared), run.options),
+        |(host, own, ssdp)| probe(host, own, ssdp, Arc::clone(&shared), run.options),
         |done| {
             let probed = match done {
                 Ok(Ok(probed)) => probed,
@@ -269,6 +291,7 @@ where
 async fn probe(
     host: Host,
     mdns: Vec<MdnsService>,
+    ssdp: ssdp::Evidence,
     probes: Arc<Probes>,
     options: ScanOptions,
 ) -> Result<Probed, String> {
@@ -294,6 +317,7 @@ async fn probe(
         ports: open_ports,
         ttl,
         mdns,
+        ssdp,
     })
 }
 

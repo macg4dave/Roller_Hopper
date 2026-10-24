@@ -77,7 +77,11 @@ fn begin(window: &Weak<AiSettingsWindow>, sidebar: &Rc<Sidebar>) {
         if !discovery.start(target) {
             return;
         }
-        match Scan::start(target, discovery.options) {
+        let adapter = scan::adapters()
+            .into_iter()
+            .find(|adapter| adapter.subnet.contains(&target.addr()))
+            .map(|adapter| adapter.address);
+        match Scan::start(target, adapter, discovery.options) {
             Ok(scan) => Some(scan),
             Err(error) => {
                 discovery.fail(error.to_string());

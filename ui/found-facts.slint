@@ -3,6 +3,7 @@ import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { Chip } from "components/chip.slint";
 import { DetailField } from "components/detail-field.slint";
+import { DebugTextBox } from "components/debug-text-box.slint";
 
 // What a discovery run found out about a host that its editor does not show: what it is, and
 // how it was found. Read-only, under the role in the discovery details' editor. Its addresses
@@ -30,6 +31,13 @@ export component FoundFacts inherits VerticalLayout {
         }
     }
     if found.mdns-services != "": DetailField { label: @tr("details.mdns-services"); value: found.mdns-services; }
+    if found.ssdp-services != "": DetailField { label: @tr("details.upnp-services"); value: found.ssdp-services; }
+    if found.ssdp-server != "": DetailField { label: @tr("details.ssdp-server"); value: found.ssdp-server; }
+    DebugTextBox {
+        label: @tr("details.ssdp-responses");
+        text: found.ssdp-responses;
+        empty-text: @tr("details.ssdp-responses-empty");
+    }
     DetailField {
         label: @tr("discovery.found-by");
         HorizontalLayout {

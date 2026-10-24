@@ -73,6 +73,9 @@ pub(crate) struct AppState {
     query: String,
     /// The discovery page's run; runs that finish or are stopped count as scans.
     discovery: Discovery,
+    /// Active IPv4 adapters; the selected one is primary for subnet and multicast discovery.
+    discovery_adapters: Vec<crate::scan::Adapter>,
+    primary_adapter: Option<usize>,
     scans: u32,
     /// Read from the icon folder by [`connect`], and again when the icon picker opens.
     icons: Icons,
@@ -120,6 +123,8 @@ impl AppState {
             collapsed: HashSet::new(),
             query: String::new(),
             discovery: Discovery::default(),
+            discovery_adapters: Vec::new(),
+            primary_adapter: None,
             scans: 0,
             icons: Icons::default(),
             file,

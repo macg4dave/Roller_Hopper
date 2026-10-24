@@ -15,6 +15,24 @@ use crate::ui_bridge::{AppState, convert};
 
 pub(super) fn push(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let discovery = &state.discovery;
+    let adapters = state
+        .discovery_adapters
+        .iter()
+        .map(|adapter| SharedString::from(adapter.label()))
+        .collect();
+    if let Some(model) = sync(&bridge.get_discovery_adapters(), adapters) {
+        bridge.set_discovery_adapters(model);
+    }
+    bridge.set_discovery_adapter_index(
+        state
+            .primary_adapter
+            .and_then(|index| i32::try_from(index).ok())
+            .unwrap_or(-1),
+    );
+    let draft = SharedString::from(discovery.target_text.as_str());
+    if bridge.get_discovery_target_draft() != draft {
+        bridge.set_discovery_target_draft(draft);
+    }
     let next = discovery.next_target();
     // While a run is busy, the subnet it scans, whatever the box says meanwhile.
     let target = if discovery.busy() {
@@ -192,6 +210,9 @@ fn found_view(state: &AppState, labels: &Labels<'_>, index: usize, found: &Found
         os_detail,
         os_clues: ModelRc::new(VecModel::from(convert::os_clues(device))),
         mdns_services: convert::mdns_services(device),
+        ssdp_services: convert::ssdp_services(device),
+        ssdp_server: device.ssdp_server.as_deref().unwrap_or_default().into(),
+        ssdp_responses: convert::ssdp_responses(device),
         unidentified: found.unidentified(),
         finding: finding(found.finding),
         duplicate_of: text(duplicate_of),
@@ -333,6 +354,7 @@ fn method(method: Method) -> ui::DiscoveryMethod {
         Method::Arp => ui::DiscoveryMethod::Arp,
         Method::Ping => ui::DiscoveryMethod::Ping,
         Method::Mdns => ui::DiscoveryMethod::Mdns,
+        Method::Ssdp => ui::DiscoveryMethod::Ssdp,
     }
 }
 

@@ -22,6 +22,9 @@ impl Network {
             hostname: None,
             os: None,
             mdns_services: Vec::new(),
+            ssdp_services: Vec::new(),
+            ssdp_server: None,
+            ssdp_responses: Vec::new(),
             last_seen: LastSeen::default(),
             notes: String::new(),
         };

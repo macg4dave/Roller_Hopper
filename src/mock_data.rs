@@ -57,6 +57,9 @@ impl Spec {
             hostname: self.hostname.map(str::to_owned),
             os: None,
             mdns_services: Vec::new(),
+            ssdp_services: Vec::new(),
+            ssdp_server: None,
+            ssdp_responses: Vec::new(),
             last_seen: LastSeen {
                 minutes_ago: self.minutes_ago,
             },

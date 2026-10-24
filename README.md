@@ -3,9 +3,11 @@
 A Rust + Slint desktop local network mapper. The map starts empty. The discovery page scans the
 IPv4 subnet you type for real with
 [netscli-core](https://crates.io/crates/netscli-core): a ping sweep with the neighbour table and
-mDNS names, then TCP connects to common ports and reverse DNS, with mDNS services, device type,
-OS family and card vendor. Found hosts can be added to the map one by one or imported together,
-and devices can be added by hand. New, Open, Save and Save as keep the map in a
+mDNS names, then TCP/UDP probes and reverse DNS, with DNS-SD services, SSDP/UPnP declarations,
+device type, OS family and card vendor. Discovery defaults to the IPv4 adapter carrying the
+router/default gateway; choosing another adapter fills its subnet and directs multicast through
+it. Found hosts can be added to the map one by one or imported together, and devices can be added
+by hand. New, Open, Save and Save as keep the map in a
 `.rhopper.json` project file. Settings → AI settings installs an AI
 model (Qwen3-4B-Q4_K_M, 2.5 GB) into the user's application data folder,
 loads one with [Candle](https://github.com/huggingface/candle), and runs it on an editable
@@ -66,7 +68,7 @@ src/model/         pure data and logic (devices with their network cards; the ma
                    network cards, roles, groups,
                    layout; the discovery run's record) — no Slint imports
 src/scan.rs        the real scan on its own Tokio threads, and in scan/ this computer's
-                   subnet, the port lists, mDNS, the type and OS rules, and turning what a
+                   subnet, the port lists, mDNS, SSDP/UPnP, the type and OS rules, and turning what a
                    host answers into model data — no Slint imports
 src/ai.rs          the AI models offered, pinned by revision and hash, where they are
                    installed, the user's own GGUF files, the prompt and sample; ai/ downloads

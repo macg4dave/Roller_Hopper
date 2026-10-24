@@ -40,7 +40,7 @@ pub(crate) struct ScanOptions {
     pub(crate) mode: ScanMode,
     /// Names from reverse DNS, and the software that names itself on open ports.
     pub(crate) service_detection: bool,
-    /// The services hosts announce over mDNS, with the model and maker they give.
+    /// Services and identity hosts declare over mDNS/DNS-SD and SSDP/UPnP.
     pub(crate) mdns_services: bool,
     /// A guess at what kind of device each host is.
     pub(crate) device_type: bool,

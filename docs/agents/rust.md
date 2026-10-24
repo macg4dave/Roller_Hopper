@@ -91,8 +91,8 @@ built around them.
 
 ### Tests are not the source of truth
 
-- The source of truth is the product brief ([product.md](product.md)) and what the user asked
-  for. A test is one piece of evidence about that, not the definition of correct.
+- The source of truth is what the user asked for. A test is one piece of evidence about that,
+  not the definition of correct.
 - When a test fails, step back and look at the whole feature before changing anything: what the
   user sees, and how the model, bridge and UI fit together. Then decide which is wrong, the code
   or the test.

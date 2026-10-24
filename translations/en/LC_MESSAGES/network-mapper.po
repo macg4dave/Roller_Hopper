@@ -631,6 +631,18 @@ msgstr "Guessed from"
 msgid "details.mdns-services"
 msgstr "mDNS services"
 
+msgid "details.upnp-services"
+msgstr "UPnP capabilities"
+
+msgid "details.ssdp-server"
+msgstr "SSDP server"
+
+msgid "details.ssdp-responses"
+msgstr "SSDP responses (debug)"
+
+msgid "details.ssdp-responses-empty"
+msgstr "No SSDP responses were captured for this device."
+
 # Who made a network card, from its MAC address; not necessarily the device's maker.
 msgid "details.card-vendor"
 msgstr "Card vendor"
@@ -1112,6 +1124,9 @@ msgstr "Scans the network for real: it pings every address and probes common por
 msgid "discovery.network"
 msgstr "Network"
 
+msgid "discovery.adapter"
+msgstr "Network adapter"
+
 msgid "discovery.network-placeholder"
 msgstr "192.168.1.0/24"
 
@@ -1213,6 +1228,9 @@ msgstr "Ping"
 
 msgid "method.mdns"
 msgstr "mDNS"
+
+msgid "method.ssdp"
+msgstr "SSDP"
 
 msgid "discovery.details.empty"
 msgstr "Select a host to see what the scan found out about it."
