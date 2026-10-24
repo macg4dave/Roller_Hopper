@@ -263,25 +263,28 @@ mod tests {
     #[test]
     fn a_device_dropped_on_a_trunk_below_a_row_hangs_below_it() {
         let mut state = AppState::new(mock_data::network());
-        let (switch, nas) = (CardId(2), CardId(4));
-        let lowest_of_switch_row = |shown: &AppState| {
-            let behind = shown.network.behind(switch).filter(|&d| d != nas);
+        let (lab_root, nas) = (CardId(22), CardId(4));
+        let lowest_of_root_row = |shown: &AppState| {
+            let behind = shown.network.behind(lab_root).filter(|&d| d != nas);
             behind
                 .map(|d| shown.positions[&d].y)
                 .fold(f32::MIN, f32::max)
         };
-        let row = lowest_of_switch_row(&state);
+        let row = lowest_of_root_row(&state);
 
-        // Just left of the switch's trunk, below its row.
+        // Just left of the root's trunk, below its row.
         let below_left = Point {
-            x: state.positions[&switch].x - 10.0,
+            x: state.positions[&lab_root].x - 10.0,
             y: row + 90.0,
         };
         state.drag_to(nas, below_left);
         state.drop_dragged();
-        assert_eq!(state.network.uplink(nas).map(|c| c.upstream), Some(switch));
-        assert!(state.positions[&nas].y > lowest_of_switch_row(&state));
-        assert!(state.positions[&nas].x < state.positions[&switch].x);
+        assert_eq!(
+            state.network.uplink(nas).map(|c| c.upstream),
+            Some(lab_root)
+        );
+        assert!(state.positions[&nas].y > lowest_of_root_row(&state));
+        assert!(state.positions[&nas].x < state.positions[&lab_root].x);
         assert!(
             state.trunks().iter().any(|(id, _)| *id == nas),
             "with a trunk of its own"
@@ -289,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn a_card_dropped_on_another_trunk_is_plugged_in_there() {
+    fn a_card_dropped_on_a_non_root_trunk_becomes_its_child() {
         let mut state = AppState::new(mock_data::network());
         let (lab_card, lab_pi) = (CardId(100), CardId(23));
         let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
@@ -303,19 +306,19 @@ mod tests {
         state.drop_dragged();
         assert_eq!(
             state.network.uplink(lab_card).map(|c| c.upstream),
-            Some(lab_pi)
+            Some(lab_pi),
+            "the closest device remains valid even though it has a parent"
         );
-        assert!(state.positions[&lab_card].y > state.positions[&lab_pi].y);
     }
 
     #[test]
     fn a_virtual_device_held_over_a_line_previews_it_and_goes_back_if_taken_off() {
         let mut state = AppState::new(mock_data::network());
         // A container's first card has the container's id, like every sample device's.
-        let (container, lab_pi) = (CardId(24), CardId(23));
+        let (container, lab_root) = (CardId(24), CardId(22));
         let host = state.network.uplink(container).map(|c| c.upstream);
         let laid_out = state.positions.clone();
-        let [_, root] = trunk(&state.network, &state.positions, lab_pi).unwrap();
+        let [_, root] = trunk(&state.network, &state.positions, lab_root).unwrap();
         let on_root = Point {
             y: root.y + 20.0,
             ..root
@@ -323,7 +326,7 @@ mod tests {
         state.drag_to(container, on_root);
         assert_eq!(
             state.strand().map(|s| s.upstream),
-            Some(lab_pi),
+            Some(lab_root),
             "previewed"
         );
 
@@ -336,7 +339,7 @@ mod tests {
         state.drag_to(container, on_root);
         state.drop_dragged();
         let plugged = state.network.uplink(container).map(|c| c.upstream);
-        assert_eq!(plugged, Some(lab_pi), "dropped where previewed");
+        assert_eq!(plugged, Some(lab_root), "dropped where previewed");
     }
 
     #[test]

@@ -54,16 +54,6 @@ impl Default for Network {
 }
 
 impl Network {
-    /// The tests' sample networks; the app's start empty, or come from a file.
-    #[cfg(test)]
-    pub(crate) fn new(devices: Vec<Device>, links: Vec<CardLink>) -> Self {
-        Self {
-            devices,
-            links,
-            ..Self::default()
-        }
-    }
-
     pub(crate) fn devices(&self) -> &[Device] {
         &self.devices
     }

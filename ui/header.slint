@@ -9,6 +9,9 @@ export component Header inherits Rectangle {
     callback scan();
     // The AI settings window is wanted.
     callback ai-settings();
+    // The built-in sample map is wanted through the hidden testing shortcut.
+    callback mock-data();
+    in property <bool> mock-data-modifiers;
 
     height: Theme.header-height;
     background: Theme.surface;
@@ -81,7 +84,13 @@ export component Header inherits Rectangle {
             text: @tr("header.settings");
             icon: @image-url("icons/settings.svg");
             colorize-icon: true;
-            clicked => { settings-popup.show(); }
+            clicked => {
+                if root.mock-data-modifiers {
+                    root.mock-data();
+                } else {
+                    settings-popup.show();
+                }
+            }
         }
     }
 

@@ -113,6 +113,12 @@ fn parse(bytes: &[u8]) -> Result<Project, OpenError> {
     })
 }
 
+/// The large built-in infrastructure fixture, decoded and checked exactly like a project the
+/// user opens from disk.
+pub(crate) fn mock() -> Result<Project, OpenError> {
+    parse(include_bytes!("../mock-data/infrastructure.rhopper.json"))
+}
+
 fn within_limits(network: &Network) -> bool {
     let devices = network.devices();
     let cards = devices.iter().flat_map(|d| &d.cards);

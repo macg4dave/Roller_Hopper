@@ -18,6 +18,7 @@ use crate::ui::{self, AppWindow, Bridge};
 pub(super) enum Then {
     New,
     Open,
+    Mock,
     Close,
 }
 
@@ -100,6 +101,8 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_save_project_as(move || save(&as_ui, &as_state, true, None));
     let (answer_ui, answer_state) = wire();
     bridge.on_answer_unsaved(move |reply| answer(&answer_ui, &answer_state, reply));
+    let (mock_ui, mock_state) = wire();
+    ui.on_open_mock_data(move || request(&mock_ui, &mock_state, Then::Mock));
     let dismiss = handler(ui, state, |st, ()| st.file_problem = None);
     bridge.on_dismiss_file_problem(move || dismiss(()));
 
@@ -147,6 +150,10 @@ fn proceed(ui: &Weak<AppWindow>, state: &Rc<RefCell<AppState>>, then: Then) {
     match then {
         Then::New => update(ui, state, |st| st.replace_project(Project::default(), None)),
         Then::Open => open(ui, state),
+        Then::Mock => update(ui, state, |st| match project::mock() {
+            Ok(mock) => st.replace_project(mock, None),
+            Err(error) => st.file_problem = Some(Problem::Open(error)),
+        }),
         // Fails only once the event loop has stopped, when there is nothing left to close.
         Then::Close => slint::quit_event_loop().unwrap_or_default(),
     }

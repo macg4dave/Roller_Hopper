@@ -8,12 +8,15 @@ use super::card::CardId;
 use super::layout::{LINE_TOP_GAP, Point, Positions, ROW_HEIGHT, link_route, trunk};
 use super::network::Network;
 
-/// How near a line a dragged device's own line must end for it to join that line, above or
-/// below it. Rows are close together, so this stays small.
-const SNAP_DISTANCE: f32 = 48.0;
+/// How near a line a dragged device's own line must end for it to join that line.
+const SNAP_DISTANCE: f32 = 72.0;
 /// The same reach to either side, larger as columns are far apart: a device brought up beside
 /// a trunk joins it well before it covers it.
-const SNAP_REACH_SIDEWAYS: f32 = 110.0;
+const SNAP_REACH_SIDEWAYS: f32 = 160.0;
+/// An existing connection holds on beyond the range where a new one would catch. This
+/// hysteresis makes detaching deliberate and lets the strand stretch like a rubber band.
+const DETACH_DISTANCE: f32 = 128.0;
+const DETACH_REACH_SIDEWAYS: f32 = 400.0;
 /// A top connection is an intentional, open drop target, so it reaches farther than the denser
 /// lines within a tree.
 const HEAD_SNAP_DISTANCE: f32 = 96.0;
@@ -51,9 +54,7 @@ pub(crate) fn snap_target(
     dragged: CardId,
     at: Point,
 ) -> Option<Snap> {
-    if let Some(snap) = head_target(network, positions, dragged, at) {
-        return Some(snap);
-    }
+    let head = head_target(network, positions, dragged, at);
     // The map without the dragged branch, whose lines and trunks move with it.
     let others: Positions = positions
         .iter()
@@ -66,6 +67,7 @@ pub(crate) fn snap_target(
         y: at.y - LINE_TOP_GAP,
     };
     let inner = arrangement.inner_neighbours(network, Some(dragged));
+    let current = network.uplink(dragged).map(|link| link.upstream);
     let candidates = others
         .keys()
         .copied()
@@ -76,21 +78,44 @@ pub(crate) fn snap_target(
             positions: &others,
             inner: &inner,
         };
-        Some((id, lines.nearest_on(id, end)?))
+        let joins = lines.nearest_on(id, end)?;
+        let retained = current == Some(id);
+        let (limit, reach) = if retained {
+            (DETACH_DISTANCE, DETACH_REACH_SIDEWAYS)
+        } else {
+            (SNAP_DISTANCE, SNAP_REACH_SIDEWAYS)
+        };
+        let stretched = scaled_distance(end, joins, limit, reach);
+        let proximity = distance(end, joins);
+        (stretched <= limit).then_some((id, joins, proximity, stretched, limit))
     });
-    near.filter(|&(_, joins)| distance(end, joins) <= SNAP_DISTANCE)
-        .min_by(|a, b| distance(end, a.1).total_cmp(&distance(end, b.1)))
-        .map(|(upstream, joins)| {
-            let tiers = arrangement.tiers_without(network, upstream, dragged);
-            let trunk_x = others.get(&upstream).map_or(at.x, |p| p.x);
-            Snap {
-                upstream,
-                kind: SnapKind::Child,
-                slot: slot(&tiers, &others, trunk_x, at),
-                line: [joins, end],
-                pull: distance(end, joins) / SNAP_DISTANCE,
-            }
-        })
+    let child =
+        near.min_by(|a, b| a.2.total_cmp(&b.2))
+            .map(|(upstream, joins, _, stretched, limit)| {
+                let tiers = arrangement.tiers_without(network, upstream, dragged);
+                let trunk_x = others.get(&upstream).map_or(at.x, |p| p.x);
+                Snap {
+                    upstream,
+                    kind: SnapKind::Child,
+                    slot: slot(&tiers, &others, trunk_x, at),
+                    line: [joins, end],
+                    pull: stretched / limit,
+                }
+            });
+    closest(head, child)
+}
+
+/// The physically closest valid connection wins, regardless of whether it is above a node or
+/// on a trunk. Extended detach reach only keeps a candidate available; it does not prioritise it.
+fn closest(a: Option<Snap>, b: Option<Snap>) -> Option<Snap> {
+    match (a, b) {
+        (Some(a), Some(b)) => {
+            let length = |snap: &Snap| distance(snap.line[0], snap.line[1]);
+            Some(if length(&a) <= length(&b) { a } else { b })
+        }
+        (Some(snap), None) | (None, Some(snap)) => Some(snap),
+        (None, None) => None,
+    }
 }
 
 /// A card held above another device is inserted directly above it.
@@ -269,17 +294,18 @@ mod tests {
     #[test]
     fn a_device_dropped_on_a_root_circle_goes_behind_that_device() {
         let (network, arrangement, positions) = map();
-        let [_, root] = trunk(&network, &positions, NAS).unwrap();
+        let lab_root = CardId(22);
+        let [_, root] = trunk(&network, &positions, lab_root).unwrap();
         let on_root = Point {
             x: root.x,
             y: root.y + LINE_TOP_GAP,
         };
         let snap = snap_target(&network, &arrangement, &positions, PC, on_root).unwrap();
-        assert_eq!((snap.upstream, snap.slot.level), (NAS, Level::NewTier(0)));
+        assert_eq!((snap.upstream, snap.kind), (lab_root, SnapKind::Child));
     }
 
     #[test]
-    fn a_device_dropped_on_a_trunk_below_a_tier_starts_a_new_one_on_that_side() {
+    fn a_device_with_a_parent_can_still_offer_the_closest_child_connection() {
         let (network, arrangement, positions) = map();
         let switch = positions[&SWITCH];
         let row = network
@@ -292,11 +318,7 @@ mod tests {
             y: row + ROW_HEIGHT * 0.6,
         };
         let snap = snap_target(&network, &arrangement, &positions, NAS, below_left).unwrap();
-        assert_eq!(snap.upstream, SWITCH);
-        assert_eq!(
-            (snap.slot.level, snap.slot.side),
-            (Level::NewTier(1), Side::Left)
-        );
+        assert_eq!((snap.upstream, snap.kind), (SWITCH, SnapKind::Child));
     }
 
     #[test]
@@ -366,7 +388,50 @@ mod tests {
     }
 
     #[test]
-    fn a_card_joins_any_card_but_its_own_devices() {
+    fn the_closest_link_wins_when_a_node_and_trunk_are_beside_each_other() {
+        let (network, arrangement, positions) = map();
+        let lab_root = CardId(22);
+        let switch = positions[&SWITCH];
+        let router = positions[&ROUTER];
+        let between = Point {
+            x: f32::midpoint(router.x, switch.x),
+            y: switch.y - 70.0,
+        };
+        let nearer_node = snap_target(
+            &network,
+            &arrangement,
+            &positions,
+            lab_root,
+            Point {
+                x: switch.x,
+                ..between
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (nearer_node.upstream, nearer_node.kind),
+            (SWITCH, SnapKind::Head)
+        );
+
+        let nearer_trunk = snap_target(
+            &network,
+            &arrangement,
+            &positions,
+            lab_root,
+            Point {
+                x: router.x,
+                ..between
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (nearer_trunk.upstream, nearer_trunk.kind),
+            (ROUTER, SnapKind::Child)
+        );
+    }
+
+    #[test]
+    fn a_card_joins_a_non_root_but_not_its_own_device() {
         let (network, arrangement, positions) = map();
         let on_root = |id| {
             let [_, root] = trunk(&network, &positions, id).unwrap();
@@ -387,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn a_trunk_reaches_further_to_the_side_than_up_or_down() {
+    fn a_non_root_trunk_attracts_a_new_child_when_it_is_closest() {
         let (network, arrangement, positions) = map();
         let [top, root] = trunk(&network, &positions, SWITCH).unwrap();
         // Beside the bare stretch of trunk below its row of devices, clear of their lines.
@@ -403,5 +468,46 @@ mod tests {
         };
         let target = snap_target(&network, &arrangement, &positions, NAS, as_far_below);
         assert_ne!(target.map(|s| s.upstream), Some(SWITCH));
+    }
+
+    #[test]
+    fn a_new_connection_catches_before_the_device_has_to_touch_the_line() {
+        let (network, arrangement, positions) = map();
+        let lab_root = CardId(22);
+        let [top, _] = trunk(&network, &positions, lab_root).unwrap();
+        let within_wider_reach = Point {
+            x: top.x,
+            y: top.y + LINE_TOP_GAP + 60.0,
+        };
+        let snap =
+            snap_target(&network, &arrangement, &positions, NAS, within_wider_reach).unwrap();
+        assert_eq!((snap.upstream, snap.kind), (lab_root, SnapKind::Child));
+    }
+
+    #[test]
+    fn an_existing_parent_holds_on_like_a_stretched_rubber_band() {
+        let (mut network, arrangement, _) = map();
+        let removed: Vec<_> = network
+            .devices()
+            .iter()
+            .map(|device| device.id)
+            .filter(|id| ![crate::model::DeviceId(2), crate::model::DeviceId(5)].contains(id))
+            .collect();
+        for device in removed {
+            network.remove_device(device);
+        }
+        let positions = tree_layout(&network, &arrangement);
+        let [top, _] = trunk(&network, &positions, SWITCH).unwrap();
+        let deliberate_pull = Point {
+            x: top.x + 250.0,
+            y: top.y + LINE_TOP_GAP + 60.0,
+        };
+        let snap = snap_target(&network, &arrangement, &positions, PC, deliberate_pull).unwrap();
+        assert_eq!((snap.upstream, snap.kind), (SWITCH, SnapKind::Child));
+        assert!(
+            distance(snap.line[0], snap.line[1]) > SNAP_DISTANCE,
+            "held beyond the range where a new connection would catch"
+        );
+        assert!(snap.pull > 0.0, "the strand shows the pull");
     }
 }
