@@ -144,6 +144,10 @@ pub(crate) struct NetworkCard {
     /// A scan may refresh this address when DHCP owns it.
     #[serde(default)]
     pub(crate) dhcp: bool,
+    /// A user-defined bridge group this card belongs to. This is organisation metadata, not a
+    /// network-card-to-network-card topology relation.
+    #[serde(default)]
+    pub(crate) bridge_group: Option<String>,
     pub(crate) gateway: Option<Ipv4Addr>,
     /// Detected with the card, or typed by the user.
     pub(crate) mac: Option<MacAddr>,
@@ -170,6 +174,7 @@ impl NetworkCard {
             state: InterfaceState::Unknown,
             address: None,
             dhcp: false,
+            bridge_group: None,
             gateway: None,
             mac: None,
             vendor: None,

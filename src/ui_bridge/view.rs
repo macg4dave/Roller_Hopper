@@ -185,24 +185,19 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
 /// Every ordinary network card and the software bridge it belongs to, for map setup.
 fn push_bridge_groups(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let network = &state.network;
-    let bridges = state.bridge_choices();
     let choices = std::iter::once(labels.invoke_no_link()).chain(
-        bridges
+        network
+            .bridge_groups()
             .iter()
-            .map(|&card| cards::socket_name(labels, network, card)),
+            .map(|name| SharedString::from(name.as_str())),
     );
     if let Some(model) = sync(&bridge.get_bridge_group_choices(), choices.collect()) {
         bridge.set_bridge_group_choices(model);
     }
-    let rows = network.nodes().into_iter().filter_map(|card| {
-        let interface = network.card(card)?;
-        (interface.interface_kind != crate::model::InterfaceKind::Bridge).then(|| {
-            ui::BridgeGroupView {
-                card: convert::ui_card_id(card),
-                name: cards::socket_name(labels, network, card),
-                bridge_index: i32::try_from(state.bridge_choice(card)).unwrap_or_default(),
-            }
-        })
+    let rows = network.nodes().into_iter().map(|card| ui::BridgeGroupView {
+        card: convert::ui_card_id(card),
+        name: cards::socket_name(labels, network, card),
+        bridge_index: i32::try_from(state.bridge_choice(card)).unwrap_or_default(),
     });
     if let Some(model) = sync(&bridge.get_bridge_group_cards(), rows.collect()) {
         bridge.set_bridge_group_cards(model);

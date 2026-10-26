@@ -398,9 +398,6 @@ msgstr "Edit mode"
 msgid "list.finish-editing"
 msgstr "Finish editing"
 
-msgid "list.roles-groups"
-msgstr "Map setup"
-
 msgid "filter.button"
 msgstr "{0}  {1}"
 
@@ -728,9 +725,6 @@ msgstr "Cancel"
 # Edit page
 msgid "edit.title"
 msgstr "Map setup"
-
-msgid "edit.intro"
-msgstr "Organise how the map looks and how its network cards belong together. Open only the section you need."
 
 msgid "edit.back"
 msgstr "Back to map"
@@ -1437,10 +1431,16 @@ msgid "bridge-groups.title"
 msgstr "Bridge groups"
 
 msgid "bridge-groups.intro"
-msgstr "Put physical and virtual network cards into software bridges such as br-lan or br-wan."
+msgstr "Create bridge groups such as br-lan or br-wan, then choose one for each network card."
+
+msgid "bridge-groups.new"
+msgstr "Bridge name, such as br-lan"
+
+msgid "bridge-groups.add"
+msgstr "Add bridge"
 
 msgid "bridge-groups.none"
-msgstr "Add a network card and set its card type to Bridge before assigning members."
+msgstr "Add the first bridge above, then assign cards to it."
 
 # {0} is the network card being assigned to a software bridge.
 msgid "bridge-groups.choice"

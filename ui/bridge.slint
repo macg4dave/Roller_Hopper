@@ -588,6 +588,9 @@ export global Bridge {
     // Moves a card by id into the software bridge at an index in bridge-group-choices, or
     // removes it from a bridge at 0.
     callback set-card-bridge(int, int);
+    // Creates a named bridge group without creating a device or card. False means its name is
+    // blank or already used.
+    callback add-bridge-group(string) -> bool;
     // Puts the selected card in the segment at an index in segment-choices (0 for none), and
     // sets its mode by index in Labels.membership-modes.
     callback set-card-segment(int);

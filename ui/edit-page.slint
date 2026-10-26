@@ -18,8 +18,6 @@ export component EditPage inherits Rectangle {
     property <bool> moved;
     property <length> panel-x;
     property <length> panel-y;
-    property <length> drag-x;
-    property <length> drag-y;
     property <bool> expanded: groups-open || roles-open || bridges-open || segments-open;
 
     background: transparent;
@@ -31,10 +29,10 @@ export component EditPage inherits Rectangle {
         y: root.moved
             ? root.panel-y.clamp(Theme.space-s, root.height - self.height - Theme.space-s)
             : (root.height - self.height) / 2;
-        width: min(680px, parent.width - 2 * Theme.space-s);
+        width: min(480px, parent.width - 2 * Theme.space-s);
         height: root.expanded
-            ? min(600px, parent.height - 2 * Theme.space-s)
-            : min(286px, parent.height - 2 * Theme.space-s);
+            ? min(540px, parent.height - 2 * Theme.space-s)
+            : min(220px, parent.height - 2 * Theme.space-s);
         background: Theme.surface;
         border-color: Theme.border-strong;
         border-width: 1px;
@@ -49,7 +47,7 @@ export component EditPage inherits Rectangle {
 
         VerticalLayout {
             title-bar := Rectangle {
-                height: 48px;
+                height: 40px;
                 background: drag.has-hover ? Theme.hover : Theme.stripe;
                 animate background { duration: 140ms; }
 
@@ -57,15 +55,15 @@ export component EditPage inherits Rectangle {
                     mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
                     pointer-event(event) => {
                         if event.kind == PointerEventKind.down {
-                            root.drag-x = panel.x;
-                            root.drag-y = panel.y;
+                            root.panel-x = panel.x;
+                            root.panel-y = panel.y;
+                            root.moved = true;
                         }
                     }
                     moved => {
                         if self.pressed {
-                            root.moved = true;
-                            root.panel-x = root.drag-x + self.mouse-x - self.pressed-x;
-                            root.panel-y = root.drag-y + self.mouse-y - self.pressed-y;
+                            root.panel-x = panel.x + self.mouse-x - self.pressed-x;
+                            root.panel-y = panel.y + self.mouse-y - self.pressed-y;
                         }
                     }
                 }
@@ -76,7 +74,7 @@ export component EditPage inherits Rectangle {
                     spacing: Theme.space-s;
                     Text {
                         text: @tr("edit.title");
-                        font-size: Theme.font-heading;
+                        font-size: Theme.font-body;
                         font-weight: 600;
                         color: Theme.text;
                         vertical-alignment: center;
@@ -87,7 +85,7 @@ export component EditPage inherits Rectangle {
                         Button {
                             icon: @image-url("icons/close.svg");
                             colorize-icon: true;
-                            accessible-label: @tr("edit.back");
+                            accessible-label: @tr("list.finish-editing");
                             clicked => { root.back(); }
                         }
                     }
@@ -95,15 +93,7 @@ export component EditPage inherits Rectangle {
             }
 
             VerticalLayout {
-                padding: Theme.space-m;
-                spacing: Theme.space-s;
-
-                Text {
-                    text: @tr("edit.intro");
-                    font-size: Theme.font-small;
-                    color: Theme.text-muted;
-                    overflow: elide;
-                }
+                padding: Theme.space-s;
 
                 setup-scroll := ScrollView {
                     vertical-stretch: 1;

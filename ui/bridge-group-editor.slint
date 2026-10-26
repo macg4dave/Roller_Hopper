@@ -1,4 +1,4 @@
-import { ComboBox, ScrollView } from "std-widgets.slint";
+import { Button, ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
 import { Bridge } from "bridge.slint";
 import { Theme } from "theme.slint";
 
@@ -12,6 +12,29 @@ export component BridgeGroupEditor inherits VerticalLayout {
         font-size: Theme.font-body;
         color: Theme.text-muted;
         wrap: word-wrap;
+    }
+    HorizontalLayout {
+        spacing: Theme.space-s;
+        bridge-name := LineEdit {
+            horizontal-stretch: 1;
+            placeholder-text: @tr("bridge-groups.new");
+            accepted(text) => {
+                if Bridge.add-bridge-group(text) {
+                    self.text = "";
+                }
+            }
+        }
+        Button {
+            text: @tr("bridge-groups.add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            enabled: bridge-name.text != "";
+            clicked => {
+                if Bridge.add-bridge-group(bridge-name.text) {
+                    bridge-name.text = "";
+                }
+            }
+        }
     }
     if Bridge.bridge-group-choices.length <= 1: Text {
         text: @tr("bridge-groups.none");
@@ -42,7 +65,7 @@ export component BridgeGroupEditor inherits VerticalLayout {
                         horizontal-stretch: 1;
                     }
                     ComboBox {
-                        width: 260px;
+                        width: 200px;
                         model: Bridge.bridge-group-choices;
                         current-index: member.bridge-index;
                         accessible-label: @tr("bridge-groups.choice", member.name);

@@ -18,7 +18,7 @@ import { AiSettingsWindow, AnswerEnd, GenerationSettings, GpuCheck, ModelState }
 export { Bridge, Labels, AiSettingsWindow, AnswerEnd, GenerationSettings, GpuCheck, InstallOutcome, ModelState }
 
 // What the window shows under the header: the map view, or a page over it.
-enum Page { map, edit, discovery }
+enum Page { map, discovery }
 
 export component AppWindow inherits Window {
     title: @tr("app.title");
@@ -47,6 +47,7 @@ export component AppWindow inherits Window {
             ai-settings => { root.open-ai-settings(); }
             // The selection may have moved on the map meanwhile: back on the found host's device.
             scan => {
+                root.edit-mode = false;
                 page = Page.discovery;
                 Bridge.select-found(Bridge.selected-found);
             }
@@ -66,7 +67,6 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 0;
                         edit-mode <=> root.edit-mode;
                         show-on-map(device) => { canvas.centre-on(device.x, device.y); }
-                        manage-roles => { page = Page.edit; }
                     }
                     canvas := TopologyCanvas {
                         min-width: Theme.canvas-min-width;
@@ -98,8 +98,8 @@ export component AppWindow inherits Window {
                 }
             }
 
-            if page == Page.edit: EditPage {
-                back => { page = Page.map; }
+            if root.edit-mode && page == Page.map: EditPage {
+                back => { root.edit-mode = false; }
             }
 
             if page == Page.discovery: DiscoveryPage {

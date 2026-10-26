@@ -37,7 +37,7 @@ export component SegmentEditor inherits VerticalLayout {
                     spacing: Theme.space-m;
                     VerticalLayout {
                         alignment: center;
-                        width: 180px;
+                        width: 130px;
                         NameBox {
                             // Segment names are the user's own words.
                             name: segment.name;
@@ -47,7 +47,7 @@ export component SegmentEditor inherits VerticalLayout {
                     }
                     VerticalLayout {
                         alignment: center;
-                        width: 90px;
+                        width: 60px;
                         NameEdit {
                             name: segment.vlan;
                             placeholder-text: @tr("segments.vlan");
@@ -57,7 +57,7 @@ export component SegmentEditor inherits VerticalLayout {
                     }
                     VerticalLayout {
                         alignment: center;
-                        width: 160px;
+                        width: 110px;
                         NameEdit {
                             name: segment.subnet;
                             placeholder-text: @tr("segments.subnet");
@@ -91,7 +91,7 @@ export component SegmentEditor inherits VerticalLayout {
         alignment: start;
         spacing: Theme.space-xs;
         name := LineEdit {
-            width: 260px;
+            width: 200px;
             placeholder-text: @tr("segments.new");
             accepted(text) => {
                 Bridge.add-segment(text);

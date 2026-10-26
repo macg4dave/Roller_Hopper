@@ -34,6 +34,7 @@ impl Network {
         check_links(&self.links, &owners)?;
         check_relations(&self.relations, &owners)?;
         check_segments(&self, &owners)?;
+        self.check_bridge_groups()?;
         self.check_hosts()?;
         self.check_roles()?;
         Ok(self)
@@ -86,6 +87,30 @@ impl Network {
         let groups = roles.iter().filter_map(|r| self.roles.group(r));
         let mut used = self.devices.iter().map(|d| &d.role);
         if !used.all(|r| roles.contains(&r)) || !groups.into_iter().all(|g| self.groups.contains(g))
+        {
+            return Err(Invalid::MissingReference);
+        }
+        Ok(())
+    }
+
+    fn check_bridge_groups(&self) -> Result<(), Invalid> {
+        let mut names = HashSet::new();
+        if self
+            .bridge_groups
+            .iter()
+            .any(|group| group.trim().is_empty() || !names.insert(group.to_lowercase()))
+        {
+            return Err(Invalid::DuplicateId);
+        }
+        if self
+            .devices
+            .iter()
+            .flat_map(|device| &device.cards)
+            .any(|card| {
+                card.bridge_group
+                    .as_ref()
+                    .is_some_and(|group| !self.bridge_groups.contains(group))
+            })
         {
             return Err(Invalid::MissingReference);
         }

@@ -41,10 +41,10 @@ export component GroupEditor inherits VerticalLayout {
                 HorizontalLayout {
                     padding-left: Theme.space-s;
                     padding-right: Theme.space-s;
-                    spacing: Theme.space-m;
+                    spacing: Theme.space-s;
                     VerticalLayout {
                         alignment: center;
-                        width: 180px;
+                        width: 110px;
                         NameBox {
                             name: group.name;
                             field-label: @tr("groups.name");
@@ -100,7 +100,7 @@ export component GroupEditor inherits VerticalLayout {
         alignment: start;
         spacing: Theme.space-xs;
         name := LineEdit {
-            width: 260px;
+            width: 220px;
             placeholder-text: @tr("groups.new");
             init => { self.focus(); }
             accepted(text) => {

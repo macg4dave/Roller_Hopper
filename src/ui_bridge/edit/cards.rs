@@ -58,40 +58,28 @@ impl AppState {
         at.map_or(0, |at| at + 1)
     }
 
-    /// Software bridges ordinary cards may belong to.
-    pub(in crate::ui_bridge) fn bridge_choices(&self) -> Vec<CardId> {
-        self.network
-            .nodes()
-            .into_iter()
-            .filter(|&card| {
-                self.network.card(card).map(|c| c.interface_kind) == Some(InterfaceKind::Bridge)
-            })
-            .collect()
-    }
-
-    /// A card's software bridge as an index after "none".
+    /// A card's bridge group as an index after "none".
     pub(in crate::ui_bridge) fn bridge_choice(&self, card: CardId) -> usize {
-        let bridge = self.network.bridge_for(card);
-        bridge
-            .and_then(|bridge| {
-                self.bridge_choices()
+        self.network
+            .card(card)
+            .and_then(|card| card.bridge_group.as_deref())
+            .and_then(|group| {
+                self.network
+                    .bridge_groups()
                     .iter()
-                    .position(|&candidate| candidate == bridge)
+                    .position(|candidate| candidate == group)
             })
             .map_or(0, |index| index + 1)
     }
 
     fn set_card_bridge(&mut self, card: CardId, choice: usize) {
-        let bridge = match choice.checked_sub(1) {
-            None => None,
-            Some(index) => match self.bridge_choices().get(index) {
-                Some(&bridge) => Some(bridge),
-                None => return,
-            },
-        };
-        if self.network.set_bridge(card, bridge) {
-            self.lay_out_at_rest();
-        }
+        self.network
+            .set_card_bridge_group(card, choice.checked_sub(1));
+    }
+
+    /// Adds a named bridge group without creating a device or network card.
+    fn add_bridge_group(&mut self, name: &str) -> bool {
+        self.network.add_bridge_group(name)
     }
 
     /// Adds a blank card to the selected device and selects it, so it can be filled in.
@@ -240,6 +228,14 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         }
     });
     bridge.on_set_card_bridge(move |card, choice| set_bridge((card, choice)));
+    let (add_bridge_ui, add_bridge_state) = (ui.as_weak(), Rc::clone(state));
+    bridge.on_add_bridge_group(move |name| {
+        let mut added = false;
+        update(&add_bridge_ui, &add_bridge_state, |st| {
+            added = st.add_bridge_group(&name);
+        });
+        added
+    });
     connect_interface_details(ui, state);
 }
 
@@ -420,17 +416,29 @@ mod tests {
     }
 
     #[test]
-    fn a_card_joins_a_software_bridge_from_its_group_dropdown() {
+    fn a_card_joins_a_named_bridge_group_from_its_dropdown() {
         let (mut state, card) = with_new_card();
-        let bridge = state.network.add_card(PC).unwrap();
-        state.network.card_mut(bridge).unwrap().interface_kind = InterfaceKind::Bridge;
-        assert_eq!(state.bridge_choices(), [bridge]);
+        assert!(state.add_bridge_group("br-lan"));
         state.set_card_bridge(card, 1);
-        assert_eq!(state.network.bridge_for(card), Some(bridge));
+        assert_eq!(
+            state.network.card(card).unwrap().bridge_group.as_deref(),
+            Some("br-lan")
+        );
         assert_eq!(state.bridge_choice(card), 1);
         state.set_card_bridge(card, 0);
-        assert_eq!(state.network.bridge_for(card), None);
+        assert_eq!(state.network.card(card).unwrap().bridge_group, None);
         assert_eq!(state.bridge_choice(card), 0);
+    }
+
+    #[test]
+    fn a_named_bridge_group_is_added_once_without_creating_a_card() {
+        let mut state = AppState::new(mock_data::network());
+        let cards = state.network.nodes().len();
+        assert!(state.add_bridge_group(" br-lan "));
+        assert_eq!(state.network.bridge_groups(), ["br-lan"]);
+        assert_eq!(state.network.nodes().len(), cards);
+        assert!(!state.add_bridge_group("BR-LAN"));
+        assert!(!state.add_bridge_group(" "));
     }
 
     #[test]

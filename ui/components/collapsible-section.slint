@@ -8,6 +8,7 @@ export component CollapsibleSection inherits VerticalLayout {
     in-out property <bool> open;
 
     spacing: Theme.space-xs;
+    vertical-stretch: 0;
 
     Button {
         height: 34px;
@@ -17,10 +18,16 @@ export component CollapsibleSection inherits VerticalLayout {
         primary: root.open;
         clicked => { root.open = !root.open; }
     }
-    VerticalLayout {
-        visible: root.open;
-        padding-left: Theme.space-s;
-        padding-right: Theme.space-s;
-        @children
+    Rectangle {
+        height: root.open ? body.preferred-height : 0px;
+        vertical-stretch: 0;
+        clip: true;
+
+        body := VerticalLayout {
+            visible: root.open;
+            padding-left: Theme.space-s;
+            padding-right: Theme.space-s;
+            @children
+        }
     }
 }

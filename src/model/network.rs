@@ -53,6 +53,8 @@ pub(crate) struct Network {
     segments: Vec<Segment>,
     #[serde(default)]
     memberships: Vec<SegmentMembership>,
+    #[serde(default)]
+    bridge_groups: Vec<String>,
     roles: Roles,
     groups: Groups,
 }
@@ -66,6 +68,7 @@ impl Default for Network {
             relations: Vec::new(),
             segments: Vec::new(),
             memberships: Vec::new(),
+            bridge_groups: Vec::new(),
             roles: Roles::default(),
             groups: Groups::default(),
         };
@@ -91,6 +94,44 @@ impl Network {
         self.devices
             .iter()
             .filter(move |device| device.matches(query))
+    }
+
+    pub(crate) fn bridge_groups(&self) -> &[String] {
+        &self.bridge_groups
+    }
+
+    /// Adds a uniquely named bridge group without creating a device or network card.
+    pub(crate) fn add_bridge_group(&mut self, name: &str) -> bool {
+        let name = name.trim();
+        if name.is_empty()
+            || self
+                .bridge_groups
+                .iter()
+                .any(|group| group.eq_ignore_ascii_case(name))
+        {
+            return false;
+        }
+        self.bridge_groups.push(name.to_owned());
+        true
+    }
+
+    /// Moves a card into a named bridge group, or removes it from every group with `None`.
+    pub(crate) fn set_card_bridge_group(&mut self, card: CardId, group: Option<usize>) -> bool {
+        let group = match group {
+            Some(index) => match self.bridge_groups.get(index) {
+                Some(name) => Some(name.clone()),
+                None => return false,
+            },
+            None => None,
+        };
+        let Some(card) = self.card_mut(card) else {
+            return false;
+        };
+        if card.bridge_group == group {
+            return false;
+        }
+        card.bridge_group = group;
+        true
     }
 
     /// Standard roles followed by the custom ones, in the order they were added.

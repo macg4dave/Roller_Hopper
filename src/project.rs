@@ -26,6 +26,7 @@ const MAX_DEVICES: usize = 10_000;
 const MAX_CARDS: usize = 50_000;
 const MAX_SERVICES: usize = 200_000;
 const MAX_SEGMENTS: usize = 10_000;
+const MAX_BRIDGE_GROUPS: usize = 10_000;
 const MAX_TEXT_BYTES: usize = 4 * 1024;
 const MAX_NOTES_BYTES: usize = 64 * 1024;
 
@@ -142,16 +143,19 @@ fn within_limits(network: &Network) -> bool {
     let groups = network.groups().iter();
     let group_names = groups.map(|(_, name)| name.typed().map_or(0, str::len));
     let segment_names = network.segments().iter().map(|segment| segment.name.len());
+    let bridge_group_names = network.bridge_groups().iter().map(String::len);
     let short = |text: Option<&str>| text.is_none_or(|t| t.len() <= MAX_TEXT_BYTES);
     devices.len() <= MAX_DEVICES
         && cards.count() <= MAX_CARDS
         && services.count() <= MAX_SERVICES
         && network.segments().len() <= MAX_SEGMENTS
+        && network.bridge_groups().len() <= MAX_BRIDGE_GROUPS
         && devices.iter().all(|d| device_within_limits(d, short))
         && card_texts.into_iter().all(short)
         && role_names
             .chain(group_names)
             .chain(segment_names)
+            .chain(bridge_group_names)
             .all(|n| n <= MAX_TEXT_BYTES)
 }
 
