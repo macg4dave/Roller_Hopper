@@ -1,44 +1,144 @@
-import { Button } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { BridgeGroupEditor } from "bridge-group-editor.slint";
 import { GroupEditor } from "group-editor.slint";
 import { RoleEditor } from "role-editor.slint";
 import { SegmentEditor } from "segment-editor.slint";
+import { CollapsibleSection } from "components/collapsible-section.slint";
 
-// Role, group and segment management. Device editing stays on the map, where its context
-// remains visible.
+// Floating map setup: the map stays usable behind a compact palette. Its title bar moves it,
+// while each kind of organisation expands in place rather than opening another page.
 export component EditPage inherits Rectangle {
     callback back();
 
-    background: Theme.surface;
+    property <bool> groups-open;
+    property <bool> roles-open;
+    property <bool> bridges-open;
+    property <bool> segments-open;
+    property <bool> moved;
+    property <length> panel-x;
+    property <length> panel-y;
+    property <length> drag-x;
+    property <length> drag-y;
+    property <bool> expanded: groups-open || roles-open || bridges-open || segments-open;
 
-    VerticalLayout {
-        padding: Theme.space-l;
-        spacing: Theme.space-m;
+    background: transparent;
 
-        HorizontalLayout {
-            spacing: Theme.space-m;
-            alignment: start;
-            Button {
-                text: @tr("edit.back");
-                clicked => { root.back(); }
-            }
-            Text {
-                text: @tr("edit.title");
-                font-size: Theme.font-title;
-                font-weight: 600;
-                color: Theme.text;
-                vertical-alignment: center;
-            }
-        }
+    panel := Rectangle {
+        x: root.moved
+            ? root.panel-x.clamp(Theme.space-s, root.width - self.width - Theme.space-s)
+            : (root.width - self.width) / 2;
+        y: root.moved
+            ? root.panel-y.clamp(Theme.space-s, root.height - self.height - Theme.space-s)
+            : (root.height - self.height) / 2;
+        width: min(680px, parent.width - 2 * Theme.space-s);
+        height: root.expanded
+            ? min(600px, parent.height - 2 * Theme.space-s)
+            : min(286px, parent.height - 2 * Theme.space-s);
+        background: Theme.surface;
+        border-color: Theme.border-strong;
+        border-width: 1px;
+        border-radius: Theme.panel-radius;
+        clip: true;
+        drop-shadow-blur: 18px;
+        drop-shadow-offset-y: 6px;
+        drop-shadow-color: Theme.scrim;
+        accessible-role: groupbox;
+        accessible-label: @tr("edit.title");
+        animate height { duration: 160ms; easing: ease-out; }
 
         VerticalLayout {
-            horizontal-stretch: 1;
-            vertical-stretch: 1;
-            spacing: Theme.space-l;
+            title-bar := Rectangle {
+                height: 48px;
+                background: drag.has-hover ? Theme.hover : Theme.stripe;
+                animate background { duration: 140ms; }
 
-            GroupEditor { vertical-stretch: 0; }
-            SegmentEditor { vertical-stretch: 0; }
-            RoleEditor { vertical-stretch: 1; }
+                drag := TouchArea {
+                    mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down {
+                            root.drag-x = panel.x;
+                            root.drag-y = panel.y;
+                        }
+                    }
+                    moved => {
+                        if self.pressed {
+                            root.moved = true;
+                            root.panel-x = root.drag-x + self.mouse-x - self.pressed-x;
+                            root.panel-y = root.drag-y + self.mouse-y - self.pressed-y;
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: Theme.space-m;
+                    padding-right: Theme.space-s;
+                    spacing: Theme.space-s;
+                    Text {
+                        text: @tr("edit.title");
+                        font-size: Theme.font-heading;
+                        font-weight: 600;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            icon: @image-url("icons/close.svg");
+                            colorize-icon: true;
+                            accessible-label: @tr("edit.back");
+                            clicked => { root.back(); }
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                padding: Theme.space-m;
+                spacing: Theme.space-s;
+
+                Text {
+                    text: @tr("edit.intro");
+                    font-size: Theme.font-small;
+                    color: Theme.text-muted;
+                    overflow: elide;
+                }
+
+                setup-scroll := ScrollView {
+                    vertical-stretch: 1;
+                    content-width: self.visible-width;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                    VerticalLayout {
+                        width: setup-scroll.visible-width;
+                        spacing: Theme.space-xs;
+
+                        CollapsibleSection {
+                            title: @tr("groups.title");
+                            open <=> root.groups-open;
+                            GroupEditor { show-heading: false; }
+                        }
+                        CollapsibleSection {
+                            title: @tr("roles.title");
+                            open <=> root.roles-open;
+                            RoleEditor {
+                                show-heading: false;
+                                height: 410px;
+                            }
+                        }
+                        CollapsibleSection {
+                            title: @tr("bridge-groups.title");
+                            open <=> root.bridges-open;
+                            BridgeGroupEditor { }
+                        }
+                        CollapsibleSection {
+                            title: @tr("segments.heading");
+                            open <=> root.segments-open;
+                            SegmentEditor { show-heading: false; }
+                        }
+                    }
+                }
+            }
         }
     }
 }

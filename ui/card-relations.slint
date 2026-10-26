@@ -1,5 +1,5 @@
 import { Button, ComboBox } from "std-widgets.slint";
-import { Bridge, InterfaceKind, MembershipMode, RelationshipKind } from "bridge.slint";
+import { Bridge, MembershipMode, RelationshipKind } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { DetailField } from "components/detail-field.slint";
@@ -59,16 +59,6 @@ export component CardRelations inherits VerticalLayout {
                         : Bridge.card.relationship == RelationshipKind.routed ? 3 : 0;
                     accessible-label: @tr("details.relationship");
                     selected => { Bridge.set-relationship-kind(self.current-index); }
-                }
-            }
-            if Bridge.card.interface-kind != InterfaceKind.bridge: DetailField {
-                label: @tr("details.bridge-group");
-                ComboBox {
-                    horizontal-stretch: 1;
-                    model: Bridge.bridge-choices;
-                    current-index: Bridge.card-bridge-index;
-                    accessible-label: @tr("details.bridge-group");
-                    selected => { Bridge.set-card-bridge(self.current-index); }
                 }
             }
             DetailField {

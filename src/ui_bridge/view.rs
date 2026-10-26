@@ -35,6 +35,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         bridge.set_list(model);
     }
     push_roles(&bridge, &labels, state);
+    push_bridge_groups(&bridge, &labels, state);
     bridge.set_count_all(i32::try_from(network.devices().len()).unwrap_or(i32::MAX));
     discovery::push(&bridge, &labels, state);
     bridge.set_scans(i32::try_from(state.scans).unwrap_or(i32::MAX));
@@ -181,6 +182,33 @@ fn push_roles(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     }
 }
 
+/// Every ordinary network card and the software bridge it belongs to, for map setup.
+fn push_bridge_groups(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let network = &state.network;
+    let bridges = state.bridge_choices();
+    let choices = std::iter::once(labels.invoke_no_link()).chain(
+        bridges
+            .iter()
+            .map(|&card| cards::socket_name(labels, network, card)),
+    );
+    if let Some(model) = sync(&bridge.get_bridge_group_choices(), choices.collect()) {
+        bridge.set_bridge_group_choices(model);
+    }
+    let rows = network.nodes().into_iter().filter_map(|card| {
+        let interface = network.card(card)?;
+        (interface.interface_kind != crate::model::InterfaceKind::Bridge).then(|| {
+            ui::BridgeGroupView {
+                card: convert::ui_card_id(card),
+                name: cards::socket_name(labels, network, card),
+                bridge_index: i32::try_from(state.bridge_choice(card)).unwrap_or_default(),
+            }
+        })
+    });
+    if let Some(model) = sync(&bridge.get_bridge_group_cards(), rows.collect()) {
+        bridge.set_bridge_group_cards(model);
+    }
+}
+
 /// The selected device (that of the selected card, if a card is selected) and its cards.
 fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let selected = state
@@ -265,13 +293,6 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_upstream_choices(model);
     }
     bridge.set_card_plug_index(i32::try_from(state.plug_choice()).unwrap_or_default());
-    let bridges = state.bridge_choices().into_iter();
-    let bridge_names = bridges.map(|bridge_card| cards::socket_name(labels, network, bridge_card));
-    let bridge_choices = std::iter::once(labels.invoke_no_link()).chain(bridge_names);
-    if let Some(model) = sync(&bridge.get_bridge_choices(), bridge_choices.collect()) {
-        bridge.set_bridge_choices(model);
-    }
-    bridge.set_card_bridge_index(i32::try_from(state.bridge_choice()).unwrap_or_default());
     // Segment names are the user's own words.
     let segments = network.segments().iter().map(|s| s.name.as_str().into());
     let segment_names = std::iter::once(labels.invoke_no_segment()).chain(segments);

@@ -56,7 +56,7 @@ export component AppWindow inherits Window {
             vertical-stretch: 1;
 
             Rectangle {
-                visible: page == Page.map;
+                visible: page != Page.discovery;
 
                 HorizontalLayout {
                     // A narrow window squeezes the map first, then the panels down to their minimum.

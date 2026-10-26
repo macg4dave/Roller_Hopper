@@ -58,41 +58,30 @@ impl AppState {
         at.map_or(0, |at| at + 1)
     }
 
-    /// Software bridges the selected non-bridge card may belong to.
+    /// Software bridges ordinary cards may belong to.
     pub(in crate::ui_bridge) fn bridge_choices(&self) -> Vec<CardId> {
-        let Some(selected) = self.selected_card() else {
-            return Vec::new();
-        };
-        if self.network.card(selected).map(|c| c.interface_kind) == Some(InterfaceKind::Bridge) {
-            return Vec::new();
-        }
         self.network
             .nodes()
             .into_iter()
             .filter(|&card| {
                 self.network.card(card).map(|c| c.interface_kind) == Some(InterfaceKind::Bridge)
-                    && self
-                        .network
-                        .can_join(selected, card, RelationshipKind::BridgeMember)
             })
             .collect()
     }
 
-    /// The selected card's software bridge as an index after "none".
-    pub(in crate::ui_bridge) fn bridge_choice(&self) -> usize {
-        let bridge = self
-            .selected_card()
-            .and_then(|card| self.network.bridge_for(card));
+    /// A card's software bridge as an index after "none".
+    pub(in crate::ui_bridge) fn bridge_choice(&self, card: CardId) -> usize {
+        let bridge = self.network.bridge_for(card);
         bridge
             .and_then(|bridge| {
                 self.bridge_choices()
                     .iter()
-                    .position(|&card| card == bridge)
+                    .position(|&candidate| candidate == bridge)
             })
             .map_or(0, |index| index + 1)
     }
 
-    fn set_card_bridge(&mut self, choice: usize) {
+    fn set_card_bridge(&mut self, card: CardId, choice: usize) {
         let bridge = match choice.checked_sub(1) {
             None => None,
             Some(index) => match self.bridge_choices().get(index) {
@@ -100,9 +89,7 @@ impl AppState {
                 None => return,
             },
         };
-        if let Some(card) = self.selected_card()
-            && self.network.set_bridge(card, bridge)
-        {
+        if self.network.set_bridge(card, bridge) {
             self.lay_out_at_rest();
         }
     }
@@ -247,9 +234,12 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_plug_card(handler(ui, state, |st, choice| {
         st.plug_card(convert::index(choice));
     }));
-    bridge.on_set_card_bridge(handler(ui, state, |st, choice| {
-        st.set_card_bridge(convert::index(choice));
-    }));
+    let set_bridge = handler(ui, state, |st, (card, choice)| {
+        if let Some(card) = convert::card_id(card) {
+            st.set_card_bridge(card, convert::index(choice));
+        }
+    });
+    bridge.on_set_card_bridge(move |card, choice| set_bridge((card, choice)));
     connect_interface_details(ui, state);
 }
 
@@ -435,12 +425,12 @@ mod tests {
         let bridge = state.network.add_card(PC).unwrap();
         state.network.card_mut(bridge).unwrap().interface_kind = InterfaceKind::Bridge;
         assert_eq!(state.bridge_choices(), [bridge]);
-        state.set_card_bridge(1);
+        state.set_card_bridge(card, 1);
         assert_eq!(state.network.bridge_for(card), Some(bridge));
-        assert_eq!(state.bridge_choice(), 1);
-        state.set_card_bridge(0);
+        assert_eq!(state.bridge_choice(card), 1);
+        state.set_card_bridge(card, 0);
         assert_eq!(state.network.bridge_for(card), None);
-        assert_eq!(state.bridge_choice(), 0);
+        assert_eq!(state.bridge_choice(card), 0);
     }
 
     #[test]

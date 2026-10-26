@@ -1,0 +1,55 @@
+import { ComboBox, ScrollView } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+
+// Assigns ordinary network cards to software-bridge cards such as br-lan and br-wan. This is
+// bridge membership in the topology, not the visual role grouping edited in GroupEditor.
+export component BridgeGroupEditor inherits VerticalLayout {
+    spacing: Theme.space-s;
+
+    Text {
+        text: @tr("bridge-groups.intro");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+    if Bridge.bridge-group-choices.length <= 1: Text {
+        text: @tr("bridge-groups.none");
+        font-size: Theme.font-body;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+    if Bridge.bridge-group-choices.length > 1: groups-scroll := ScrollView {
+        height: min(Bridge.bridge-group-cards.length, 7) * Theme.card-row-height;
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        VerticalLayout {
+            width: groups-scroll.visible-width;
+            for member[i] in Bridge.bridge-group-cards: Rectangle {
+                height: Theme.card-row-height;
+                background: Math.mod(i, 2) == 1 ? Theme.stripe : transparent;
+                border-radius: Theme.radius;
+                HorizontalLayout {
+                    padding-left: Theme.space-s;
+                    padding-right: Theme.space-s;
+                    spacing: Theme.space-m;
+                    Text {
+                        text: member.name;
+                        font-size: Theme.font-body;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    ComboBox {
+                        width: 260px;
+                        model: Bridge.bridge-group-choices;
+                        current-index: member.bridge-index;
+                        accessible-label: @tr("bridge-groups.choice", member.name);
+                        selected => { Bridge.set-card-bridge(member.card, self.current-index); }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -9,16 +9,17 @@ import { LineStylePicker } from "components/line-style-picker.slint";
 // standard set.
 export component GroupEditor inherits VerticalLayout {
     property <bool> adding;
+    in property <bool> show-heading: true;
 
     spacing: Theme.space-m;
 
-    Text {
+    if show-heading: Text {
         text: @tr("groups.title");
         font-size: Theme.font-heading;
         font-weight: 600;
         color: Theme.text;
     }
-    Text {
+    if show-heading: Text {
         text: @tr("groups.intro");
         font-size: Theme.font-body;
         color: Theme.text-muted;

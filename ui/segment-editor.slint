@@ -9,9 +9,10 @@ import { NameEdit } from "components/name-edit.slint";
 // name, VLAN ID, subnet and colour, and a way to add one. Cards join a segment in the card
 // editor; on the map a segment is a region around its cards.
 export component SegmentEditor inherits VerticalLayout {
+    in property <bool> show-heading: true;
     spacing: Theme.space-m;
 
-    Text {
+    if show-heading: Text {
         text: @tr("segments.heading");
         font-size: Theme.font-heading;
         font-weight: 600;

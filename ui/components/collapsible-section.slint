@@ -1,0 +1,26 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// One disclosure section in the floating map-setup window. Only its open child editor takes
+// space, keeping a large set of controls understandable without adding separate pages.
+export component CollapsibleSection inherits VerticalLayout {
+    in property <string> title;
+    in-out property <bool> open;
+
+    spacing: Theme.space-xs;
+
+    Button {
+        height: 34px;
+        text: root.title;
+        icon: @image-url("../icons/chevron-right.svg");
+        colorize-icon: true;
+        primary: root.open;
+        clicked => { root.open = !root.open; }
+    }
+    VerticalLayout {
+        visible: root.open;
+        padding-left: Theme.space-s;
+        padding-right: Theme.space-s;
+        @children
+    }
+}

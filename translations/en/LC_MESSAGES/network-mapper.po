@@ -399,7 +399,7 @@ msgid "list.finish-editing"
 msgstr "Finish editing"
 
 msgid "list.roles-groups"
-msgstr "Roles and groups"
+msgstr "Map setup"
 
 msgid "filter.button"
 msgstr "{0}  {1}"
@@ -727,7 +727,10 @@ msgstr "Cancel"
 
 # Edit page
 msgid "edit.title"
-msgstr "Roles and groups"
+msgstr "Map setup"
+
+msgid "edit.intro"
+msgstr "Organise how the map looks and how its network cards belong together. Open only the section you need."
 
 msgid "edit.back"
 msgstr "Back to map"
@@ -1430,8 +1433,18 @@ msgstr "Advanced connections"
 msgid "connection.hide-advanced"
 msgstr "Hide advanced connections"
 
-msgid "details.bridge-group"
-msgstr "Bridge group"
+msgid "bridge-groups.title"
+msgstr "Bridge groups"
+
+msgid "bridge-groups.intro"
+msgstr "Put physical and virtual network cards into software bridges such as br-lan or br-wan."
+
+msgid "bridge-groups.none"
+msgstr "Add a network card and set its card type to Bridge before assigning members."
+
+# {0} is the network card being assigned to a software bridge.
+msgid "bridge-groups.choice"
+msgstr "Bridge group for {0}"
 
 msgid "relationships.additional"
 msgstr "Also joined to"

@@ -7,16 +7,17 @@ import { RoleColumns, RoleRow } from "components/role-row.slint";
 // Below the groups: every role, editable, with ways to add one or restore the standard set.
 export component RoleEditor inherits VerticalLayout {
     property <bool> adding;
+    in property <bool> show-heading: true;
 
     spacing: Theme.space-m;
 
-    Text {
+    if show-heading: Text {
         text: @tr("roles.title");
         font-size: Theme.font-heading;
         font-weight: 600;
         color: Theme.text;
     }
-    Text {
+    if show-heading: Text {
         text: @tr("roles.intro");
         font-size: Theme.font-body;
         color: Theme.text-muted;
