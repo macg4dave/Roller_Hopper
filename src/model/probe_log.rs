@@ -5,11 +5,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProbeProtocol {
     Ssdp,
-    WsDiscovery,
-    NetBios,
-    Smb,
-    Ipp,
-    Http,
 }
 
 impl ProbeProtocol {
@@ -17,18 +12,6 @@ impl ProbeProtocol {
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Ssdp => "SSDP",
-            Self::WsDiscovery => "WS-Discovery",
-            Self::NetBios => "NetBIOS",
-            Self::Smb => "SMB",
-            Self::Ipp => "IPP",
-            Self::Http => "HTTP",
-        }
-    }
-
-    pub(crate) fn transport(self) -> &'static str {
-        match self {
-            Self::Ssdp | Self::WsDiscovery | Self::NetBios => "UDP",
-            Self::Smb | Self::Ipp | Self::Http => "TCP",
         }
     }
 }

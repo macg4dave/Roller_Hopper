@@ -12,6 +12,7 @@
 mod answer;
 mod identify;
 mod mdns;
+mod multicast;
 mod ports;
 mod ssdp;
 mod subnets;

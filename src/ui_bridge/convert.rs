@@ -124,8 +124,8 @@ pub(super) fn ssdp_services(device: &Device) -> SharedString {
 pub(super) fn probe_log(device: &Device) -> SharedString {
     let records = device.probe_log.iter().map(|record| {
         let protocol = record.protocol;
-        let (name, transport) = (protocol.name(), protocol.transport());
-        format!("━━ {name} · {transport} {} ━━\n{}", record.port, record.text)
+        let name = protocol.name();
+        format!("━━ {name} · UDP {} ━━\n{}", record.port, record.text)
     });
     records.collect::<Vec<_>>().join("\n\n").into()
 }

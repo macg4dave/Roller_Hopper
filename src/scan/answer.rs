@@ -14,7 +14,7 @@ use super::ports::PortRegistry;
 use super::ssdp;
 use crate::model::{
     Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
-    ScanOptions, ServiceProtocol, ServiceSource, Services, Status,
+    ProbeProtocol, ProbeRecord, ScanOptions, ServiceProtocol, ServiceSource, Services, Status,
 };
 
 /// The longest name kept, a DNS name's limit.
@@ -102,10 +102,22 @@ pub(super) fn answer(
         mdns_services,
         ssdp_services: ssdp.services.clone(),
         ssdp_server: ssdp.server.clone(),
-        ssdp_responses: ssdp.responses.clone(),
+        probe_log: ssdp_probe_log(ssdp),
         ..device(hostname, suggested_name, card)
     };
     Some(Answer { device, methods })
+}
+
+fn ssdp_probe_log(evidence: &ssdp::Evidence) -> Vec<ProbeRecord> {
+    evidence
+        .responses
+        .iter()
+        .map(|text| ProbeRecord {
+            protocol: ProbeProtocol::Ssdp,
+            port: ssdp::PORT,
+            text: text.clone(),
+        })
+        .collect()
 }
 
 fn manufacturer(announced: &[MdnsService], ssdp: &ssdp::Evidence) -> Option<String> {
@@ -421,7 +433,10 @@ mod tests {
             Some("RouterOS UPnP/1.1")
         );
         assert_eq!(answer.device.ssdp_services, router.ssdp.services);
-        assert_eq!(answer.device.ssdp_responses, router.ssdp.responses);
+        assert_eq!(answer.device.probe_log.len(), router.ssdp.responses.len());
+        assert_eq!(answer.device.probe_log[0].protocol, ProbeProtocol::Ssdp);
+        assert_eq!(answer.device.probe_log[0].port, ssdp::PORT);
+        assert_eq!(answer.device.probe_log[0].text, router.ssdp.responses[0]);
     }
 
     #[test]

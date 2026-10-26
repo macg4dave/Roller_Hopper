@@ -14,7 +14,11 @@ const MAX_PACKET: usize = 16 * 1024;
 
 /// Sends each of `messages` to `group` out of the adapter at `local` (any adapter when
 /// unspecified), then listens for replies, each with the address it came from.
-pub(super) fn ask(local: Ipv4Addr, group: SocketAddrV4, messages: &[&[u8]]) -> Vec<(Ipv4Addr, Vec<u8>)> {
+pub(super) fn ask(
+    local: Ipv4Addr,
+    group: SocketAddrV4,
+    messages: &[&[u8]],
+) -> Vec<(Ipv4Addr, Vec<u8>)> {
     match send(local, group, messages) {
         Some(socket) => receive(&socket),
         None => Vec::new(),
@@ -31,7 +35,9 @@ fn send(local: Ipv4Addr, group: SocketAddrV4, messages: &[&[u8]]) -> Option<UdpS
     socket.set_multicast_ttl_v4(4).ok()?;
     socket.set_read_timeout(Some(RECEIVE_SLICE)).ok()?;
     for message in messages {
-        socket.send_to(message, &SocketAddr::V4(group).into()).ok()?;
+        socket
+            .send_to(message, &SocketAddr::V4(group).into())
+            .ok()?;
     }
     Some(socket.into())
 }
