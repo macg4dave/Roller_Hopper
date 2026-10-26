@@ -1,0 +1,120 @@
+{
+  "format": "rhopper",
+  "version": 2,
+  "project": {
+    "network": {
+      "devices": [
+        {
+          "id": 1, "name": "pc101", "kind": "Desktop", "role": "Desktop", "icon": null, "status": "Online",
+          "cards": [
+            {"id": 1, "name": "enp48s0f4u2", "interface_kind": "Physical", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": "12:5E:75:62:29:21", "vendor": null, "services": [], "icon": "Network cards/USB"},
+            {"id": 2, "name": "virbr-opnwan", "interface_kind": "Bridge", "state": "Up", "address": "10.77.0.1/24", "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 3, "name": "vnet8", "interface_kind": "Virtual", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 4, "name": "vnet11", "interface_kind": "Virtual", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 5, "name": "vnet12", "interface_kind": "Virtual", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 6, "name": "vnet13", "interface_kind": "Virtual", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 7, "name": "br-opnlan", "interface_kind": "Bridge", "state": "Up", "address": "192.168.1.132/24", "dhcp": false, "gateway": "192.168.1.1", "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 8, "name": "enp34s0u3", "interface_kind": "Physical", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": "00:E0:4C:68:00:B6", "vendor": null, "services": [], "icon": "Network cards/USB"},
+            {"id": 9, "name": "enp42s0", "interface_kind": "Physical", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": "04:7C:16:47:DC:0B", "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 14, "name": "wlp41s0", "interface_kind": "Physical", "state": "Down", "address": null, "dhcp": false, "gateway": null, "mac": "50:C2:E8:95:A2:A5", "vendor": null, "services": [], "icon": "Network cards/Wi-Fi"}
+          ],
+          "manufacturer": null, "model": null, "hostname": "pc101", "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Linux host; bridge STP is disabled. Upstream traffic is NATed through isolated policy routing (table 181). wlp41s0 is disconnected and keeps rollback profiles."
+        },
+        {
+          "id": 10, "name": "OPNsense", "kind": "Router", "role": "Router", "icon": null, "status": "Online", "host": 1,
+          "cards": [
+            {"id": 10, "name": "vtnet0", "interface_kind": "Virtual", "state": "Up", "address": "10.77.0.2/24", "dhcp": false, "gateway": "10.77.0.1", "mac": "52:54:00:77:00:02", "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 11, "name": "vtnet1", "interface_kind": "Virtual", "state": "Up", "address": "192.168.1.1/24", "dhcp": false, "gateway": null, "mac": "52:54:00:77:01:01", "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 12, "name": "ue0", "interface_kind": "Physical", "state": "Up", "address": "192.168.20.1/24", "dhcp": false, "gateway": null, "mac": "00:E0:4C:68:3B:46", "vendor": null, "services": [], "icon": "Network cards/USB"},
+            {"id": 13, "name": "ue1", "interface_kind": "Physical", "state": "AdminDown", "address": null, "dhcp": false, "gateway": null, "mac": "00:E0:4C:68:00:1D", "vendor": null, "services": [], "icon": "Network cards/USB"}
+          ],
+          "manufacturer": null, "model": null, "hostname": "opnsense", "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Routes and filters between WAN, trusted LAN and SMART. ue0/ue1 are USB passthrough cards owned by this VM."
+        },
+        {
+          "id": 20, "name": "Linksys switch", "kind": "Switch", "role": "Switch", "icon": null, "status": "Online",
+          "cards": [
+            {"id": 21, "name": "Gi0/1", "interface_kind": "SwitchPort", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 22, "name": "Gi0/2", "interface_kind": "SwitchPort", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 23, "name": "Gi0/3", "interface_kind": "SwitchPort", "state": "Down", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 24, "name": "Gi0/4", "interface_kind": "SwitchPort", "state": "Unknown", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 25, "name": "Gi0/5", "interface_kind": "SwitchPort", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 26, "name": "Gi0/6", "interface_kind": "SwitchPort", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 27, "name": "Gi0/7", "interface_kind": "SwitchPort", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 28, "name": "Gi0/8", "interface_kind": "SwitchPort", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"},
+            {"id": 29, "name": "VLAN 1", "interface_kind": "Bridge", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"},
+            {"id": 20, "name": "VLAN 20", "interface_kind": "Bridge", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Virtual"}
+          ],
+          "manufacturer": "Linksys", "model": null, "hostname": null, "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Port 2 occupancy is user-reported; ports 3 and 4 have not been freshly rechecked. VLAN 20 is exactly Gi0/2 and Gi0/6, with ingress filtering. Ports 5 and 6 carry untagged traffic for separate networks, not a trunk."
+        },
+        {"id": 30, "name": "TrueNAS", "kind": "Nas", "role": "Nas", "icon": null, "status": "Online", "host": 1, "cards": [{"id": 30, "name": "VM LAN", "interface_kind": "Virtual", "state": "Up", "address": null, "dhcp": true, "gateway": "192.168.1.1", "mac": "52:54:00:77:01:10", "vendor": null, "services": [], "icon": "Network cards/Virtual"}], "manufacturer": null, "model": null, "hostname": "truenas", "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Virtual machine."},
+        {"id": 31, "name": "win11_gpu", "kind": "Desktop", "role": "Desktop", "icon": null, "status": "Online", "host": 1, "cards": [{"id": 31, "name": "VM LAN", "interface_kind": "Virtual", "state": "Up", "address": null, "dhcp": true, "gateway": "192.168.1.1", "mac": "52:54:00:77:01:11", "vendor": null, "services": [], "icon": "Network cards/Virtual"}], "manufacturer": null, "model": null, "hostname": "win11-gpu", "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Virtual machine."},
+        {"id": 40, "name": "Trusted AP", "kind": "AccessPoint", "role": "AccessPoint", "icon": null, "status": "Unknown", "cards": [{"id": 40, "name": "uplink", "interface_kind": "Physical", "state": "Unknown", "address": null, "dhcp": true, "gateway": "192.168.1.1", "mac": null, "vendor": null, "services": [], "icon": "Network cards/Wi-Fi"}], "manufacturer": null, "model": null, "hostname": null, "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Recorded cable trace to Gi0/1."},
+        {"id": 41, "name": "LT300 SMART AP", "kind": "AccessPoint", "role": "AccessPoint", "icon": null, "status": "Unknown", "cards": [{"id": 41, "name": "uplink", "interface_kind": "Physical", "state": "Unknown", "address": null, "dhcp": true, "gateway": "192.168.20.1", "mac": null, "vendor": null, "services": [], "icon": "Network cards/Wi-Fi"}], "manufacturer": null, "model": "LT300", "hostname": null, "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Port 2 connection is reported; successful AP operation remains unverified."},
+        {"id": 42, "name": "Other PC", "kind": "Desktop", "role": "Desktop", "icon": null, "status": "Unknown", "cards": [{"id": 42, "name": "", "interface_kind": "Physical", "state": "Unknown", "address": null, "dhcp": true, "gateway": "192.168.1.1", "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"}], "manufacturer": null, "model": null, "hostname": null, "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Direct cable to enp42s0; does not go through the switch."},
+        {"id": 43, "name": "ruby101", "kind": "Desktop", "role": "Desktop", "icon": null, "status": "Unknown", "cards": [{"id": 43, "name": "", "interface_kind": "Physical", "state": "Unknown", "address": null, "dhcp": true, "gateway": "192.168.1.1", "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"}], "manufacturer": null, "model": null, "hostname": "ruby101", "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Last traced on Gi0/4; current occupancy not rechecked."},
+        {"id": 44, "name": "Unmanaged switch", "kind": "Switch", "role": "Switch", "icon": null, "status": "Unknown", "cards": [{"id": 44, "name": "uplink", "interface_kind": "Physical", "state": "Unknown", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/Ethernet"}], "manufacturer": null, "model": null, "hostname": null, "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Recorded cable trace to Gi0/8."},
+        {"id": 45, "name": "HONOR phone", "kind": "Phone", "role": "Phone", "icon": null, "status": "Online", "cards": [{"id": 45, "name": "USB tether", "interface_kind": "Physical", "state": "Up", "address": null, "dhcp": false, "gateway": null, "mac": null, "vendor": null, "services": [], "icon": "Network cards/USB"}], "manufacturer": "HONOR", "model": null, "hostname": null, "os": null, "mdns_services": [], "last_seen": {"minutes_ago": 0}, "notes": "Upstream internet over USB tethering; no switch port."}
+      ],
+      "links": [
+        {"upstream": 1, "card": 2, "kind": "Known", "relationship": "Routed"},
+        {"upstream": 3, "card": 10, "kind": "Known", "relationship": "VirtualPeer"},
+        {"upstream": 6, "card": 11, "kind": "Known", "relationship": "VirtualPeer"},
+        {"upstream": 25, "card": 8, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 26, "card": 12, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 27, "card": 13, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 21, "card": 40, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 22, "card": 41, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 4, "card": 30, "kind": "Known", "relationship": "VirtualPeer"},
+        {"upstream": 5, "card": 31, "kind": "Known", "relationship": "VirtualPeer"},
+        {"upstream": 45, "card": 1, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 9, "card": 42, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 25, "card": 29, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 29, "card": 21, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 29, "card": 23, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 29, "card": 24, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 29, "card": 27, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 29, "card": 28, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 24, "card": 43, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 28, "card": 44, "kind": "Known", "relationship": "Physical"},
+        {"upstream": 26, "card": 20, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 20, "card": 22, "kind": "Known", "relationship": "BridgeMember"}
+      ],
+      "relations": [
+        {"upstream": 2, "card": 3, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 7, "card": 4, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 7, "card": 5, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 7, "card": 6, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 7, "card": 8, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 7, "card": 9, "kind": "Known", "relationship": "BridgeMember"},
+        {"upstream": 10, "card": 11, "kind": "Known", "relationship": "Routed"},
+        {"upstream": 11, "card": 12, "kind": "Known", "relationship": "Routed"}
+      ],
+      "segments": [
+        {"id": 1, "name": "Trusted LAN", "colour": "Blue", "vlan": 1, "subnet": "192.168.1.0/24"},
+        {"id": 2, "name": "SMART", "colour": "Orange", "vlan": 20, "subnet": "192.168.20.0/24"},
+        {"id": 3, "name": "Virtual WAN transit", "colour": "Purple", "vlan": null, "subnet": "10.77.0.0/24"}
+      ],
+      "memberships": [
+        {"card": 7, "segment": 1, "mode": "Untagged"}, {"card": 8, "segment": 1, "mode": "Untagged"}, {"card": 9, "segment": 1, "mode": "Untagged"}, {"card": 11, "segment": 1, "mode": "Untagged"},
+        {"card": 21, "segment": 1, "mode": "Untagged"}, {"card": 23, "segment": 1, "mode": "Untagged"}, {"card": 24, "segment": 1, "mode": "Untagged"}, {"card": 25, "segment": 1, "mode": "Untagged"}, {"card": 27, "segment": 1, "mode": "Untagged"}, {"card": 28, "segment": 1, "mode": "Untagged"},
+        {"card": 29, "segment": 1, "mode": "Untagged"}, {"card": 42, "segment": 1, "mode": "Untagged"}, {"card": 43, "segment": 1, "mode": "Untagged"}, {"card": 44, "segment": 1, "mode": "Untagged"},
+        {"card": 12, "segment": 2, "mode": "Native"}, {"card": 22, "segment": 2, "mode": "Native"}, {"card": 26, "segment": 2, "mode": "Native"}, {"card": 20, "segment": 2, "mode": "Untagged"},
+        {"card": 2, "segment": 3, "mode": "Untagged"}, {"card": 3, "segment": 3, "mode": "Untagged"}, {"card": 10, "segment": 3, "mode": "Untagged"}
+      ],
+      "roles": [
+        {"role":"Router","renamed":null,"icon":"Network/Router","group":0}, {"role":"Switch","renamed":null,"icon":"Network/Switch","group":1}, {"role":"AccessPoint","renamed":null,"icon":"Network/Access point","group":2},
+        {"role":"Server","renamed":null,"icon":"Computers/Server","group":6}, {"role":"Nas","renamed":null,"icon":"Computers/NAS","group":7}, {"role":"Desktop","renamed":null,"icon":"Computers/Desktop","group":4},
+        {"role":"Laptop","renamed":null,"icon":"Computers/Laptop","group":3}, {"role":"Phone","renamed":null,"icon":"Phones and wearables/Phone","group":3}, {"role":"Printer","renamed":null,"icon":"Other/Printer","group":5},
+        {"role":"Camera","renamed":null,"icon":"Smart home/Camera","group":8}, {"role":"Iot","renamed":null,"icon":"Smart home/Smart device","group":9}, {"role":"Other","renamed":null,"icon":null,"group":null}
+      ],
+      "groups": {"list": [
+        {"id":0,"name":{"standard":"NetworkCore","renamed":null},"colour":"Purple","line_style":"Thick"}, {"id":1,"name":{"standard":"Switching","renamed":null},"colour":"Blue","line_style":"Solid"},
+        {"id":2,"name":{"standard":"WiFi","renamed":null},"colour":"Green","line_style":"Wavy"}, {"id":3,"name":{"standard":"Mobile","renamed":null},"colour":"Green","line_style":"Dotted"},
+        {"id":4,"name":{"standard":"Workstations","renamed":null},"colour":"Yellow","line_style":"Solid"}, {"id":5,"name":{"standard":"Printing","renamed":null},"colour":"Yellow","line_style":"DashDot"},
+        {"id":6,"name":{"standard":"Servers","renamed":null},"colour":"Red","line_style":"Thick"}, {"id":7,"name":{"standard":"Storage","renamed":null},"colour":"Orange","line_style":"LongDashes"},
+        {"id":8,"name":{"standard":"Security","renamed":null},"colour":"Red","line_style":"Zigzag"}, {"id":9,"name":{"standard":"SmartHome","renamed":null},"colour":"Orange","line_style":"Zigzag"}
+      ], "next_id": 10}
+    },
+    "arrangement": {"tiers": {}}
+  }
+}

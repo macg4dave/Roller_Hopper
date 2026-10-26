@@ -2,8 +2,10 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { GroupEditor } from "group-editor.slint";
 import { RoleEditor } from "role-editor.slint";
+import { SegmentEditor } from "segment-editor.slint";
 
-// Role and group management. Device editing stays on the map, where its context remains visible.
+// Role, group and segment management. Device editing stays on the map, where its context
+// remains visible.
 export component EditPage inherits Rectangle {
     callback back();
 
@@ -35,6 +37,7 @@ export component EditPage inherits Rectangle {
             spacing: Theme.space-l;
 
             GroupEditor { vertical-stretch: 0; }
+            SegmentEditor { vertical-stretch: 0; }
             RoleEditor { vertical-stretch: 1; }
         }
     }

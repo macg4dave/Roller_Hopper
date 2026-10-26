@@ -140,6 +140,36 @@ export component TopologyCanvas inherits Rectangle {
         transform-origin: { x: 0, y: 0 };
         transform-scale: zoom;
 
+        // Layer 2 membership is a coloured region, separate from cable and virtual links.
+        for segment in Bridge.segments: Rectangle {
+            visible: segment.shown;
+            x: (segment.x - Bridge.bounds.x) * 1px;
+            y: (segment.y - Bridge.bounds.y) * 1px;
+            width: segment.width * 1px;
+            height: segment.height * 1px;
+            background: Theme.group-colour(segment.colour, Theme.accent).with-alpha(0.10);
+            border-color: Theme.group-colour(segment.colour, Theme.accent).with-alpha(0.55);
+            border-width: 2px / zoom;
+            border-radius: Theme.radius;
+            Text {
+                x: Theme.space-s;
+                y: Theme.space-xs;
+                text: segment.vlan == ""
+                    ? segment.name
+                    : @tr("map.segment-vlan", segment.name, segment.vlan);
+                font-size: Theme.font-small;
+                font-weight: 700;
+                color: Theme.group-colour(segment.colour, Theme.text);
+            }
+            if segment.subnet != "": Text {
+                x: Theme.space-s;
+                y: Theme.space-xs + 16px;
+                text: segment.subnet;
+                font-size: Theme.font-small;
+                color: Theme.text-muted;
+            }
+        }
+
         // Connection lines: one path per colour and style.
         for set in Bridge.lines: Path {
             width: parent.width;

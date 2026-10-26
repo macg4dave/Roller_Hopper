@@ -3,6 +3,13 @@
 // Rust sends data, not wording: user-visible text is produced in Slint (see labels.slint).
 
 export enum DeviceKind { router, switch, access-point, nas, desktop, laptop, server, printer, phone, tv, console, camera, thermostat, smart-display, voice-assistant, smart, unknown }
+// What a network card is, and its last recorded state; listed in the editor in this order.
+export enum InterfaceKind { physical, virtual-adapter, bridge, switch-port }
+export enum InterfaceState { unknown, up, down, admin-down }
+// What joins two cards: a cable, a virtual cable, bridge or VLAN membership, or routing.
+export enum RelationshipKind { physical, virtual-peer, bridge-member, routed }
+// How a card carries its Layer 2 segment; native is untagged on the port's default VLAN.
+export enum MembershipMode { untagged, tagged, native }
 
 /// An icon from the icon folder. `id` is its path there, which identifies it to Rust; `label` is
 /// its file name. `image` is empty when the file is gone, and is then shown as Unknown. `group`
@@ -41,6 +48,8 @@ export struct DeviceView {
     card-id: int,
     card-index: int,
     card-name: string,
+    interface-kind: InterfaceKind,
+    interface-state: InterfaceState,
     // The card dragging its row onto the map moves: the card itself, or a device's first card.
     drag-card: int,
     // The card's own icon (Ethernet, Wi-Fi…): in its row, and as a badge on the map.
@@ -106,6 +115,8 @@ export struct CardView {
     // Its place among its device's cards, from 0, and its name, empty when it has none.
     index: int,
     name: string,
+    interface-kind: InterfaceKind,
+    interface-state: InterfaceState,
     ip: string,
     dhcp: bool,
     mask: string,
@@ -119,8 +130,20 @@ export struct CardView {
     via-card: string,
     via-index: int,
     inferred: bool,
+    // What joins it to where it is plugged in.
+    relationship: RelationshipKind,
+    // Its place in Bridge.segment-choices (0 for none), and how it carries that segment.
+    segment-index: int,
+    membership-mode: MembershipMode,
     ports: [PortView],
     icon: IconChoice,
+}
+
+/// A join of the selected card beside the map's tree: the card at its other end, named as in
+/// Bridge.upstream-choices, and what joins them.
+export struct RelationView {
+    endpoint: string,
+    relationship: RelationshipKind,
 }
 
 /// A setting of the selected network card, typed in map edit mode.
@@ -148,7 +171,9 @@ export struct DeviceDetails {
     // Already translated, like DeviceView.role.
     role: string,
     notes: string,
-    // What it runs as, and the id and name of the device it runs on (-1 for none).
+    // The name of the device it runs on, such as a virtual machine's host, if it has one.
+    has-host: bool,
+    host: string,
     manufacturer: string,
     model: string,
     hostname: string,
@@ -185,8 +210,9 @@ export struct GroupView {
 }
 
 /// Connection lines drawn alike, as SVG path commands in map units. A line takes the colour and
-/// line style of the device whose card it hangs from; the selected card's lines (all of the
-/// selected device's cards' lines, and the ties between them) are highlighted instead.
+/// line style of the device whose card it hangs from (a join other than a cable has a style of
+/// its own); the selected card's lines (all of the selected device's cards' lines, and the ties
+/// between them) are highlighted instead.
 /// The style is already in the commands, apart from its width.
 export struct LineSet {
     commands: string,
@@ -195,6 +221,23 @@ export struct LineSet {
     inferred: bool,
     selected: bool,
     thick: bool,
+    // In Bridge.relationship-samples only: the join it previews.
+    relationship: RelationshipKind,
+}
+
+/// A Layer 2 segment, in the edit page's segment list order. Its name is the user's own; its
+/// VLAN and subnet are empty when not given. On the map it is a region around its cards, in
+/// map units, not `shown` when none of them is on the map.
+export struct SegmentView {
+    name: string,
+    vlan: string,
+    subnet: string,
+    colour: GroupColour,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    shown: bool,
 }
 
 /// The stretchy strand from a dragged device to the line it would join, as SVG path commands in
@@ -394,6 +437,7 @@ export global Bridge {
     in property <[DeviceView]> list;
     // Highlighted lines come last, so they are drawn on top.
     in property <[LineSet]> lines;
+    in property <[SegmentView]> segments;
     in property <Strand> strand;
     in property <MapBounds> bounds;
     // A deterministic proposal waiting for review. An empty model with auto-map-open set is a
@@ -411,10 +455,18 @@ export global Bridge {
     // A card picked on the map: its device is selected, and this card is listed first.
     in property <int> featured-card: -1;
     in property <CardView> card;
-    // What the selected card can be plugged into: first none, then the cards of the devices
-    // away from its own, in device order; and where it is plugged in now.
+    in property <[RelationView]> card-relations;
+    // What the selected card can be plugged into or joined to: first none, then every other
+    // card apart from those behind it, in device order; and where it is plugged in now.
     in property <[string]> upstream-choices;
     in property <int> card-plug-index;
+    // What a card's segment can be: first none, then the segments in list order.
+    in property <[string]> segment-choices;
+    // The devices the selected device can run on, first none, and the one it runs on now.
+    in property <[string]> host-choices;
+    in property <int> host-index;
+    // A sample line for each relationship other than a cable that the map draws, for its key.
+    in property <[LineSet]> relationship-samples;
     // The devices the selected card can be a child of, in device order, and the one it is a
     // child of now.
     in property <[string]> parent-choices;
@@ -488,6 +540,8 @@ export global Bridge {
     callback search(string);
     callback rename(string);
     callback choose-role(int);
+    // Makes the selected device run on the device at an index in host-choices; 0 for none.
+    callback choose-host(int);
     // Reads the icon folder again, so icons added since appear. Icons are passed by their id;
     // an empty id is the Unknown icon.
     callback refresh-icons();
@@ -511,6 +565,28 @@ export global Bridge {
     // not parse, an address is already in use, or a subnet mask is given before an address.
     // An address may carry its prefix (`a.b.c.d/nn`).
     callback edit-card(CardField, string) -> bool;
+    // The selected card's kind, state, and what joins it to where it is plugged in, each by
+    // index in the matching Labels list.
+    callback set-interface-kind(int);
+    callback set-interface-state(int);
+    callback set-relationship-kind(int);
+    // Joins the selected card beside the tree to the card at an index in upstream-choices, by
+    // the relationship at an index in Labels.relationships; and removes the join at an index
+    // in card-relations.
+    callback add-card-relation(int, int);
+    callback remove-card-relation(int);
+    // Puts the selected card in the segment at an index in segment-choices (0 for none), and
+    // sets its mode by index in Labels.membership-modes.
+    callback set-card-segment(int);
+    callback set-membership-mode(int);
+    // The segment list, by index in segments. Blank or taken names are ignored. A VLAN must be
+    // 1–4094 and a subnet `a.b.c.d/nn`, or blank for none; others are refused (false).
+    callback add-segment(string);
+    callback rename-segment(int, string);
+    callback set-segment-colour(int, GroupColour);
+    callback set-segment-vlan(int, string) -> bool;
+    callback set-segment-subnet(int, string) -> bool;
+    callback remove-segment(int);
     // Plugs the selected card into the card at an index in upstream-choices; 0 for none.
     callback plug-card(int);
     // Makes the selected card a child of the device at an index in parent-choices.

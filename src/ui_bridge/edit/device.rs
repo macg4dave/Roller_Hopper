@@ -1,5 +1,5 @@
-//! Editing the selected device's name, notes, role and icon; forgetting it; and adding a blank
-//! ordinary device.
+//! Editing the selected device's name, notes, role, icon and the device it runs on;
+//! forgetting it; and adding a blank ordinary device.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,6 +24,42 @@ impl AppState {
         }
     }
 
+    /// The devices the selected device can run on, in dropdown order after "none": every
+    /// other device, in device order, apart from those that run on it.
+    pub(in crate::ui_bridge) fn host_choices(&self) -> Vec<DeviceId> {
+        let Some(selected) = self.selected_device() else {
+            return Vec::new();
+        };
+        let devices = self.network.devices().iter().map(|d| d.id);
+        devices
+            .filter(|&host| self.network.can_host(selected, host))
+            .collect()
+    }
+
+    /// What the selected device runs on, as its index in the dropdown: 0 for none.
+    pub(in crate::ui_bridge) fn host_choice(&self) -> usize {
+        let selected = self
+            .selected_device()
+            .and_then(|id| self.network.device(id));
+        let host = selected.and_then(|d| d.host);
+        let at = host.and_then(|host| self.host_choices().iter().position(|&d| d == host));
+        at.map_or(0, |at| at + 1)
+    }
+
+    /// Makes the selected device run on the device at `choice` in the dropdown, where 0 is none.
+    fn set_host(&mut self, choice: usize) {
+        let host = match choice.checked_sub(1) {
+            None => None,
+            Some(at) => match self.host_choices().get(at) {
+                Some(&host) => Some(host),
+                None => return,
+            },
+        };
+        if let Some(device) = self.selected_device() {
+            self.network.set_host(device, host);
+        }
+    }
+
     /// Forgets the selected device (or the device of the selected card) until restart and lays
     /// the map out again without its cards.
     fn forget_selected(&mut self) {
@@ -43,7 +79,7 @@ impl AppState {
     }
 }
 
-/// Name, notes, role, icon and forgetting for the selected device, and adding devices.
+/// Name, notes, role, host, icon and forgetting for the selected device, and adding devices.
 pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     let bridge = ui.global::<Bridge<'_>>();
     bridge.on_rename(handler(ui, state, |st, name: SharedString| {
@@ -54,6 +90,9 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     }));
     bridge.on_choose_role(handler(ui, state, |st, index| {
         st.choose_role(convert::index(index));
+    }));
+    bridge.on_choose_host(handler(ui, state, |st, choice| {
+        st.set_host(convert::index(choice));
     }));
     let set_icon = handler(ui, state, |st, (id, icon): (i32, SharedString)| {
         if let Some(id) = convert::device_id(id) {
@@ -86,6 +125,25 @@ mod tests {
             Some(Role::Router),
             "out of range is ignored"
         );
+    }
+
+    #[test]
+    fn a_device_is_given_a_host_from_the_others_that_do_not_run_on_it() {
+        let (server, vm) = (DeviceId(6), DeviceId(19));
+        let mut state = AppState::with_selected(19);
+        let choices = state.host_choices();
+        assert!(!choices.contains(&vm), "not itself");
+        let at = choices.iter().position(|&d| d == server).unwrap();
+        state.set_host(at + 1);
+        assert_eq!(state.host_choice(), at + 1);
+        assert_eq!(state.network.device(vm).and_then(|d| d.host), Some(server));
+        state.selected = Some(Selection::Device(server));
+        assert!(!state.host_choices().contains(&vm), "would form a ring");
+        state.set_host(999);
+        assert_eq!(state.host_choice(), 0, "out of range is ignored");
+        state.selected = Some(Selection::Device(vm));
+        state.set_host(0);
+        assert_eq!(state.host_choice(), 0);
     }
 
     #[test]

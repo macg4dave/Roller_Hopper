@@ -1,5 +1,6 @@
 //! Editing the selected device's network cards: adding a blank one, filling in its IPv4
-//! settings, plugging it into a card of another device, giving it an icon, and removing it.
+//! settings and what kind of card it is, plugging it into another card or joining it to one,
+//! giving it an icon, and removing it.
 
 use std::cell::RefCell;
 use std::net::Ipv4Addr;
@@ -8,7 +9,7 @@ use std::rc::Rc;
 use ipnet::Ipv4Net;
 use slint::{ComponentHandle, SharedString};
 
-use crate::model::{CardId, Icon, MacAddr};
+use crate::model::{CardId, Icon, InterfaceKind, InterfaceState, MacAddr, RelationshipKind};
 use crate::ui::{self, AppWindow, Bridge};
 use crate::ui_bridge::{AppState, Selection, convert, handler, update};
 
@@ -23,7 +24,7 @@ fn prefix(text: &str) -> Option<u8> {
 }
 
 /// An optional value as typed: empty is none; anything else must parse.
-fn optional<T: std::str::FromStr>(text: &str) -> Result<Option<T>, T::Err> {
+pub(super) fn optional<T: std::str::FromStr>(text: &str) -> Result<Option<T>, T::Err> {
     let text = text.trim();
     if text.is_empty() {
         Ok(None)
@@ -33,16 +34,16 @@ fn optional<T: std::str::FromStr>(text: &str) -> Result<Option<T>, T::Err> {
 }
 
 impl AppState {
-    /// The cards the selected card can be plugged into, in dropdown order after "none": the
-    /// cards of the other devices, in device order, apart from those behind it, which would
-    /// form a loop.
+    /// The cards the selected card can be plugged into, in dropdown order after "none": every
+    /// other card, in device order, apart from those behind it, which would form a loop. Its
+    /// own device's cards are offered for bridges and virtual adapters.
     pub(in crate::ui_bridge) fn upstream_choices(&self) -> Vec<CardId> {
         let Some(selected) = self.selected_card() else {
             return Vec::new();
         };
         let cards = self.network.nodes().into_iter();
         cards
-            .filter(|&card| self.network.can_plug(selected, card))
+            .filter(|&card| self.network.can_attach(selected, card))
             .collect()
     }
 
@@ -140,8 +141,32 @@ impl AppState {
         let Some(card) = self.selected_card() else {
             return;
         };
-        if self.network.plug_card(card, upstream) {
+        if self.network.attach_card(card, upstream) {
             self.lay_out_at_rest();
+        }
+    }
+
+    /// Changes what joins the selected card to the card it is plugged into.
+    fn set_relationship(&mut self, relationship: RelationshipKind) {
+        let Some(card) = self.selected_card() else {
+            return;
+        };
+        let Some(upstream) = self.network.link(card).map(|link| link.upstream) else {
+            return;
+        };
+        if self.network.relate_card(card, Some(upstream), relationship) {
+            self.lay_out_at_rest();
+        }
+    }
+
+    /// Joins the selected card beside the tree to the card at `target` in the plug dropdown.
+    fn add_relation(&mut self, target: usize, relationship: RelationshipKind) {
+        let Some(card) = self.selected_card() else {
+            return;
+        };
+        let choices = self.upstream_choices();
+        if let Some(&target) = target.checked_sub(1).and_then(|at| choices.get(at)) {
+            self.network.add_relation(card, target, relationship);
         }
     }
 }
@@ -172,6 +197,39 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     });
     bridge.on_plug_card(handler(ui, state, |st, choice| {
         st.plug_card(convert::index(choice));
+    }));
+    connect_interface_details(ui, state);
+}
+
+/// What the selected card is, its state, and how it is joined to other cards. Each choice is
+/// an index in the matching `ALL` list.
+fn connect_interface_details(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
+    bridge.on_set_interface_kind(handler(ui, state, |st, choice| {
+        if let Some(&kind) = InterfaceKind::ALL.get(convert::index(choice)) {
+            st.edit_selected_card(|card| card.interface_kind = kind);
+        }
+    }));
+    bridge.on_set_interface_state(handler(ui, state, |st, choice| {
+        if let Some(&value) = InterfaceState::ALL.get(convert::index(choice)) {
+            st.edit_selected_card(|card| card.state = value);
+        }
+    }));
+    bridge.on_set_relationship_kind(handler(ui, state, |st, choice| {
+        if let Some(&kind) = RelationshipKind::ALL.get(convert::index(choice)) {
+            st.set_relationship(kind);
+        }
+    }));
+    let add_relation = handler(ui, state, |st, (target, choice): (i32, i32)| {
+        if let Some(&kind) = RelationshipKind::ALL.get(convert::index(choice)) {
+            st.add_relation(convert::index(target), kind);
+        }
+    });
+    bridge.on_add_card_relation(move |target, kind| add_relation((target, kind)));
+    bridge.on_remove_card_relation(handler(ui, state, |st, index| {
+        if let Some(card) = st.selected_card() {
+            st.network.remove_relation(card, convert::index(index));
+        }
     }));
 }
 
@@ -266,28 +324,57 @@ mod tests {
     }
 
     #[test]
-    fn a_card_is_plugged_into_a_card_chosen_away_from_its_own_device() {
+    fn a_card_is_plugged_into_a_card_chosen_from_the_dropdown() {
         let (mut state, card) = with_new_card();
         let choices = state.upstream_choices();
-        let own: Vec<_> = state
-            .network
-            .device(PC)
-            .unwrap()
-            .cards
-            .iter()
-            .map(|c| c.id)
-            .collect();
-        assert!(choices.iter().all(|c| !own.contains(c)));
+        assert!(!choices.contains(&card), "not into itself");
         let lab = state.network.device(LAB_ROUTER).unwrap().cards[0].id;
         let at = choices.iter().position(|&c| c == lab).unwrap();
         state.plug_card(at + 1);
         assert_eq!(state.plug_choice(), at + 1);
-        let uplink = state.network.uplink(card).map(|c| c.upstream);
-        assert_eq!(uplink, Some(CardId(LAB_ROUTER.0)));
+        let uplink = state
+            .network
+            .uplink(card)
+            .map(|c| (c.upstream, c.relationship));
+        assert_eq!(uplink, Some((lab, RelationshipKind::Physical)));
         state.plug_card(999);
         assert_eq!(state.plug_choice(), at + 1, "out of range");
         state.plug_card(0);
         assert_eq!(state.plug_choice(), 0);
+    }
+
+    #[test]
+    fn a_card_joins_another_card_of_its_device_virtually() {
+        let (mut state, card) = with_new_card();
+        let own = state.network.device(PC).unwrap().cards[0].id;
+        let at = state.upstream_choices().iter().position(|&c| c == own);
+        state.plug_card(at.unwrap() + 1);
+        let uplink = state
+            .network
+            .uplink(card)
+            .map(|c| (c.upstream, c.relationship));
+        assert_eq!(uplink, Some((own, RelationshipKind::VirtualPeer)));
+        state.set_relationship(RelationshipKind::Routed);
+        let kind = state.network.uplink(card).map(|c| c.relationship);
+        assert_eq!(kind, Some(RelationshipKind::Routed));
+        state.set_relationship(RelationshipKind::Physical);
+        assert_eq!(
+            state.network.uplink(card).map(|c| c.relationship),
+            Some(RelationshipKind::Routed),
+            "a cable cannot join two cards of one device"
+        );
+    }
+
+    #[test]
+    fn a_card_is_joined_beside_the_tree_and_unjoined() {
+        let (mut state, card) = with_new_card();
+        let lab = state.network.device(LAB_ROUTER).unwrap().cards[0].id;
+        let at = state.upstream_choices().iter().position(|&c| c == lab);
+        state.add_relation(at.unwrap() + 1, RelationshipKind::Routed);
+        assert_eq!(state.network.relations_for(card).count(), 1);
+        assert_eq!(state.network.uplink(card), None, "the tree is unchanged");
+        state.add_relation(0, RelationshipKind::Routed);
+        assert_eq!(state.network.relations_for(card).count(), 1, "none chosen");
     }
 
     #[test]

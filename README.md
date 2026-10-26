@@ -33,6 +33,14 @@ This loads `mock-data/infrastructure.rhopper.json`. Use release mode when judgin
 performance on this fixture; debug builds are intentionally unoptimised and can make its large
 topology appear slow.
 
+To inspect the checked-in physical, virtual, bridge, switch-port and VLAN example, run:
+
+```sh
+cargo run -- --network-map
+```
+
+This loads `mock-data/network-map.rhopper.json` through the same parser as Open.
+
 The default build includes CUDA for running the AI on an NVIDIA graphics card. How to build,
 including a build without CUDA (and so without AI) and a portable folder, is in
 [docs/building.md](docs/building.md);
@@ -65,7 +73,7 @@ All UI text is translatable. To add or change a language, see
 src/main.rs        wiring only: build state, create window, connect callbacks, run
 src/ui.rs          Slint-generated types only (lint-exempt; never add code here)
 src/model/         pure data and logic (devices with their network cards; the map's tree of
-                   network cards, roles, groups,
+                   network cards and the joins beside it, Layer 2 segments, roles, groups,
                    layout; the discovery run's record) — no Slint imports
 src/scan.rs        the real scan on its own Tokio threads, and in scan/ this computer's
                    subnet, the port lists, mDNS, SSDP/UPnP, the type and OS rules, and turning what a
@@ -79,7 +87,7 @@ src/ai_settings.rs the AI settings window: install, load/unload, GPU switch and 
 src/project.rs     the project file: its versioned format, the checks Open makes, safe saving
 src/mock_data.rs   the tests' sample network, and in mock_data/ the hosts a test run finds
 src/ui_bridge.rs   the app state and selection, wiring every Slint callback to it
-src/ui_bridge/     edit/ (device, card, card move, port, role and group edits), map/ (layout, dragging,
+src/ui_bridge/     edit/ (device, card, card move, port, role, group and segment edits), map/ (layout, dragging,
                    lines, motion), discovery (running a scan), project (New, Open, Save and
                    the unsaved-changes question), view/ (sending state to
                    the UI), model ↔ Slint conversion, reading the icon folder, choosing the

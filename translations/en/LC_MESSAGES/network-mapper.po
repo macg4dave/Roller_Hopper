@@ -1364,3 +1364,117 @@ msgstr "Full"
 msgid "discovery.mode.everything"
 msgstr "Everything"
 
+msgid "details.host"
+msgstr "Runs on"
+
+msgid "edit.no-host"
+msgstr "Nothing"
+
+msgid "interface.physical"
+msgstr "Physical card"
+
+msgid "interface.virtual"
+msgstr "Virtual adapter"
+
+msgid "interface.bridge"
+msgstr "Bridge or VLAN"
+
+msgid "interface.switch-port"
+msgstr "Switch port"
+
+msgid "interface.unknown"
+msgstr "Unknown"
+
+msgid "interface.up"
+msgstr "Up"
+
+msgid "interface.down"
+msgstr "Down"
+
+msgid "interface.admin-down"
+msgstr "Switched off"
+
+msgid "map.interface-state"
+msgstr "{0} · {1}"
+
+msgid "details.interface-kind"
+msgstr "Card type"
+
+msgid "details.interface-state"
+msgstr "State"
+
+msgid "relationship.physical"
+msgstr "Cable"
+
+msgid "relationship.virtual"
+msgstr "Virtual cable"
+
+msgid "relationship.bridge"
+msgstr "Bridge or VLAN member"
+
+msgid "relationship.routed"
+msgstr "Routed"
+
+msgid "details.relationship"
+msgstr "Joined by"
+
+msgid "relationships.additional"
+msgstr "Also joined to"
+
+msgid "relationships.summary"
+msgstr "{0} · {1}"
+
+msgid "relationships.target"
+msgstr "Card to join"
+
+msgid "relationships.add"
+msgstr "Join"
+
+msgid "relationships.remove"
+msgstr "Remove"
+
+msgid "membership.untagged"
+msgstr "Untagged"
+
+msgid "membership.tagged"
+msgstr "Tagged"
+
+msgid "membership.native"
+msgstr "Untagged, default VLAN"
+
+msgid "details.segment"
+msgstr "Segment"
+
+msgid "details.segment.value"
+msgstr "{0} ({1})"
+
+msgid "details.vlan-mode"
+msgstr "VLAN mode"
+
+msgid "segments.none"
+msgstr "None"
+
+msgid "segments.heading"
+msgstr "Segments"
+
+msgid "segments.name"
+msgstr "Segment name"
+
+msgid "segments.vlan"
+msgstr "VLAN"
+
+msgid "segments.subnet"
+msgstr "Subnet"
+
+msgid "segments.new"
+msgstr "New segment name"
+
+msgid "segments.add"
+msgstr "Add segment"
+
+msgid "segments.remove"
+msgstr "Remove segment"
+
+msgid "map.segment-vlan"
+msgstr "{0} · VLAN {1}"
+

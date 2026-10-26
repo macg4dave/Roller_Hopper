@@ -173,6 +173,9 @@ pub(crate) struct Device {
     /// An icon picked for this device alone; `None` follows the role.
     pub(crate) icon: Option<Icon>,
     pub(crate) status: Status,
+    /// The device it runs on, such as a virtual machine's host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) host: Option<DeviceId>,
     /// Its children in the lists, and what stands for it on the map. Every device has at least
     /// one; the first is the one its address is shown from.
     pub(crate) cards: Vec<NetworkCard>,
@@ -225,6 +228,7 @@ mod tests {
             role: Role::Other,
             icon: None,
             status: Status::Online,
+            host: None,
             cards: vec![
                 NetworkCard {
                     address: Some("192.168.1.50/24".parse().unwrap()),

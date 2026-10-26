@@ -200,6 +200,7 @@ fn device(hostname: Option<String>, name: String, card: NetworkCard) -> Device {
         role: DeviceKind::Unknown.default_role(),
         icon: None,
         status: Status::Online,
+        host: None,
         cards: vec![card],
         manufacturer: None,
         model: None,

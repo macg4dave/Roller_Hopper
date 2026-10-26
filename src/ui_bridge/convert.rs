@@ -8,10 +8,46 @@ use slint::SharedString;
 
 use super::icons::Icons;
 use crate::model::{
-    CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, Icon, LineStyle, Network,
-    NetworkCard, OsClue, OsFamily, Point, Role, ServiceSource, Snap, StandardGroup, TargetError,
+    CardId, Device, DeviceId, DeviceKind, GroupColour, GroupName, Icon, InterfaceKind,
+    InterfaceState, LineStyle, MembershipMode, Network, NetworkCard, OsClue, OsFamily, Point,
+    RelationshipKind, Role, ServiceSource, Snap, StandardGroup, TargetError,
 };
 use crate::ui::{self, Labels};
+
+pub(super) fn interface_kind(kind: InterfaceKind) -> ui::InterfaceKind {
+    match kind {
+        InterfaceKind::Physical => ui::InterfaceKind::Physical,
+        InterfaceKind::Virtual => ui::InterfaceKind::VirtualAdapter,
+        InterfaceKind::Bridge => ui::InterfaceKind::Bridge,
+        InterfaceKind::SwitchPort => ui::InterfaceKind::SwitchPort,
+    }
+}
+
+pub(super) fn interface_state(state: InterfaceState) -> ui::InterfaceState {
+    match state {
+        InterfaceState::Unknown => ui::InterfaceState::Unknown,
+        InterfaceState::Up => ui::InterfaceState::Up,
+        InterfaceState::Down => ui::InterfaceState::Down,
+        InterfaceState::AdminDown => ui::InterfaceState::AdminDown,
+    }
+}
+
+pub(super) fn relationship(kind: RelationshipKind) -> ui::RelationshipKind {
+    match kind {
+        RelationshipKind::Physical => ui::RelationshipKind::Physical,
+        RelationshipKind::VirtualPeer => ui::RelationshipKind::VirtualPeer,
+        RelationshipKind::BridgeMember => ui::RelationshipKind::BridgeMember,
+        RelationshipKind::Routed => ui::RelationshipKind::Routed,
+    }
+}
+
+pub(super) fn membership(mode: MembershipMode) -> ui::MembershipMode {
+    match mode {
+        MembershipMode::Untagged => ui::MembershipMode::Untagged,
+        MembershipMode::Tagged => ui::MembershipMode::Tagged,
+        MembershipMode::Native => ui::MembershipMode::Native,
+    }
+}
 
 /// Room around the outermost icons for their labels and root circles, in map units; below them
 /// there is room for every label line the View menu can turn on.
@@ -235,6 +271,8 @@ pub(super) fn device_view(
         card_id: -1,
         card_index: 0,
         card_name: SharedString::new(),
+        interface_kind: ui::InterfaceKind::Physical,
+        interface_state: ui::InterfaceState::Unknown,
         drag_card: primary.map_or(-1, |c| ui_card_id(c.id)),
         card_icon: ui::IconChoice::default(),
         // Blank names are shown with a translated placeholder by the UI.
@@ -286,7 +324,10 @@ pub(super) fn details(
 ) -> ui::DeviceDetails {
     let text = |value: Option<&str>| SharedString::from(value.unwrap_or_default());
     let (os_family, os_detail) = os(device);
+    let host = device.host.and_then(|host| network.device(host));
     ui::DeviceDetails {
+        has_host: host.is_some(),
+        host: host.map(|host| host.name.trim()).unwrap_or_default().into(),
         kind: kind(device.kind),
         icon: icons.choice(&network.icon(device)),
         custom_icon: device.icon.is_some(),

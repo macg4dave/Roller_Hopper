@@ -202,6 +202,7 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
             .unwrap_or_default();
         bridge.set_role_index(i32::try_from(index).unwrap_or_default());
     }
+    push_hosts(bridge, labels, state);
     let cards = selected
         .map(|d| cards::card_views(&state.network, &state.icons, d, state.featured_card()))
         .unwrap_or_default();
@@ -211,7 +212,22 @@ fn push_selection(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     bridge.set_selected_id(id);
 }
 
-/// The selected card: its view, its open ports, and what it can be plugged into.
+/// The devices the selected device can run on, after "none", and the one it runs on now.
+fn push_hosts(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
+    let network = &state.network;
+    let devices = state.host_choices().into_iter();
+    let names = devices
+        .filter_map(|id| network.device(id))
+        .map(|d| labels.invoke_device_name(d.name.trim().into()));
+    let choices = std::iter::once(labels.invoke_no_host()).chain(names);
+    if let Some(model) = sync(&bridge.get_host_choices(), choices.collect()) {
+        bridge.set_host_choices(model);
+    }
+    bridge.set_host_index(i32::try_from(state.host_choice()).unwrap_or_default());
+}
+
+/// The selected card: its view, its open ports, what it can be plugged into or joined to, and
+/// the segment it is in.
 fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
     let network = &state.network;
     let card = state.selected_card();
@@ -222,6 +238,22 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         views.find(|v| v.id == id)
     });
     bridge.set_card(view.unwrap_or_default());
+    let relations = card.into_iter().flat_map(|selected| {
+        network.relations_for(selected).map(move |relation| {
+            let other = if relation.card == selected {
+                relation.upstream
+            } else {
+                relation.card
+            };
+            ui::RelationView {
+                endpoint: cards::socket_name(labels, network, other),
+                relationship: convert::relationship(relation.relationship),
+            }
+        })
+    });
+    if let Some(model) = sync(&bridge.get_card_relations(), relations.collect()) {
+        bridge.set_card_relations(model);
+    }
     let ports = card.and_then(|c| network.card(c)).map(convert::port_views);
     if let Some(model) = sync(&bridge.get_ports(), ports.unwrap_or_default()) {
         bridge.set_ports(model);
@@ -233,6 +265,12 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_upstream_choices(model);
     }
     bridge.set_card_plug_index(i32::try_from(state.plug_choice()).unwrap_or_default());
+    // Segment names are the user's own words.
+    let segments = network.segments().iter().map(|s| s.name.as_str().into());
+    let segment_names = std::iter::once(labels.invoke_no_segment()).chain(segments);
+    if let Some(model) = sync(&bridge.get_segment_choices(), segment_names.collect()) {
+        bridge.set_segment_choices(model);
+    }
     push_card_parents(bridge, labels, state);
     bridge.set_selected_card(id);
     bridge.set_featured_card(state.featured_card().map_or(-1, convert::ui_card_id));

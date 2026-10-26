@@ -329,6 +329,7 @@ mod tests {
             role: Role::Other,
             icon: None,
             status: Status::Online,
+            host: None,
             cards: vec![card],
             manufacturer: None,
             model: None,

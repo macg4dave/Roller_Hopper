@@ -46,7 +46,7 @@ pub(crate) enum SnapKind {
 }
 
 /// Where `dragged` would join if dropped with its icon centred on `at`: on the trunk, root circle
-/// or lines of the nearest card it can be plugged into (see [`Network::can_plug`]), at the place
+/// or lines of the nearest card it can be plugged into (see [`Network::plug_card`]), at the place
 /// on that trunk where it was dropped. `None` when nothing is near.
 pub(crate) fn snap_target(
     network: &Network,

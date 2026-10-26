@@ -153,6 +153,10 @@ impl Network {
         };
         owner.cards.retain(|c| c.id != card);
         self.links.retain(|l| l.card != card && l.upstream != card);
+        self.relations
+            .retain(|relation| relation.card != card && relation.upstream != card);
+        self.memberships
+            .retain(|membership| membership.card != card);
         true
     }
 }

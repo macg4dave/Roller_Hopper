@@ -21,7 +21,15 @@ use slint::ComponentHandle;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = ui::AppWindow::new()?;
     ui_bridge::select_language(&ui);
-    let state = if std::env::args_os().any(|argument| argument == "--mock-data") {
+    let arguments: Vec<_> = std::env::args_os().collect();
+    let state = if arguments.iter().any(|argument| argument == "--network-map") {
+        let project = project::network_map().map_err(|error| {
+            std::io::Error::other(format!(
+                "the detailed network map could not be opened: {error:?}"
+            ))
+        })?;
+        ui_bridge::AppState::with_project(project, None)
+    } else if arguments.iter().any(|argument| argument == "--mock-data") {
         let project = project::mock().map_err(|error| {
             std::io::Error::other(format!(
                 "the built-in mock project could not be opened: {error:?}"

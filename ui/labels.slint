@@ -1,6 +1,6 @@
 // Translatable text derived from data. No wording lives in .slint files: every @tr() takes a
 // message key, and the text for each language (English included) is in translations/.
-import { AiImportPhase, DeviceKind, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, InstallOutcome, LogEvent, LogView, OsClueKind, OsClueView, OsFamily, RoleKind, StandardGroup, TargetError } from "bridge.slint";
+import { AiImportPhase, DeviceKind, DiscoveryMethod, DiscoveryPhase, DiscoveryView, FoundDecision, FoundFinding, GroupColour, InstallOutcome, InterfaceKind, InterfaceState, LogEvent, LogView, MembershipMode, OsClueKind, OsClueView, OsFamily, RelationshipKind, RoleKind, StandardGroup, TargetError } from "bridge.slint";
 
 export global Labels {
     // False when no bundled language matched the system locale, so keys would show as-is.
@@ -89,6 +89,57 @@ export global Labels {
     public pure function no-link() -> string {
         return @tr("edit.card-no-link");
     }
+
+    // First in the dropdowns of what a device runs on and the segment a card is in. Rust calls
+    // these to build those lists.
+    public pure function no-host() -> string {
+        return @tr("edit.no-host");
+    }
+
+    public pure function no-segment() -> string {
+        return @tr("segments.none");
+    }
+
+    public pure function interface-kind(kind: InterfaceKind) -> string {
+        if kind == InterfaceKind.virtual-adapter { return @tr("interface.virtual"); }
+        if kind == InterfaceKind.bridge { return @tr("interface.bridge"); }
+        if kind == InterfaceKind.switch-port { return @tr("interface.switch-port"); }
+        return @tr("interface.physical");
+    }
+
+    public pure function interface-state(state: InterfaceState) -> string {
+        if state == InterfaceState.up { return @tr("interface.up"); }
+        if state == InterfaceState.down { return @tr("interface.down"); }
+        if state == InterfaceState.admin-down { return @tr("interface.admin-down"); }
+        return @tr("interface.unknown");
+    }
+
+    // A card's kind and state under it on the map; empty for a physical card in an unknown
+    // state, which is what every card is until the user says otherwise.
+    public pure function interface(kind: InterfaceKind, state: InterfaceState) -> string {
+        if kind == InterfaceKind.physical && state == InterfaceState.unknown { return ""; }
+        if state == InterfaceState.unknown { return interface-kind(kind); }
+        return @tr("map.interface-state", interface-kind(kind), interface-state(state));
+    }
+
+    public pure function relationship(kind: RelationshipKind) -> string {
+        if kind == RelationshipKind.virtual-peer { return @tr("relationship.virtual"); }
+        if kind == RelationshipKind.bridge-member { return @tr("relationship.bridge"); }
+        if kind == RelationshipKind.routed { return @tr("relationship.routed"); }
+        return @tr("relationship.physical");
+    }
+
+    public pure function membership(mode: MembershipMode) -> string {
+        if mode == MembershipMode.tagged { return @tr("membership.tagged"); }
+        if mode == MembershipMode.native { return @tr("membership.native"); }
+        return @tr("membership.untagged");
+    }
+
+    // The editor's dropdowns, in the order of the enums (and the Rust `ALL` lists).
+    out property <[string]> interface-kinds: [interface-kind(InterfaceKind.physical), interface-kind(InterfaceKind.virtual-adapter), interface-kind(InterfaceKind.bridge), interface-kind(InterfaceKind.switch-port)];
+    out property <[string]> interface-states: [interface-state(InterfaceState.unknown), interface-state(InterfaceState.up), interface-state(InterfaceState.down), interface-state(InterfaceState.admin-down)];
+    out property <[string]> relationships: [relationship(RelationshipKind.physical), relationship(RelationshipKind.virtual-peer), relationship(RelationshipKind.bridge-member), relationship(RelationshipKind.routed)];
+    out property <[string]> membership-modes: [membership(MembershipMode.untagged), membership(MembershipMode.tagged), membership(MembershipMode.native)];
 
     public pure function group-colour(colour: GroupColour) -> string {
         if colour == GroupColour.red { return @tr("groups.colour.red"); }

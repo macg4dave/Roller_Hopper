@@ -16,7 +16,7 @@ use crate::model::{Arrangement, Device, Network};
 /// Marks a file as a project, whatever it is called.
 const FORMAT: &str = "rhopper";
 /// The version this build writes. Older ones would be migrated here; newer ones are refused.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 /// What every project file's name ends with.
 pub(crate) const EXTENSION: &str = "rhopper.json";
 
@@ -25,6 +25,7 @@ const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DEVICES: usize = 10_000;
 const MAX_CARDS: usize = 50_000;
 const MAX_SERVICES: usize = 200_000;
+const MAX_SEGMENTS: usize = 10_000;
 const MAX_TEXT_BYTES: usize = 4 * 1024;
 const MAX_NOTES_BYTES: usize = 64 * 1024;
 
@@ -119,6 +120,11 @@ pub(crate) fn mock() -> Result<Project, OpenError> {
     parse(include_bytes!("../mock-data/infrastructure.rhopper.json"))
 }
 
+/// The checked-in detailed physical/virtual map, decoded through the production parser.
+pub(crate) fn network_map() -> Result<Project, OpenError> {
+    parse(include_bytes!("../mock-data/network-map.rhopper.json"))
+}
+
 fn within_limits(network: &Network) -> bool {
     let devices = network.devices();
     let cards = devices.iter().flat_map(|d| &d.cards);
@@ -135,13 +141,18 @@ fn within_limits(network: &Network) -> bool {
     });
     let groups = network.groups().iter();
     let group_names = groups.map(|(_, name)| name.typed().map_or(0, str::len));
+    let segment_names = network.segments().iter().map(|segment| segment.name.len());
     let short = |text: Option<&str>| text.is_none_or(|t| t.len() <= MAX_TEXT_BYTES);
     devices.len() <= MAX_DEVICES
         && cards.count() <= MAX_CARDS
         && services.count() <= MAX_SERVICES
+        && network.segments().len() <= MAX_SEGMENTS
         && devices.iter().all(|d| device_within_limits(d, short))
         && card_texts.into_iter().all(short)
-        && role_names.chain(group_names).all(|n| n <= MAX_TEXT_BYTES)
+        && role_names
+            .chain(group_names)
+            .chain(segment_names)
+            .all(|n| n <= MAX_TEXT_BYTES)
 }
 
 fn device_within_limits(device: &Device, short: impl Fn(Option<&str>) -> bool) -> bool {
@@ -232,12 +243,44 @@ mod tests {
     }
 
     #[test]
+    fn version_one_projects_migrate_and_saves_are_version_two() {
+        let project = sample();
+        let mut old: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
+        old["version"] = 1.into();
+        let migrated = parse(&serde_json::to_vec(&old).unwrap()).unwrap();
+        assert_eq!(migrated, project);
+
+        let written: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
+        assert_eq!(written["version"], 2);
+    }
+
+    #[test]
+    fn detailed_network_map_fixture_uses_the_production_parser() {
+        let network = network_map().unwrap().network;
+        assert_eq!(network.segments().len(), 3);
+        let named = |name: &str| network.devices().iter().find(|d| d.name == name);
+        let host = named("pc101").map(|d| d.id);
+        for vm in ["OPNsense", "TrueNAS", "win11_gpu"] {
+            assert_eq!(named(vm).and_then(|d| d.host), host, "{vm} runs on pc101");
+        }
+        // A switch VLAN is a bridge card its ports hang from, so the tree runs through it.
+        let switch = named("Linksys switch").unwrap();
+        let card = |name: &str| switch.cards.iter().find(|c| c.name == name).unwrap().id;
+        let (vlan, port) = (card("VLAN 1"), card("Gi0/1"));
+        assert!(network.is_within(port, vlan));
+        assert_eq!(
+            network.uplink(port).map(|c| c.relationship),
+            Some(crate::model::RelationshipKind::BridgeMember)
+        );
+    }
+
+    #[test]
     fn other_files_newer_versions_and_damaged_projects_are_refused() {
         assert_eq!(parse(b"not json"), Err(OpenError::NotProject));
         assert_eq!(parse(b"{\"a\": 1}"), Err(OpenError::NotProject));
         let other = br#"{"format": "other", "version": 1, "project": {}}"#;
         assert_eq!(parse(other), Err(OpenError::NotProject));
-        let newer = br#"{"format": "rhopper", "version": 2, "project": {}}"#;
+        let newer = br#"{"format": "rhopper", "version": 3, "project": {}}"#;
         assert_eq!(parse(newer), Err(OpenError::Newer));
         let empty = br#"{"format": "rhopper", "version": 1, "project": {}}"#;
         assert_eq!(parse(empty), Err(OpenError::Damaged));

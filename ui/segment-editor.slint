@@ -1,0 +1,111 @@
+import { Button, LineEdit, ScrollView } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Theme } from "theme.slint";
+import { ColourPicker } from "components/colour-picker.slint";
+import { NameBox } from "components/name-box.slint";
+import { NameEdit } from "components/name-edit.slint";
+
+// Beside the groups: the Layer 2 segments (VLANs and other shared networks), each with its
+// name, VLAN ID, subnet and colour, and a way to add one. Cards join a segment in the card
+// editor; on the map a segment is a region around its cards.
+export component SegmentEditor inherits VerticalLayout {
+    spacing: Theme.space-m;
+
+    Text {
+        text: @tr("segments.heading");
+        font-size: Theme.font-heading;
+        font-weight: 600;
+        color: Theme.text;
+    }
+    segments-scroll := ScrollView {
+        // As tall as its rows, up to a few, like the group list.
+        height: min(Bridge.segments.length, 4) * Theme.row-height;
+        content-width: self.visible-width;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        VerticalLayout {
+            width: segments-scroll.visible-width;
+            // Segments are identified to Rust by their index in Bridge.segments.
+            for segment[i] in Bridge.segments: Rectangle {
+                height: Theme.row-height;
+                border-radius: Theme.radius;
+                background: Math.mod(i, 2) == 1 ? Theme.stripe : transparent;
+
+                HorizontalLayout {
+                    padding-left: Theme.space-s;
+                    padding-right: Theme.space-s;
+                    spacing: Theme.space-m;
+                    VerticalLayout {
+                        alignment: center;
+                        width: 180px;
+                        NameBox {
+                            // Segment names are the user's own words.
+                            name: segment.name;
+                            field-label: @tr("segments.name");
+                            commit(text) => { Bridge.rename-segment(i, text); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        width: 90px;
+                        NameEdit {
+                            name: segment.vlan;
+                            placeholder-text: @tr("segments.vlan");
+                            accessible-label: @tr("segments.vlan");
+                            commit(text) => { Bridge.set-segment-vlan(i, text); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        width: 160px;
+                        NameEdit {
+                            name: segment.subnet;
+                            placeholder-text: @tr("segments.subnet");
+                            accessible-label: @tr("segments.subnet");
+                            commit(text) => { Bridge.set-segment-subnet(i, text); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        // Takes the spare width, so the delete button sits at the far right.
+                        horizontal-stretch: 1;
+                        ColourPicker {
+                            selected: segment.colour;
+                            picked(colour) => { Bridge.set-segment-colour(i, colour); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            icon: @image-url("icons/delete.svg");
+                            colorize-icon: true;
+                            accessible-label: @tr("segments.remove");
+                            clicked => { Bridge.remove-segment(i); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space-xs;
+        name := LineEdit {
+            width: 260px;
+            placeholder-text: @tr("segments.new");
+            accepted(text) => {
+                Bridge.add-segment(text);
+                self.text = "";
+            }
+        }
+        Button {
+            text: @tr("segments.add");
+            icon: @image-url("icons/plus.svg");
+            colorize-icon: true;
+            enabled: name.text != "";
+            clicked => {
+                Bridge.add-segment(name.text);
+                name.text = "";
+            }
+        }
+    }
+}

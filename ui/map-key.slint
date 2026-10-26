@@ -1,17 +1,20 @@
 import { ScrollView } from "std-widgets.slint";
-import { Bridge } from "bridge.slint";
+import { Bridge, GroupColour } from "bridge.slint";
+import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { LineSample } from "components/line-sample.slint";
 
-// The map's key: each group's name in its colour beside its line style, scrolling once there
-// are more than a few. Hidden when there are no groups.
+// The map's key: each group's name in its colour beside its line style, then the style of each
+// join other than a cable that the map draws, scrolling once there are more than a few rows.
+// Hidden when there are no rows.
 export component MapKey inherits Rectangle {
     property <length> row-height: 20px;
     property <int> rows-shown: 6;
+    property <int> rows: Bridge.groups.length + Bridge.relationship-samples.length;
 
-    visible: Bridge.groups.length > 0;
+    visible: rows > 0;
     width: 180px;
-    height: min(Bridge.groups.length, rows-shown) * row-height + 2 * Theme.space-xs;
+    height: min(rows, rows-shown) * row-height + 2 * Theme.space-xs;
     background: Theme.surface;
     border-color: Theme.border;
     border-width: 1px;
@@ -40,6 +43,25 @@ export component MapKey inherits Rectangle {
                     font-size: Theme.font-small;
                     font-weight: 600;
                     color: Theme.group-colour(group.colour, Theme.text);
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+            }
+            for sample in Bridge.relationship-samples: HorizontalLayout {
+                height: row-height;
+                spacing: Theme.space-s;
+                VerticalLayout {
+                    alignment: center;
+                    LineSample {
+                        sample: sample;
+                        colour: GroupColour.none;
+                    }
+                }
+                Text {
+                    text: Labels.relationship(sample.relationship);
+                    font-size: Theme.font-small;
+                    color: Theme.text;
                     vertical-alignment: center;
                     overflow: elide;
                     horizontal-stretch: 1;

@@ -12,6 +12,43 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use super::device::Icon;
 use super::services::Services;
 
+/// What a network card is: a real card, a virtual adapter, a software bridge or VLAN, or a
+/// switch port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) enum InterfaceKind {
+    #[default]
+    Physical,
+    Virtual,
+    Bridge,
+    SwitchPort,
+}
+
+impl InterfaceKind {
+    /// Every kind, in the order the editor lists them.
+    pub(crate) const ALL: [Self; 4] = [
+        Self::Physical,
+        Self::Virtual,
+        Self::Bridge,
+        Self::SwitchPort,
+    ];
+}
+
+/// The last recorded operational state of a card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) enum InterfaceState {
+    #[default]
+    Unknown,
+    Up,
+    Down,
+    /// Linked, but switched off in its settings.
+    AdminDown,
+}
+
+impl InterfaceState {
+    /// Every state, in the order the editor lists them.
+    pub(crate) const ALL: [Self; 4] = [Self::Unknown, Self::Up, Self::Down, Self::AdminDown];
+}
+
 /// Stable identifier of a network card, unique across the network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -69,6 +106,10 @@ pub(crate) struct NetworkCard {
     pub(crate) id: CardId,
     /// The user's name for it, such as "LAN"; empty shows a numbered placeholder.
     pub(crate) name: String,
+    #[serde(default)]
+    pub(crate) interface_kind: InterfaceKind,
+    #[serde(default)]
+    pub(crate) state: InterfaceState,
     /// The card's address and the prefix length of its subnet; `None` until the user gives one
     /// to a card they added.
     pub(crate) address: Option<Ipv4Net>,
@@ -97,6 +138,8 @@ impl NetworkCard {
         Self {
             id,
             name: String::new(),
+            interface_kind: InterfaceKind::Physical,
+            state: InterfaceState::Unknown,
             address: None,
             dhcp: false,
             gateway: None,

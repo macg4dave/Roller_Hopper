@@ -1,10 +1,10 @@
-import { CardView } from "bridge.slint";
+import { Bridge, CardView, InterfaceKind, InterfaceState } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { DetailField } from "components/detail-field.slint";
 import { PortList } from "components/port-list.slint";
 
-// What is known about one network card: its addresses, maker, where it is plugged in and its
-// open ports. Shown for the selected card, and for each card under the selected device.
+// What is known about one network card: its addresses, maker, kind and state, where it is
+// plugged in and how, its segment and its open ports. Shown for the selected card, and for each card under the selected device.
 export component CardDetails inherits VerticalLayout {
     in property <CardView> card;
 
@@ -13,9 +13,17 @@ export component CardDetails inherits VerticalLayout {
     if card.gateway != "": DetailField { label: @tr("details.gateway"); value: card.gateway; }
     if card.mac != "": DetailField { label: @tr("details.mac"); value: card.mac; }
     if card.vendor != "": DetailField { label: @tr("details.card-vendor"); value: card.vendor; }
+    if card.interface-kind != InterfaceKind.physical: DetailField { label: @tr("details.interface-kind"); value: Labels.interface-kind(card.interface-kind); }
+    if card.interface-state != InterfaceState.unknown: DetailField { label: @tr("details.interface-state"); value: Labels.interface-state(card.interface-state); }
     DetailField {
         label: @tr("details.plugged-into");
         value: Labels.plugged-into(card.via-name, card.via-card, card.via-index, card.inferred);
+    }
+    if card.via-name != "": DetailField { label: @tr("details.relationship"); value: Labels.relationship(card.relationship); }
+    if card.segment-index > 0: DetailField {
+        label: @tr("details.segment");
+        // Segment names are the user's own words.
+        value: @tr("details.segment.value", Bridge.segment-choices[card.segment-index], Labels.membership(card.membership-mode));
     }
     PortList { ports: card.ports; }
 }

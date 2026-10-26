@@ -44,7 +44,7 @@ pub(super) fn fresh_ids(used: impl Iterator<Item = u32>, count: usize) -> Option
 }
 
 pub(crate) use arrangement::{Arrangement, Level};
-pub(crate) use card::{CardId, MacAddr, NetworkCard};
+pub(crate) use card::{CardId, InterfaceKind, InterfaceState, MacAddr, NetworkCard};
 pub(crate) use device::{Device, DeviceId, DeviceKind, Icon, LastSeen, Role, Status};
 pub(crate) use discovery::{
     AiImportPhase, Answer, Decision, Discovery, Finding, Found, FoundFilter, FoundSort, LogEntry,
@@ -55,7 +55,8 @@ pub(crate) use groups::{GroupColour, GroupId, GroupName, LineStyle, StandardGrou
 pub(crate) use layout::trunk;
 pub(crate) use layout::{Point, Positions, link_route, tree_layout, trunks};
 pub(crate) use network::{
-    AutoMapConfidence, AutoMapProposal, AutoMapReason, Connection, ConnectionKind, Network,
+    AutoMapConfidence, AutoMapProposal, AutoMapReason, Connection, ConnectionKind, MembershipMode,
+    Network, RelationshipKind, Segment, SegmentId,
 };
 pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use probe_log::{ProbeProtocol, ProbeRecord};

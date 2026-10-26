@@ -48,6 +48,7 @@ impl Spec {
             role: self.role,
             icon: None,
             status: self.status,
+            host: None,
             cards: card(self.id, self.subnet, self.host, self.prefix, self.mac)
                 .map(|card| NetworkCard { services, ..card })
                 .into_iter()

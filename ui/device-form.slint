@@ -9,8 +9,8 @@ import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
 import { SelectableText } from "components/selectable-text.slint";
 
-// The selected device's editable fields: icon, name, role, network cards, notes, and forgetting
-// it. Used in the map details panel's edit mode and in the
+// The selected device's editable fields: icon, name, role, the device it runs on, network
+// cards, notes, and forgetting it. Used in the map details panel's edit mode and in the
 // discovery details for a host on the map, which puts what the run found out
 // under the role as this form's children.
 export component DeviceForm inherits VerticalLayout {
@@ -59,6 +59,16 @@ export component DeviceForm inherits VerticalLayout {
             model: Bridge.roles;
             current-index <=> Bridge.role-index;
             selected => { Bridge.choose-role(self.current-index); }
+        }
+    }
+    DetailField {
+        label: @tr("details.host");
+        // Such as the host of a virtual machine.
+        ComboBox {
+            model: Bridge.host-choices;
+            current-index: Bridge.host-index;
+            accessible-label: @tr("details.host");
+            selected => { Bridge.choose-host(self.current-index); }
         }
     }
     @children

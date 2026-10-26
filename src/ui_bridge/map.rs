@@ -18,7 +18,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel, 
 use super::view::sync;
 use super::{AppState, convert, handler};
 use crate::model::{
-    CardId, Connection, Level, Point, Positions, Snap, SnapKind, link_route, tree_layout, trunks,
+    CardId, Connection, Level, Point, Positions, Segment, Snap, SnapKind, link_route, tree_layout,
+    trunks,
 };
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -27,6 +28,10 @@ const FRAME: Duration = Duration::from_millis(16);
 /// A delayed UI frame catches the animation up to real time, but a suspended window does not
 /// replay seconds of invisible motion when it resumes.
 const MAX_CATCH_UP: Duration = Duration::from_millis(250);
+/// How far a segment's region reaches beyond the icons of its outermost cards, past their
+/// labels, in map units.
+const SEGMENT_X_PAD: f32 = 75.0;
+const SEGMENT_Y_PAD: f32 = 65.0;
 
 impl AppState {
     /// The cards lit up on the map: the selected card, or every card of the selected device.
@@ -81,7 +86,7 @@ impl AppState {
         let inner = self
             .arrangement
             .inner_neighbours(&self.network, self.dragging);
-        let links = self.network.connections().into_iter();
+        let links = self.network.map_connections().into_iter();
         links
             .filter(|c| Some(c.downstream) != self.dragging)
             .filter_map(|c| Some((c, link_route(shown, &inner, c.upstream, c.downstream)?)))
@@ -275,6 +280,10 @@ fn update_map(
 pub(super) fn push(bridge: &Bridge<'_>, state: &AppState) {
     let strand = state.strand();
     push_preview(bridge, state, strand.as_ref());
+    let samples = lines::relationship_samples(&state.network.map_connections());
+    if let Some(model) = sync(&bridge.get_relationship_samples(), samples) {
+        bridge.set_relationship_samples(model);
+    }
 }
 
 /// Pushes a frame whose snap preview was already calculated while advancing its motion.
@@ -297,6 +306,10 @@ fn push_preview(bridge: &Bridge<'_>, state: &AppState, strand: Option<&Snap>) {
     if let Some(model) = sync(&bridge.get_places(), places.collect()) {
         bridge.set_places(model);
     }
+    let segments = segment_views(state, on_map);
+    if let Some(model) = sync(&bridge.get_segments(), segments) {
+        bridge.set_segments(model);
+    }
 
     let lit = state
         .dragging
@@ -307,6 +320,44 @@ fn push_preview(bridge: &Bridge<'_>, state: &AppState, strand: Option<&Snap>) {
         bridge.set_lines(model);
     }
     bridge.set_bounds(convert::bounds(on_map.values().copied()));
+}
+
+/// Each segment, with the box round its cards where they are drawn now, padded to hold their
+/// labels.
+fn segment_views(state: &AppState, on_map: &Positions) -> Vec<ui::SegmentView> {
+    let network = &state.network;
+    let view = |segment: &Segment| {
+        let members = network.memberships().iter();
+        let mut points = members
+            .filter(|membership| membership.segment == segment.id)
+            .filter_map(|membership| on_map.get(&membership.card).copied());
+        let first = points.next();
+        let start = first.unwrap_or_default();
+        let (min, max) = points.fold((start, start), |(min, max), at| {
+            let min = Point {
+                x: min.x.min(at.x),
+                y: min.y.min(at.y),
+            };
+            let max = Point {
+                x: max.x.max(at.x),
+                y: max.y.max(at.y),
+            };
+            (min, max)
+        });
+        let text = |value: Option<String>| SharedString::from(value.unwrap_or_default());
+        ui::SegmentView {
+            name: segment.name.as_str().into(),
+            vlan: text(segment.vlan.map(|vlan| vlan.to_string())),
+            subnet: text(segment.subnet.map(|subnet| subnet.to_string())),
+            colour: convert::colour(Some(segment.colour)),
+            x: min.x - SEGMENT_X_PAD,
+            y: min.y - SEGMENT_Y_PAD,
+            width: (max.x - min.x) + SEGMENT_X_PAD * 2.0,
+            height: (max.y - min.y) + SEGMENT_Y_PAD * 2.0,
+            shown: first.is_some(),
+        }
+    };
+    network.segments().iter().map(view).collect()
 }
 
 #[cfg(test)]

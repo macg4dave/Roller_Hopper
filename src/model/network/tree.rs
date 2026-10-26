@@ -2,7 +2,7 @@
 //! name; devices themselves are not on the map. A card hangs from the card it is plugged into,
 //! and a card plugged in nowhere heads a tree of its own.
 
-use super::{CardLink, ConnectionKind, Network};
+use super::{CardLink, ConnectionKind, Network, RelationshipKind};
 use crate::model::card::CardId;
 use crate::model::device::Device;
 
@@ -13,6 +13,7 @@ pub(crate) struct Connection {
     pub(crate) upstream: CardId,
     pub(crate) downstream: CardId,
     pub(crate) kind: ConnectionKind,
+    pub(crate) relationship: RelationshipKind,
 }
 
 impl From<&CardLink> for Connection {
@@ -21,6 +22,7 @@ impl From<&CardLink> for Connection {
             upstream: link.upstream,
             downstream: link.card,
             kind: link.kind,
+            relationship: link.relationship,
         }
     }
 }
@@ -56,6 +58,15 @@ impl Network {
         self.links.iter().map(Connection::from).collect()
     }
 
+    /// The lines of the map's tree followed by the joins drawn beside it.
+    pub(crate) fn map_connections(&self) -> Vec<Connection> {
+        self.links
+            .iter()
+            .chain(&self.relations)
+            .map(Connection::from)
+            .collect()
+    }
+
     /// The cards plugged straight into `card`, in the order of [`Self::connections`].
     pub(crate) fn behind(&self, card: CardId) -> impl Iterator<Item = CardId> {
         self.links
@@ -71,19 +82,22 @@ impl Network {
         chain.take(self.nodes().len() + 1).any(|at| at == branch)
     }
 
-    /// Whether `card` may be plugged into `target`: not into another card of its own device,
-    /// and not into one behind it, which would form a loop.
-    pub(crate) fn can_plug(&self, card: CardId, target: CardId) -> bool {
-        let owner = |c| self.card_owner(c).map(|d| d.id);
-        owner(card).is_some()
-            && owner(target).is_some()
-            && owner(card) != owner(target)
-            && !self.is_within(target, card)
+    /// Whether `card` may hang from `target`, joined as [`Self::natural_relationship`] says,
+    /// also from a card of its own device, such as a bridge it belongs to. The card editor
+    /// offers these, where the user picks the card on purpose.
+    pub(crate) fn can_attach(&self, card: CardId, target: CardId) -> bool {
+        self.can_relate(card, target, self.natural_relationship(card, target))
+    }
+
+    /// Whether `card` may hang from `target` by `relationship`: as [`Self::can_join`] allows,
+    /// and not from a card behind it, which would form a loop.
+    fn can_relate(&self, card: CardId, target: CardId, relationship: RelationshipKind) -> bool {
+        self.can_join(card, target, relationship) && !self.is_within(target, card)
     }
 
     /// Plugs `card` into `upstream`, as a link the user made by dragging it there, or unplugs
     /// it on `None`, so it heads a tree of its own; the cards behind it go with it. Refused
-    /// where [`Self::can_plug`] does not allow it. A card that stays plugged into the same card
+    /// where [`Self::plug_card`] does not allow it. A card that stays plugged into the same card
     /// keeps the link it had.
     pub(crate) fn connect(&mut self, card: CardId, upstream: Option<CardId>) {
         if self.link(card).map(|l| l.upstream) != upstream {
@@ -120,12 +134,14 @@ impl Network {
                 upstream: old.upstream,
                 card,
                 kind: old.kind,
+                relationship: old.relationship,
             });
         }
         self.links.push(CardLink {
             upstream: card,
             card: below,
             kind: ConnectionKind::Known,
+            relationship: self.natural_relationship(below, card),
         });
         true
     }
@@ -138,7 +154,7 @@ impl Network {
             let Some(link) = self.link(at) else {
                 break;
             };
-            path.push((link.card, link.upstream, link.kind));
+            path.push((link.card, link.upstream, link.kind, link.relationship));
             at = link.upstream;
         }
         if path.is_empty() {
@@ -146,21 +162,49 @@ impl Network {
         }
 
         self.links
-            .retain(|link| !path.iter().any(|(child, _, _)| *child == link.card));
-        self.links
-            .extend(path.into_iter().map(|(child, parent, kind)| CardLink {
-                upstream: child,
-                card: parent,
-                kind,
-            }));
+            .retain(|link| !path.iter().any(|(child, _, _, _)| *child == link.card));
+        self.links.extend(
+            path.into_iter()
+                .map(|(child, parent, kind, relationship)| CardLink {
+                    upstream: child,
+                    card: parent,
+                    kind,
+                    relationship,
+                }),
+        );
         true
     }
 
     /// Plugs `card` into `target`, or unplugs it on `None`, as a known link. Refused (false)
-    /// where [`Self::can_plug`] does not allow it.
+    /// into another card of its own device, which a drag or a scan never means, or where
+    /// [`Self::can_attach`] does not allow it.
     pub(crate) fn plug_card(&mut self, card: CardId, target: Option<CardId>) -> bool {
+        if target.is_some_and(|target| self.same_device(card, target)) {
+            return false;
+        }
+        self.attach_card(card, target)
+    }
+
+    /// Hangs `card` from `target` as a known link joined as [`Self::natural_relationship`]
+    /// says, or unplugs it on `None`. Refused (false) where [`Self::can_attach`] does not allow
+    /// it.
+    pub(crate) fn attach_card(&mut self, card: CardId, target: Option<CardId>) -> bool {
+        let relationship = target.map_or(RelationshipKind::Physical, |target| {
+            self.natural_relationship(card, target)
+        });
+        self.relate_card(card, target, relationship)
+    }
+
+    /// Plugs `card` into `target` joined by `relationship`, or unplugs it on `None`. Refused
+    /// (false) where [`Self::can_relate`] does not allow it.
+    pub(crate) fn relate_card(
+        &mut self,
+        card: CardId,
+        target: Option<CardId>,
+        relationship: RelationshipKind,
+    ) -> bool {
         let refused = match target {
-            Some(target) => !self.can_plug(card, target),
+            Some(target) => !self.can_relate(card, target, relationship),
             None => self.card_owner(card).is_none(),
         };
         if refused {
@@ -172,6 +216,7 @@ impl Network {
                 upstream,
                 card,
                 kind: ConnectionKind::Known,
+                relationship,
             });
         }
         true

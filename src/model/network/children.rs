@@ -1,4 +1,4 @@
-//! Adding and forgetting ordinary devices.
+//! Adding and forgetting ordinary devices, and the device each runs on.
 
 use super::{ConnectionKind, Network};
 use crate::model::card::{CardId, NetworkCard};
@@ -16,6 +16,7 @@ impl Network {
             role: Role::Other,
             icon: None,
             status: Status::Unknown,
+            host: None,
             cards: vec![NetworkCard::blank(CardId(0))],
             manufacturer: None,
             model: None,
@@ -77,7 +78,37 @@ impl Network {
         self.devices.retain(|device| device.id != id);
         self.links
             .retain(|link| !cards.contains(&link.upstream) && !cards.contains(&link.card));
+        self.relations
+            .retain(|link| !cards.contains(&link.upstream) && !cards.contains(&link.card));
+        self.memberships
+            .retain(|membership| !cards.contains(&membership.card));
+        for guest in self.devices.iter_mut().filter(|d| d.host == Some(id)) {
+            guest.host = None;
+        }
         (!cards.is_empty()).then_some(id).into_iter().collect()
+    }
+
+    /// Whether `device` may run on `host`: both exist, and `host` is not `device` itself or
+    /// something that runs on it, which would form a ring.
+    pub(crate) fn can_host(&self, device: DeviceId, host: DeviceId) -> bool {
+        let host_of = |at: &DeviceId| self.device(*at)?.host;
+        let mut chain = std::iter::successors(Some(host), host_of).take(self.devices.len() + 1);
+        self.device(device).is_some()
+            && self.device(host).is_some()
+            && !chain.any(|at| at == device)
+    }
+
+    /// Records the device `device` runs on, or none. Refused (false) where [`Self::can_host`]
+    /// does not allow it.
+    pub(crate) fn set_host(&mut self, device: DeviceId, host: Option<DeviceId>) -> bool {
+        if host.is_some_and(|host| !self.can_host(device, host)) {
+            return false;
+        }
+        let Some(guest) = self.device_mut(device) else {
+            return false;
+        };
+        guest.host = host;
+        true
     }
 }
 
@@ -94,6 +125,21 @@ mod tests {
         assert!(network.device(id).is_none());
         assert!(network.device(DeviceId(24)).is_some());
         assert!(network.uplink(CardId(24)).is_none());
+    }
+
+    #[test]
+    fn a_device_runs_on_a_host_without_a_ring() {
+        let mut network = mock_data::network();
+        let (server, vm, other) = (DeviceId(6), DeviceId(19), DeviceId(5));
+        assert!(network.set_host(vm, Some(server)));
+        assert_eq!(network.device(vm).and_then(|d| d.host), Some(server));
+        assert!(!network.set_host(server, Some(vm)), "a ring");
+        assert!(!network.set_host(vm, Some(vm)), "itself");
+        assert!(!network.set_host(vm, Some(DeviceId(u32::MAX))), "missing");
+        assert!(network.set_host(other, Some(vm)), "a chain is fine");
+        network.remove_device(server);
+        assert_eq!(network.device(vm).and_then(|d| d.host), None);
+        assert!(network.set_host(other, None));
     }
 
     #[test]

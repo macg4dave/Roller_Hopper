@@ -126,6 +126,10 @@ export component MapNode inherits Rectangle {
         NodeLabel {
             text: MapSettings.show-addresses ? Labels.card-label(device.card-name, device.card-index, Labels.address(device.ip, device.dhcp)) : Labels.card-short(device.card-name, device.card-index);
         }
+        // Its kind and state, once the user has given either.
+        if Labels.interface(device.interface-kind, device.interface-state) != "": NodeLabel {
+            text: Labels.interface(device.interface-kind, device.interface-state);
+        }
         if MapSettings.show-roles: NodeLabel { text: device.role; }
         if MapSettings.show-macs && device.mac != "": NodeLabel { text: device.mac; }
         if MapSettings.show-hostnames && device.hostname != "": NodeLabel { text: device.hostname; }

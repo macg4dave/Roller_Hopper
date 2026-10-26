@@ -1,13 +1,17 @@
 //! The network as a whole: devices, how their network cards are plugged into each other, the
-//! roles on offer and their groups.
+//! Layer 2 segments they share, the roles on offer and their groups.
 
 mod auto_map;
 mod cards;
 mod check;
 mod children;
+mod relations;
+mod segments;
 mod tree;
 
 pub(crate) use auto_map::{AutoMapConfidence, AutoMapProposal, AutoMapReason};
+pub(crate) use relations::RelationshipKind;
+pub(crate) use segments::{MembershipMode, Segment, SegmentId};
 pub(crate) use tree::Connection;
 
 use serde::{Deserialize, Serialize};
@@ -16,6 +20,7 @@ use super::card::CardId;
 use super::device::{Device, DeviceId, Icon, Role};
 use super::groups::{GroupColour, GroupId, Groups, LineStyle, StandardGroup};
 use super::roles::Roles;
+use segments::SegmentMembership;
 
 /// Whether a link was observed directly or guessed from indirect evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -24,12 +29,15 @@ pub(crate) enum ConnectionKind {
     Inferred,
 }
 
-/// A network card plugged into a card of another device, towards the router (`upstream`).
+/// A network card plugged into another card, towards the router (`upstream`), or joined to it
+/// beside the tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct CardLink {
     pub(crate) upstream: CardId,
     pub(crate) card: CardId,
     pub(crate) kind: ConnectionKind,
+    #[serde(default)]
+    pub(crate) relationship: RelationshipKind,
 }
 
 /// Read from a file, it is only used once [`Self::checked`].
@@ -37,6 +45,14 @@ pub(crate) struct CardLink {
 pub(crate) struct Network {
     devices: Vec<Device>,
     links: Vec<CardLink>,
+    /// Joins drawn beside the tree, which do not move cards in it. This lets one card be both
+    /// cabled and a bridge member without being shown twice.
+    #[serde(default)]
+    relations: Vec<CardLink>,
+    #[serde(default)]
+    segments: Vec<Segment>,
+    #[serde(default)]
+    memberships: Vec<SegmentMembership>,
     roles: Roles,
     groups: Groups,
 }
@@ -47,6 +63,9 @@ impl Default for Network {
         let mut network = Self {
             devices: Vec::new(),
             links: Vec::new(),
+            relations: Vec::new(),
+            segments: Vec::new(),
+            memberships: Vec::new(),
             roles: Roles::default(),
             groups: Groups::default(),
         };

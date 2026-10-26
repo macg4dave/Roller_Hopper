@@ -87,6 +87,7 @@ impl Network {
             upstream: link.upstream,
             card: link.downstream,
             kind: ConnectionKind::Inferred,
+            relationship: link.relationship,
         }));
     }
 

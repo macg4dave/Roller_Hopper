@@ -1,8 +1,9 @@
 //! Connection lines as SVG path commands, drawn in the colour and line style of the group of the
-//! device whose card each line hangs from.
+//! device whose card each line hangs from; a join other than a cable has a style of its own.
 
 use crate::model::{
     CardId, Connection, ConnectionKind, Device, GroupColour, LineStyle, Network, Point, Positions,
+    RelationshipKind,
 };
 use crate::ui;
 use crate::ui_bridge::convert;
@@ -36,24 +37,31 @@ pub(super) fn lines(
     // Every line hangs from a card: a link from its upstream card, a trunk from its own.
     let link_lines = links.iter().map(|(link, route)| {
         let highlighted = is_lit(link.upstream) || is_lit(link.downstream);
-        (link.upstream, link.kind, highlighted, route.to_vec())
+        let line = (link.kind, link.relationship, highlighted);
+        (link.upstream, line, route.to_vec())
     });
-    let trunk_lines = trunks
-        .iter()
-        .map(|&(id, trunk)| (id, ConnectionKind::Known, is_lit(id), trunk.to_vec()));
+    let trunk_lines = trunks.iter().map(|&(id, trunk)| {
+        let line = (
+            ConnectionKind::Known,
+            RelationshipKind::Physical,
+            is_lit(id),
+        );
+        (id, line, trunk.to_vec())
+    });
     let mut sets: Vec<(Look, Vec<String>)> = Vec::new();
     let mut add = |look: Look, path: String| match sets.iter_mut().find(|(l, _)| *l == look) {
         Some((_, paths)) => paths.push(path),
         None => sets.push((look, vec![path])),
     };
-    for (parent, kind, highlighted, points) in link_lines.chain(trunk_lines) {
+    for (parent, (kind, relationship, highlighted), points) in link_lines.chain(trunk_lines) {
         let parent = network.card_owner(parent);
         // A line takes the group colour of the device it hangs from, unless it is highlighted;
-        // it keeps that group's style either way.
+        // a cable keeps that group's style either way.
         let colour = parent
             .filter(|_| !highlighted)
             .and_then(|d| network.colour(d));
-        let style = parent.map(|d| network.line_style(d)).unwrap_or_default();
+        let grouped = parent.map(|d| network.line_style(d)).unwrap_or_default();
+        let style = relationship_style(relationship, grouped);
         add((colour, style, kind, highlighted), path(style, &points));
     }
     for tie in ties {
@@ -69,8 +77,19 @@ pub(super) fn lines(
             inferred: kind == ConnectionKind::Inferred,
             selected: highlighted,
             thick: style == LineStyle::Thick,
+            ..ui::LineSet::default()
         });
     sets.collect()
+}
+
+/// The style a line is drawn in: a cable in its group's, other joins each in one of their own.
+fn relationship_style(relationship: RelationshipKind, grouped: LineStyle) -> LineStyle {
+    match relationship {
+        RelationshipKind::Physical => grouped,
+        RelationshipKind::VirtualPeer => LineStyle::Dashed,
+        RelationshipKind::BridgeMember => LineStyle::Dotted,
+        RelationshipKind::Routed => LineStyle::Thick,
+    }
 }
 
 /// The ties between the cards of `device` as `shown`, each to the next, so they read as one
@@ -111,6 +130,25 @@ pub(super) fn samples() -> Vec<ui::LineSet> {
         ..ui::LineSet::default()
     };
     LineStyle::ALL.into_iter().map(sample).collect()
+}
+
+/// A preview of each relationship other than a cable that `links` use, in the order of
+/// [`RelationshipKind::ALL`], for the map's key. A cable is drawn in its group's style, which
+/// the key already shows.
+pub(super) fn relationship_samples(links: &[Connection]) -> Vec<ui::LineSet> {
+    let used = |kind: &RelationshipKind| links.iter().any(|link| link.relationship == *kind);
+    let kinds = RelationshipKind::ALL.into_iter().skip(1).filter(used);
+    kinds
+        .map(|kind| {
+            let style = relationship_style(kind, LineStyle::Solid);
+            ui::LineSet {
+                commands: path(style, &SAMPLE).into(),
+                thick: style == LineStyle::Thick,
+                relationship: convert::relationship(kind),
+                ..ui::LineSet::default()
+            }
+        })
+        .collect()
 }
 
 /// A polyline through `points` in the given style.

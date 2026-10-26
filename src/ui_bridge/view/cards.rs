@@ -26,6 +26,8 @@ pub(super) fn card_row(
         card_id: convert::ui_card_id(card.id),
         card_index: index_of(device, card.id),
         card_name: card.name.trim().into(),
+        interface_kind: convert::interface_kind(card.interface_kind),
+        interface_state: convert::interface_state(card.state),
         drag_card: convert::ui_card_id(card.id),
         card_icon: icons.choice(&card.icon),
         ip: convert::ip(card),
@@ -74,6 +76,8 @@ pub(super) fn card_views(
             id: convert::ui_card_id(card.id),
             index: index_of(device, card.id),
             name: card.name.trim().into(),
+            interface_kind: convert::interface_kind(card.interface_kind),
+            interface_state: convert::interface_state(card.state),
             ip: convert::ip(card),
             dhcp: card.dhcp,
             mask: convert::mask(card),
@@ -87,6 +91,26 @@ pub(super) fn card_views(
                 Some(_) | None => -1,
             },
             inferred: link.is_some_and(|l| l.kind == ConnectionKind::Inferred),
+            relationship: convert::relationship(
+                link.map_or(crate::model::RelationshipKind::Physical, |item| {
+                    item.relationship
+                }),
+            ),
+            segment_index: network
+                .segment_of(card.id)
+                .and_then(|(id, _)| {
+                    network
+                        .segments()
+                        .iter()
+                        .position(|segment| segment.id == id)
+                })
+                .and_then(|index| i32::try_from(index + 1).ok())
+                .unwrap_or_default(),
+            membership_mode: convert::membership(
+                network
+                    .segment_of(card.id)
+                    .map_or(crate::model::MembershipMode::Untagged, |(_, mode)| mode),
+            ),
             ports: ModelRc::new(VecModel::from(convert::port_views(card))),
             icon: icons.choice(&card.icon),
         }

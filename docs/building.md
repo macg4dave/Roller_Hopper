@@ -49,6 +49,14 @@ for diagnostics, but its unoptimised rendering is not a valid performance result
 cargo run -- --mock-data
 ```
 
+The smaller detailed Layer 2 fixture can be opened directly for UI checks:
+
+```sh
+cargo run -- --network-map
+```
+
+It loads `mock-data/network-map.rhopper.json` through the production project parser.
+
 ## Checking a change
 
 Every change passes the quality gate, in this order:

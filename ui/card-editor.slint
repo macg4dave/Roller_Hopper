@@ -1,7 +1,8 @@
 import { Button, CheckBox, ComboBox } from "std-widgets.slint";
-import { Bridge, CardField } from "bridge.slint";
+import { Bridge, CardField, InterfaceKind, InterfaceState, MembershipMode, RelationshipKind } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
+import { CardRelations } from "card-relations.slint";
 import { DetailField } from "components/detail-field.slint";
 import { IconChooser } from "components/icon-chooser.slint";
 import { NameBox } from "components/name-box.slint";
@@ -40,9 +41,10 @@ component CardSetting inherits VerticalLayout {
     }
 }
 
-// While a network card is selected in map edit mode: its name (edited in its heading), IPv4
-// settings, parent device, upstream connection, open ports, and removal. A card is a child of
-// its device, which it leads back to.
+// While a network card is selected in map edit mode: its name (edited in its heading), kind and
+// state, IPv4 settings, parent device, upstream connection and what joins it there, its other
+// joins, its segment, open ports, and removal. A card is a child of its device, which it leads
+// back to.
 export component CardEditor inherits VerticalLayout {
     alignment: start;
     spacing: Theme.space-xs;
@@ -90,6 +92,29 @@ export component CardEditor inherits VerticalLayout {
         }
     }
 
+    // Dropdown positions follow the order of the enums.
+    DetailField {
+        label: @tr("details.interface-kind");
+        ComboBox {
+            model: Labels.interface-kinds;
+            current-index: Bridge.card.interface-kind == InterfaceKind.virtual-adapter ? 1
+                : Bridge.card.interface-kind == InterfaceKind.bridge ? 2
+                : Bridge.card.interface-kind == InterfaceKind.switch-port ? 3 : 0;
+            accessible-label: @tr("details.interface-kind");
+            selected => { Bridge.set-interface-kind(self.current-index); }
+        }
+    }
+    DetailField {
+        label: @tr("details.interface-state");
+        ComboBox {
+            model: Labels.interface-states;
+            current-index: Bridge.card.interface-state == InterfaceState.up ? 1
+                : Bridge.card.interface-state == InterfaceState.down ? 2
+                : Bridge.card.interface-state == InterfaceState.admin-down ? 3 : 0;
+            accessible-label: @tr("details.interface-state");
+            selected => { Bridge.set-interface-state(self.current-index); }
+        }
+    }
     DetailField {
         label: @tr("details.ip");
         CardSetting {
@@ -161,6 +186,40 @@ export component CardEditor inherits VerticalLayout {
             current-index: Bridge.card-plug-index;
             accessible-label: @tr("details.plugged-into");
             selected => { Bridge.plug-card(self.current-index); }
+        }
+    }
+    if Bridge.card-plug-index > 0: DetailField {
+        label: @tr("details.relationship");
+        ComboBox {
+            model: Labels.relationships;
+            current-index: Bridge.card.relationship == RelationshipKind.virtual-peer ? 1
+                : Bridge.card.relationship == RelationshipKind.bridge-member ? 2
+                : Bridge.card.relationship == RelationshipKind.routed ? 3 : 0;
+            accessible-label: @tr("details.relationship");
+            selected => { Bridge.set-relationship-kind(self.current-index); }
+        }
+    }
+    DetailField {
+        label: @tr("relationships.additional");
+        CardRelations { }
+    }
+    DetailField {
+        label: @tr("details.segment");
+        ComboBox {
+            model: Bridge.segment-choices;
+            current-index: Bridge.card.segment-index;
+            accessible-label: @tr("details.segment");
+            selected => { Bridge.set-card-segment(self.current-index); }
+        }
+    }
+    if Bridge.card.segment-index > 0: DetailField {
+        label: @tr("details.vlan-mode");
+        ComboBox {
+            model: Labels.membership-modes;
+            current-index: Bridge.card.membership-mode == MembershipMode.tagged ? 1
+                : Bridge.card.membership-mode == MembershipMode.native ? 2 : 0;
+            accessible-label: @tr("details.vlan-mode");
+            selected => { Bridge.set-membership-mode(self.current-index); }
         }
     }
     DetailField {

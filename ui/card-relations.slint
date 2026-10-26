@@ -1,0 +1,48 @@
+import { Button, ComboBox } from "std-widgets.slint";
+import { Bridge } from "bridge.slint";
+import { Labels } from "labels.slint";
+import { Theme } from "theme.slint";
+import { SelectableText } from "components/selectable-text.slint";
+
+// The selected card's joins beside the map's tree, such as bridge membership or a routed path,
+// each with a way to remove it, and a row to add one: the other card and what joins them. A
+// cable is the card's place in the tree, so it is not offered here.
+export component CardRelations inherits VerticalLayout {
+    // Index in Bridge.upstream-choices (0 for none), and in Labels.relationships less the cable.
+    property <int> target;
+    property <int> kind;
+
+    spacing: Theme.space-xs;
+
+    for relation[index] in Bridge.card-relations: HorizontalLayout {
+        spacing: Theme.space-xs;
+        SelectableText {
+            horizontal-stretch: 1;
+            text: @tr("relationships.summary", relation.endpoint, Labels.relationship(relation.relationship));
+        }
+        Button {
+            text: @tr("relationships.remove");
+            clicked => { Bridge.remove-card-relation(index); }
+        }
+    }
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        ComboBox {
+            horizontal-stretch: 1;
+            model: Bridge.upstream-choices;
+            current-index <=> root.target;
+            accessible-label: @tr("relationships.target");
+        }
+        ComboBox {
+            horizontal-stretch: 1;
+            model: [Labels.relationships[1], Labels.relationships[2], Labels.relationships[3]];
+            current-index <=> root.kind;
+            accessible-label: @tr("details.relationship");
+        }
+        Button {
+            text: @tr("relationships.add");
+            enabled: root.target > 0;
+            clicked => { Bridge.add-card-relation(root.target, root.kind + 1); }
+        }
+    }
+}
