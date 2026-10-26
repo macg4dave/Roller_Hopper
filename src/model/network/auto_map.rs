@@ -116,7 +116,8 @@ impl Network {
     }
 
     /// A unique router card selected first by an exact default-gateway address, otherwise by a
-    /// shared subnet. More than one equally good candidate is deliberately unresolved.
+    /// shared subnet, where routers that share it are narrowed to the one another card there
+    /// names as its gateway. More than one equally good candidate is deliberately unresolved.
     fn router_for(&self, card: &NetworkCard) -> Option<(CardId, bool)> {
         let routers = self.cards_with_role(&Role::Router);
         if let Some(gateway) = card.gateway {
@@ -132,15 +133,26 @@ impl Network {
                 return None;
             }
         }
-        let same_subnet: Vec<CardId> = routers
+        let same_subnet: Vec<(CardId, &NetworkCard)> = routers
             .into_iter()
             .filter(|(_, candidate)| shares_subnet(card, candidate))
-            .map(|(id, _)| id)
             .collect();
-        (same_subnet.len() == 1)
-            .then(|| same_subnet.first().copied())
-            .flatten()
-            .map(|id| (id, false))
+        let named: Vec<CardId> = same_subnet
+            .iter()
+            .filter(|(_, candidate)| self.named_as_gateway(card, candidate))
+            .map(|(id, _)| *id)
+            .collect();
+        let only = |ids: &[CardId]| (ids.len() == 1).then(|| ids.first().copied()).flatten();
+        let ids: Vec<CardId> = same_subnet.iter().map(|(id, _)| *id).collect();
+        only(&ids).or_else(|| only(&named)).map(|id| (id, false))
+    }
+
+    /// Whether a card on `card`'s subnet names `router`'s address as its gateway, as the
+    /// scanning computer's own card does.
+    fn named_as_gateway(&self, card: &NetworkCard, router: &NetworkCard) -> bool {
+        let cards = self.devices.iter().flat_map(|device| &device.cards);
+        let mut neighbours = cards.filter(|other| shares_subnet(card, other));
+        neighbours.any(|other| other.gateway.is_some() && other.gateway == address(router))
     }
 
     fn infrastructure_for(
@@ -257,6 +269,36 @@ mod tests {
                 .iter()
                 .any(|suggestion| { suggestion.reason == AutoMapReason::Wireless })
         );
+    }
+
+    #[test]
+    fn of_several_routers_on_a_subnet_the_gateway_a_neighbour_names_is_chosen() {
+        let mut network = Network::default();
+        let router = |net: &mut Network, ip: &str| {
+            let id = net.add_device().unwrap();
+            let device = net.device_mut(id).unwrap();
+            device.role = Role::Router;
+            device.cards[0].address = Some(format!("{ip}/24").parse().unwrap());
+            device.cards[0].id
+        };
+        let gateway = router(&mut network, "192.168.1.1");
+        router(&mut network, "192.168.1.220");
+        let laptop = network.add_device().unwrap();
+        let card = network.device(laptop).unwrap().cards[0].id;
+        network.card_mut(card).unwrap().address = Some("192.168.1.50/24".parse().unwrap());
+        let unresolved = network.auto_map_proposal();
+        assert!(
+            unresolved.suggestions.is_empty(),
+            "two routers, no gateway known"
+        );
+
+        let this_computer = network.add_device().unwrap();
+        let own = network.device_mut(this_computer).unwrap();
+        own.cards[0].address = Some("192.168.1.145/24".parse().unwrap());
+        own.cards[0].gateway = Some("192.168.1.1".parse().unwrap());
+        let proposal = network.auto_map_proposal();
+        let laptops = proposal.suggestions.iter().find(|s| s.downstream == card);
+        assert_eq!(laptops.map(|s| s.upstream), Some(gateway));
     }
 
     #[test]

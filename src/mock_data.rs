@@ -45,6 +45,7 @@ impl Spec {
             id: DeviceId(self.id),
             name: self.name.to_owned(),
             kind: self.kind,
+            kind_clue: None,
             role: self.role,
             icon: None,
             status: self.status,

@@ -45,7 +45,7 @@ pub(super) fn fresh_ids(used: impl Iterator<Item = u32>, count: usize) -> Option
 
 pub(crate) use arrangement::{Arrangement, Level};
 pub(crate) use card::{CardId, InterfaceKind, InterfaceState, MacAddr, NetworkCard};
-pub(crate) use device::{Device, DeviceId, DeviceKind, Icon, LastSeen, Role, Status};
+pub(crate) use device::{Device, DeviceId, DeviceKind, Icon, KindClue, LastSeen, Role, Status};
 pub(crate) use discovery::{
     AiImportPhase, Answer, Decision, Discovery, Finding, Found, FoundFilter, FoundSort, LogEntry,
     LogEvent, Method, Parent, Phase, ScanMode, ScanOptions, ScanProgress, TargetError,

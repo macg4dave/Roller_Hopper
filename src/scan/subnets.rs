@@ -124,6 +124,29 @@ fn interfaces() -> (HashSet<String>, Vec<netscli_core::InterfaceInfo>) {
     (routers, interfaces)
 }
 
+/// This computer's default gateway on `subnet`, as its adapter there lists it; none when it
+/// has none there or the system does not say.
+#[cfg(windows)]
+pub(super) fn gateway_on(subnet: Ipv4Net) -> Option<Ipv4Addr> {
+    let on_subnet = |ip: &IpAddr| matches!(ip, IpAddr::V4(ip) if subnet.contains(ip));
+    let adapters = ipconfig::get_adapters().ok()?;
+    let mut there = adapters
+        .iter()
+        .filter(|adapter| adapter.ip_addresses().iter().any(on_subnet));
+    there.find_map(|adapter| {
+        adapter.gateways().iter().find_map(|gateway| match gateway {
+            IpAddr::V4(gateway) if subnet.contains(gateway) => Some(*gateway),
+            IpAddr::V4(_) | IpAddr::V6(_) => None,
+        })
+    })
+}
+
+/// Only Windows lists gateways directly; elsewhere the scan goes without.
+#[cfg(not(windows))]
+pub(super) fn gateway_on(_subnet: Ipv4Net) -> Option<Ipv4Addr> {
+    None
+}
+
 #[cfg(not(windows))]
 fn interfaces() -> (HashSet<String>, Vec<netscli_core::InterfaceInfo>) {
     (HashSet::new(), NetworkManager::get_interfaces())

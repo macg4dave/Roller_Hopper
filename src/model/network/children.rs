@@ -13,6 +13,7 @@ impl Network {
             id: DeviceId(0),
             name: String::new(),
             kind: DeviceKind::Unknown,
+            kind_clue: None,
             role: Role::Other,
             icon: None,
             status: Status::Unknown,

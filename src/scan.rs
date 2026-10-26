@@ -22,6 +22,7 @@ pub(crate) use subnets::{Adapter, adapters, local_subnet};
 
 use std::future::Future;
 use std::io;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryIter};
@@ -32,7 +33,7 @@ use tokio::runtime::{Builder, Runtime};
 use tokio::task::{JoinError, JoinHandle, JoinSet};
 
 use crate::model::{Answer, Discovery, Network, ScanOptions, ScanProgress};
-use answer::Probed;
+use answer::{Probed, Route};
 use ports::{PortPlan, PortRegistry};
 
 /// Probes in flight at once across the port probes of all hosts, and the sweep's knocks.
@@ -172,6 +173,8 @@ async fn run(
                 registry: &registry,
                 subnet,
                 options,
+                gateway: subnets::gateway_on(subnet),
+                own: subnets::own_macs().into_iter().map(|(ip, _)| ip).collect(),
             };
             probe_all(hosts, &run, counts, &events).await
         }
@@ -201,6 +204,21 @@ struct Run<'a> {
     registry: &'a PortRegistry,
     subnet: Ipv4Net,
     options: ScanOptions,
+    /// This computer's default gateway on the subnet, when the system says.
+    gateway: Option<Ipv4Addr>,
+    /// This computer's own addresses.
+    own: Vec<IpAddr>,
+}
+
+impl Run<'_> {
+    /// Where the host at `ip` stands to this computer's default gateway.
+    fn route(&self, ip: IpAddr) -> Route {
+        match self.gateway {
+            Some(gateway) if ip == gateway => Route::Gateway,
+            Some(gateway) if self.own.contains(&ip) => Route::ThisComputer(gateway),
+            Some(_) | None => Route::Other,
+        }
+    }
 }
 
 /// Probes every host the sweep found, reporting each as soon as it is done, and says how the
@@ -238,7 +256,7 @@ async fn probe_all(
         HOST_TASKS,
         |(host, own, ssdp)| probe(host, own, ssdp, Arc::clone(&shared), run.options),
         |done| {
-            let probed = match done {
+            let mut probed = match done {
                 Ok(Ok(probed)) => probed,
                 Ok(Err(error)) => {
                     failure = Some(Event::Failed(error));
@@ -249,6 +267,7 @@ async fn probe_all(
                     return false;
                 }
             };
+            probed.route = run.route(probed.host.ip);
             let Some(answer) = answer::answer(&probed, run.subnet, run.options, run.registry)
             else {
                 return true;
@@ -319,6 +338,8 @@ async fn probe(
         ttl,
         mdns,
         ssdp,
+        // Set from the run once probed, which knows this computer's addresses and gateway.
+        route: Route::Other,
     })
 }
 

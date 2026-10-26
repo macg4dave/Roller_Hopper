@@ -8,7 +8,8 @@ use serde_json::{Map, Value, json};
 
 use super::response;
 use crate::model::{
-    Device, DeviceKind, NetworkCard, OsClue, OsFamily, OsHint, ServiceProtocol, ServiceSource,
+    Device, DeviceKind, KindClue, MacAddr, NetworkCard, OsClue, OsFamily, OsHint, ServiceProtocol,
+    ServiceSource,
 };
 
 /// The most open ports listed for one card, so a host with thousands open still fits the
@@ -45,6 +46,9 @@ pub(crate) fn evidence(device: &Device) -> String {
         fact.insert("ssdp_server".into(), json!(server));
     }
     add_card_evidence(&mut fact, &device.cards);
+    if let Some(kind) = kind_clue(device) {
+        fact.insert("type_fingerprint".into(), kind);
+    }
     if let Some(os) = os_clues(device) {
         fact.insert("fingerprint".into(), os);
     }
@@ -70,19 +74,13 @@ fn add_card_evidence(fact: &mut Map<String, Value>, cards: &[NetworkCard]) {
     if !vendors.is_empty() {
         fact.insert("mac_vendors".into(), json!(vendors));
     }
-    if cards
-        .iter()
-        .filter_map(|card| card.mac)
-        .any(|mac| mac.0[0] & 0x02 != 0)
-    {
+    let mut macs = cards.iter().filter_map(|card| card.mac);
+    if macs.clone().any(MacAddr::is_randomised) {
         fact.insert("randomised_mac".into(), json!(true));
     }
-    let gateway = cards.iter().any(|card| {
-        card.address
-            .zip(card.gateway)
-            .is_some_and(|(address, gateway)| address.addr() == gateway)
-    });
-    fact.insert("gateway_evidence".into(), json!(gateway));
+    if macs.any(MacAddr::is_virtual) {
+        fact.insert("virtual_adapter".into(), json!(true));
+    }
     let services: Vec<Value> = cards.iter().flat_map(open_ports).take(MAX_PORTS).collect();
     if !services.is_empty() {
         fact.insert("services".into(), json!(services));
@@ -115,6 +113,16 @@ fn open_ports(card: &NetworkCard) -> Vec<Value> {
             Value::Object(fact)
         })
         .collect()
+}
+
+/// The scanner's type when one of its certain rules decided it, with the clue behind it.
+fn kind_clue(device: &Device) -> Option<Value> {
+    let clue = match device.kind_clue? {
+        KindClue::DefaultGateway => "default gateway of the scanning computer",
+        KindClue::SwitchModel => "hostname or model names a managed switch series",
+        KindClue::FileServer => "NFS, its port mapper and SMB open together",
+    };
+    Some(json!({ "scanner_guess": device.kind, "clue": clue }))
 }
 
 /// The scanner's OS guess with the clues behind it; none for a guess the AI made, which it is
@@ -326,6 +334,7 @@ mod tests {
             id: DeviceId(1),
             name: "diskstation".into(),
             kind: DeviceKind::Unknown,
+            kind_clue: None,
             role: Role::Other,
             icon: None,
             status: Status::Online,
@@ -378,7 +387,6 @@ mod tests {
                 "hostname": "diskstation.home.arpa",
                 "mdns_services": ["smb"],
                 "mac_vendors": ["Synology Incorporated"],
-                "gateway_evidence": false,
                 "services": [
                     { "port": 445, "protocol": "tcp", "source": "manual", "description": "SMB" },
                     { "port": 5001, "protocol": "tcp", "source": "manual" }
@@ -411,9 +419,25 @@ mod tests {
         assert_eq!(
             evidence_of(&device),
             json!({
-                "randomised_mac": true,
-                "gateway_evidence": false
+                "randomised_mac": true
             })
+        );
+    }
+
+    #[test]
+    fn a_virtual_machines_card_is_not_called_randomised_and_a_certain_type_says_why() {
+        let mut device = found();
+        if let Some(card) = device.cards.first_mut() {
+            card.mac = Some(MacAddr([0x52, 0x54, 0x00, 0x77, 0x01, 0x10]));
+        }
+        device.kind = DeviceKind::Nas;
+        device.kind_clue = Some(KindClue::FileServer);
+        let evidence = evidence_of(&device);
+        assert_eq!(evidence.get("randomised_mac"), None);
+        assert_eq!(evidence["virtual_adapter"], json!(true));
+        assert_eq!(
+            evidence["type_fingerprint"],
+            json!({ "scanner_guess": "Nas", "clue": "NFS, its port mapper and SMB open together" })
         );
     }
 

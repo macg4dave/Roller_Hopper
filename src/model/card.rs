@@ -58,6 +58,34 @@ pub(crate) struct CardId(pub(crate) u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct MacAddr(pub(crate) [u8; 6]);
 
+/// The prefixes hypervisors and container engines give the cards they make.
+const VIRTUAL_PREFIXES: [&[u8]; 9] = [
+    &[0x52, 0x54, 0x00], // QEMU and KVM
+    &[0x00, 0x16, 0x3E], // Xen
+    &[0x00, 0x0C, 0x29], // VMware
+    &[0x00, 0x50, 0x56], // VMware
+    &[0x00, 0x05, 0x69], // VMware
+    &[0x00, 0x15, 0x5D], // Hyper-V
+    &[0x08, 0x00, 0x27], // VirtualBox
+    &[0x00, 0x1C, 0x42], // Parallels
+    &[0x02, 0x42],       // Docker
+];
+
+impl MacAddr {
+    /// Whether a hypervisor or container engine made it, going by its prefix.
+    pub(crate) fn is_virtual(self) -> bool {
+        VIRTUAL_PREFIXES
+            .iter()
+            .any(|prefix| self.0.starts_with(prefix))
+    }
+
+    /// Whether it is a private, randomised address, as phones and laptops use on Wi-Fi: locally
+    /// administered, and not one a hypervisor or container engine gave out.
+    pub(crate) fn is_randomised(self) -> bool {
+        self.0[0] & 0x02 != 0 && !self.is_virtual()
+    }
+}
+
 impl fmt::Display for MacAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let octets: Vec<String> = self.0.iter().map(|octet| format!("{octet:02X}")).collect();

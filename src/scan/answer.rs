@@ -3,7 +3,7 @@
 //! descriptions come from the host or the network, so they are untrusted text: one with control
 //! characters is dropped and the rest are bounded.
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use ipnet::Ipv4Net;
 use netscli_core::{FoundBy, Host, MdnsService, NameSource, PortResult, Protocol};
@@ -13,14 +13,18 @@ use super::mdns;
 use super::ports::PortRegistry;
 use super::ssdp;
 use crate::model::{
-    Answer, CardId, Device, DeviceId, DeviceKind, LastSeen, MacAddr, Method, NetworkCard,
-    ProbeProtocol, ProbeRecord, ScanOptions, ServiceProtocol, ServiceSource, Services, Status,
+    Answer, CardId, Device, DeviceId, DeviceKind, Icon, InterfaceKind, LastSeen, MacAddr, Method,
+    NetworkCard, ProbeProtocol, ProbeRecord, ScanOptions, ServiceProtocol, ServiceSource, Services,
+    Status,
 };
 
 /// The longest name kept, a DNS name's limit.
 const MAX_NAME: usize = 253;
 /// The longest description kept: a product and its version, a model, a maker.
 const MAX_DESCRIPTION: usize = 60;
+/// The card icons, among those that ship with the app, for a virtual adapter and for Wi-Fi.
+const VIRTUAL_ICON: &str = "Network cards/Virtual";
+const WIRELESS_ICON: &str = "Network cards/Wi-Fi";
 
 /// One host as the sweep found it, and what probing it found out.
 pub(super) struct Probed {
@@ -35,6 +39,20 @@ pub(super) struct Probed {
     pub(super) mdns: Vec<MdnsService>,
     /// What it declared through SSDP and its `UPnP` description.
     pub(super) ssdp: ssdp::Evidence,
+    /// Where it stands to the scanning computer's default gateway.
+    pub(super) route: Route,
+}
+
+/// Where a host stands to the scanning computer's default gateway on the scanned subnet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(super) enum Route {
+    /// Any other host, or the gateway is not known.
+    #[default]
+    Other,
+    /// It is the gateway.
+    Gateway,
+    /// It is the scanning computer, which sends through this gateway.
+    ThisComputer(Ipv4Addr),
 }
 
 /// The answer `probed` gives a scan of `subnet` with `options`: a device with one card, at its
@@ -53,17 +71,8 @@ pub(super) fn answer(
         return None;
     }
     let host = &probed.host;
-    let detect = options.service_detection;
     let announced = announced(options.mdns_services, &probed.mdns);
-    let mdns_name = host
-        .hostname
-        .as_deref()
-        .filter(|_| host.hostname_source == Some(NameSource::Mdns))
-        .or_else(|| mdns::hostname(announced))
-        .filter(|_| detect)
-        .and_then(|name| clean(name, MAX_NAME));
-    let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
-    let reverse_name = reverse_name.and_then(|name| clean(name, MAX_NAME));
+    let (mdns_name, reverse_name) = heard_names(probed, announced, options.service_detection);
     let mdns_services = mdns::service_names(announced);
     let empty_ssdp = ssdp::Evidence::default();
     let ssdp = selected_ssdp(options.mdns_services, &probed.ssdp, &empty_ssdp);
@@ -79,22 +88,25 @@ pub(super) fn answer(
         .or(ssdp.model.as_deref())
         .and_then(|m| clean(m, MAX_DESCRIPTION));
     let manufacturer = manufacturer(announced, ssdp);
+    let (hostname, suggested_name) = name_from(mdns_name, reverse_name, model.as_deref(), mac, ip);
     let evidence = Evidence {
         ports: &probed.ports,
         mdns_services: &mdns_services,
         ssdp_services: &ssdp.services,
         model: model.as_deref(),
         ttl: probed.ttl,
+        hostname: hostname.as_deref(),
+        gateway: probed.route == Route::Gateway,
     };
-    let kind = if options.device_type {
+    let (kind, kind_clue) = if options.device_type {
         identify::kind(&evidence)
     } else {
-        DeviceKind::Unknown
+        (DeviceKind::Unknown, None)
     };
     let os = options.os_family.then(|| identify::os(&evidence)).flatten();
-    let (hostname, suggested_name) = name_from(mdns_name, reverse_name, model.as_deref(), mac, ip);
     let device = Device {
         kind,
+        kind_clue,
         role: kind.default_role(),
         manufacturer,
         model,
@@ -106,6 +118,27 @@ pub(super) fn answer(
         ..device(hostname, suggested_name, card)
     };
     Some(Answer { device, methods })
+}
+
+/// The names `probed` goes by over mDNS and in reverse DNS, when `detect` asks for names.
+fn heard_names(
+    probed: &Probed,
+    announced: &[MdnsService],
+    detect: bool,
+) -> (Option<String>, Option<String>) {
+    let host = &probed.host;
+    let mdns_name = host
+        .hostname
+        .as_deref()
+        .filter(|_| host.hostname_source == Some(NameSource::Mdns))
+        .or_else(|| mdns::hostname(announced))
+        .filter(|_| detect)
+        .and_then(|name| clean(name, MAX_NAME));
+    let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
+    (
+        mdns_name,
+        reverse_name.and_then(|name| clean(name, MAX_NAME)),
+    )
 }
 
 fn ssdp_probe_log(evidence: &ssdp::Evidence) -> Vec<ProbeRecord> {
@@ -150,12 +183,33 @@ fn network_card(
         IpAddr::V4(ip) => Ipv4Net::new(ip, subnet.prefix_len()).ok(),
         IpAddr::V6(_) => None,
     };
+    let gateway = match probed.route {
+        Route::ThisComputer(gateway) => Some(gateway),
+        Route::Gateway | Route::Other => None,
+    };
+    let (interface_kind, icon) = connection(mac);
     NetworkCard {
+        interface_kind,
         address,
+        gateway,
         mac,
         vendor: vendor.and_then(|value| clean(value, MAX_DESCRIPTION)),
         services: services(&probed.ports, options.service_detection, names),
+        icon,
         ..NetworkCard::blank(CardId(0))
+    }
+}
+
+/// What its MAC address says of a card: a hypervisor's or container engine's prefix makes it
+/// a virtual adapter, and a randomised address is what phones and laptops use on Wi-Fi.
+fn connection(mac: Option<MacAddr>) -> (InterfaceKind, Icon) {
+    match mac {
+        Some(mac) if mac.is_virtual() => (InterfaceKind::Virtual, Icon::new(VIRTUAL_ICON)),
+        Some(mac) if mac.is_randomised() => (InterfaceKind::Physical, Icon::new(WIRELESS_ICON)),
+        Some(_) | None => (
+            InterfaceKind::Physical,
+            Icon::new(NetworkCard::DEFAULT_ICON),
+        ),
     }
 }
 
@@ -168,7 +222,7 @@ fn name_from(
     reverse: Option<String>,
     model: Option<&str>,
     mac: Option<MacAddr>,
-    ip: std::net::Ipv4Addr,
+    ip: Ipv4Addr,
 ) -> (Option<String>, String) {
     let hostname = mdns.or(reverse);
     let name = suggested_name(hostname.as_deref(), model, mac, ip);
@@ -197,6 +251,7 @@ fn device(hostname: Option<String>, name: String, card: NetworkCard) -> Device {
         id: DeviceId(0),
         name,
         kind: DeviceKind::Unknown,
+        kind_clue: None,
         role: DeviceKind::Unknown.default_role(),
         icon: None,
         status: Status::Online,
@@ -219,7 +274,7 @@ fn suggested_name(
     hostname: Option<&str>,
     model: Option<&str>,
     mac: Option<MacAddr>,
-    ip: std::net::Ipv4Addr,
+    ip: Ipv4Addr,
 ) -> String {
     if let Some(name) = hostname
         .and_then(|h| h.split('.').next())
@@ -337,6 +392,7 @@ mod tests {
             ttl: None,
             mdns: Vec::new(),
             ssdp: ssdp::Evidence::default(),
+            route: Route::Other,
         }
     }
 
@@ -395,6 +451,54 @@ mod tests {
         assert_eq!(card.mac, "00:17:88:6E:6C:5C".parse().ok());
         assert_eq!(card.vendor.as_deref(), Some("Philips Lighting BV"));
         assert_eq!(card.services.to_string(), "22 (OpenSSH 9.6), 80 (http)");
+    }
+
+    #[test]
+    fn the_gateway_is_a_router_and_this_computer_keeps_its_own_gateway() {
+        let mut gateway = probed(host(FoundBy::Probe, None), None);
+        gateway.route = Route::Gateway;
+        let router = answer(&gateway, home(), all(), &none()).unwrap().device;
+        assert_eq!(
+            (router.kind, router.kind_clue),
+            (
+                DeviceKind::Router,
+                Some(crate::model::KindClue::DefaultGateway)
+            )
+        );
+        assert_eq!(router.cards[0].gateway, None, "its own upstream is unknown");
+
+        let mut this_computer = probed(host(FoundBy::Probe, None), None);
+        this_computer.route = Route::ThisComputer(Ipv4Addr::new(192, 168, 1, 1));
+        let device = answer(&this_computer, home(), all(), &none())
+            .unwrap()
+            .device;
+        assert_eq!(device.cards[0].gateway, Some(Ipv4Addr::new(192, 168, 1, 1)));
+        assert_eq!(device.kind_clue, None);
+    }
+
+    #[test]
+    fn a_virtual_or_randomised_mac_tells_how_the_card_connects() {
+        for (mac, kind, icon) in [
+            ("52:54:00:77:01:10", InterfaceKind::Virtual, VIRTUAL_ICON),
+            ("82:C5:00:39:61:21", InterfaceKind::Physical, WIRELESS_ICON),
+            (
+                "00:17:88:6E:6C:5C",
+                InterfaceKind::Physical,
+                NetworkCard::DEFAULT_ICON,
+            ),
+        ] {
+            let mut found = host(FoundBy::Probe, None);
+            found.mac = Some(mac.into());
+            let device = answer(&probed(found, None), home(), all(), &none())
+                .unwrap()
+                .device;
+            let card = &device.cards[0];
+            assert_eq!(
+                (card.interface_kind, card.icon.0.as_str()),
+                (kind, icon),
+                "{mac}"
+            );
+        }
     }
 
     #[test]

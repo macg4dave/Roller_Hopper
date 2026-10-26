@@ -4,7 +4,7 @@
 
 use netscli_core::PortResult;
 
-use crate::model::{DeviceKind, OsClue, OsFamily, OsHint};
+use crate::model::{DeviceKind, KindClue, OsClue, OsFamily, OsHint};
 
 /// What the rules look at for one host.
 pub(super) struct Evidence<'a> {
@@ -18,6 +18,10 @@ pub(super) struct Evidence<'a> {
     pub(super) model: Option<&'a str>,
     /// The time-to-live of its ping reply.
     pub(super) ttl: Option<u8>,
+    /// Its name from mDNS or reverse DNS.
+    pub(super) hostname: Option<&'a str>,
+    /// Whether it is the scanning computer's default gateway.
+    pub(super) gateway: bool,
 }
 
 impl Evidence<'_> {
@@ -55,12 +59,51 @@ impl Evidence<'_> {
         self.model_is(&["iphone", "ipad"])
     }
 
+    /// An Apple computer, unless it is a file server announcing a Mac model so Macs treat it
+    /// as one, as `TrueNAS` and Samba do.
     fn mac(&self) -> bool {
-        self.model_is(&["mac", "imac"])
+        self.model_is(&["mac", "imac"]) && !self.file_server()
+    }
+
+    /// NFS with its port mapper and SMB: a Unix file server, which a Mac or a PC is not.
+    fn file_server(&self) -> bool {
+        self.open(2049) && self.open(111) && self.open(445)
+    }
+
+    /// Its hostname or model begins with a managed switch series and a digit, as "LGS310C"
+    /// or "GS308E" do.
+    fn switch_model(&self) -> bool {
+        let label = self.hostname.and_then(|name| name.split('.').next());
+        [label, self.model].into_iter().flatten().any(|name| {
+            let name = name.to_ascii_lowercase();
+            SWITCH_SERIES.iter().any(|series| {
+                let rest = name
+                    .strip_prefix(series)
+                    .and_then(|rest| rest.chars().next());
+                rest.is_some_and(|c| c.is_ascii_digit())
+            })
+        })
     }
 }
 
+/// Managed switch series, as their models and default hostnames begin: Linksys LGS, Netgear
+/// and Zyxel GS, TP-Link TL-SG, Cisco SG, SF and Catalyst WS-C, `MikroTik` CRS and CSS.
+const SWITCH_SERIES: [&str; 8] = ["lgs", "gs", "tl-sg", "sg", "sf", "ws-c", "crs", "css"];
+
 type Rule = fn(&Evidence<'_>) -> bool;
+
+/// The rules sure enough to say why, checked before the others.
+fn certain_rules() -> [(Rule, DeviceKind, KindClue); 3] {
+    [
+        (|e| e.gateway, DeviceKind::Router, KindClue::DefaultGateway),
+        (
+            |e| e.switch_model(),
+            DeviceKind::Switch,
+            KindClue::SwitchModel,
+        ),
+        (|e| e.file_server(), DeviceKind::Nas, KindClue::FileServer),
+    ]
+}
 
 fn thermostat(e: &Evidence<'_>) -> bool {
     e.model_mentions(&["thermostat", "ecobee", "tado"])
@@ -135,11 +178,16 @@ fn kind_rules() -> [(Rule, DeviceKind); 14] {
     ]
 }
 
-/// What kind of device the evidence points to; Unknown when no rule holds.
-pub(super) fn kind(evidence: &Evidence<'_>) -> DeviceKind {
+/// What kind of device the evidence points to, and why when a certain rule decided it;
+/// Unknown when no rule holds.
+pub(super) fn kind(evidence: &Evidence<'_>) -> (DeviceKind, Option<KindClue>) {
+    let mut certain = certain_rules().into_iter();
+    if let Some((_, kind, clue)) = certain.find(|(holds, _, _)| holds(evidence)) {
+        return (kind, Some(clue));
+    }
     let mut rules = kind_rules().into_iter();
     let found = rules.find(|(holds, _)| holds(evidence));
-    found.map_or(DeviceKind::Unknown, |(_, kind)| kind)
+    (found.map_or(DeviceKind::Unknown, |(_, kind)| kind), None)
 }
 
 /// One clue to the operating system: how strong it is, where it points, and what it says
@@ -287,6 +335,8 @@ mod tests {
             ssdp_services: &[],
             model: None,
             ttl: None,
+            hostname: None,
+            gateway: false,
         }
     }
 
@@ -310,7 +360,7 @@ mod tests {
         for (open, announced, kind) in cases {
             let (open, announced) = (ports(open), names(announced));
             assert_eq!(
-                super::kind(&evidence(&open, &announced)),
+                super::kind(&evidence(&open, &announced)).0,
                 kind,
                 "{open:?} {announced:?}"
             );
@@ -328,7 +378,7 @@ mod tests {
                 model: Some(model),
                 ..evidence(&[], &[])
             };
-            assert_eq!(super::kind(&e), kind, "{model}");
+            assert_eq!(super::kind(&e).0, kind, "{model}");
             let hint = os(&e).unwrap();
             assert_eq!(
                 (hint.family, hint.clues),
@@ -349,7 +399,7 @@ mod tests {
                 model: Some(model),
                 ..evidence(&[], &[])
             };
-            assert_eq!(super::kind(&evidence), kind, "{model}");
+            assert_eq!(super::kind(&evidence).0, kind, "{model}");
         }
     }
 
@@ -360,7 +410,7 @@ mod tests {
             ssdp_services: &services,
             ..evidence(&[], &[])
         };
-        assert_eq!(super::kind(&evidence), DeviceKind::Router);
+        assert_eq!(super::kind(&evidence), (DeviceKind::Router, None));
     }
 
     #[test]
@@ -405,5 +455,72 @@ mod tests {
             ..evidence(&[], &[])
         };
         assert_eq!(os(&unix), None, "64 does not tell Linux from macOS");
+    }
+
+    #[test]
+    fn the_default_gateway_is_a_router_whatever_else_it_runs() {
+        let open = ports(&[22, 53, 80, 443, 445, 135]);
+        let gateway = Evidence {
+            gateway: true,
+            ..evidence(&open, &[])
+        };
+        assert_eq!(
+            super::kind(&gateway),
+            (DeviceKind::Router, Some(KindClue::DefaultGateway))
+        );
+    }
+
+    #[test]
+    fn a_switch_series_in_the_hostname_or_model_names_a_switch() {
+        for (hostname, model) in [
+            (Some("LGS310C.lan"), None),
+            (None, Some("GS308E")),
+            (Some("tl-sg108e"), None),
+            (Some("sg350-28.home.arpa"), None),
+        ] {
+            let e = Evidence {
+                model,
+                hostname,
+                ..evidence(&[], &[])
+            };
+            let found = super::kind(&e);
+            assert_eq!(
+                found,
+                (DeviceKind::Switch, Some(KindClue::SwitchModel)),
+                "{hostname:?} {model:?}"
+            );
+        }
+        for hostname in ["gsmith-laptop", "sg.lan", "crstation", "lgs"] {
+            let e = Evidence {
+                hostname: Some(hostname),
+                ..evidence(&[], &[])
+            };
+            assert_ne!(super::kind(&e).0, DeviceKind::Switch, "{hostname}");
+        }
+    }
+
+    #[test]
+    fn a_file_server_announcing_a_mac_model_is_a_nas_not_a_mac() {
+        let open = ports(&[22, 111, 139, 445, 2049]);
+        let e = Evidence {
+            model: Some("MacPro7,1@ECOLOR=226,226,224"),
+            ..evidence(&open, &[])
+        };
+        assert_eq!(
+            super::kind(&e),
+            (DeviceKind::Nas, Some(KindClue::FileServer))
+        );
+        assert_ne!(os(&e).map(|h| h.family), Some(OsFamily::MacOs));
+
+        let sharing_mac = ports(&[445, 548]);
+        let mac = Evidence {
+            model: Some("MacPro7,1"),
+            ..evidence(&sharing_mac, &[])
+        };
+        assert_eq!(
+            super::kind(&mac),
+            (DeviceKind::Desktop, None),
+            "SMB alone is not NFS"
+        );
     }
 }

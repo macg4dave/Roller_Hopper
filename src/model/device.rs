@@ -164,11 +164,25 @@ pub(crate) struct LastSeen {
     pub(crate) minutes_ago: u32,
 }
 
+/// What made a scan sure of a device's kind, where a rule found more than a hint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KindClue {
+    /// It is the scanning computer's default gateway.
+    DefaultGateway,
+    /// Its hostname or model names a managed switch series.
+    SwitchModel,
+    /// It serves files over NFS and SMB, so an Apple model it announces is a disguise.
+    FileServer,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Device {
     pub(crate) id: DeviceId,
     pub(crate) name: String,
     pub(crate) kind: DeviceKind,
+    /// Why the last scan was sure of `kind`, for the AI's evidence; never saved to a project.
+    #[serde(skip)]
+    pub(crate) kind_clue: Option<KindClue>,
     pub(crate) role: Role,
     /// An icon picked for this device alone; `None` follows the role.
     pub(crate) icon: Option<Icon>,
@@ -225,6 +239,7 @@ mod tests {
             id: DeviceId(1),
             name: "Living Room TV".into(),
             kind: DeviceKind::Tv,
+            kind_clue: None,
             role: Role::Other,
             icon: None,
             status: Status::Online,

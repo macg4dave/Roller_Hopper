@@ -14,6 +14,9 @@ IMPORTANT CLUES
 - Home Assistant is home automation; hardware evidence decides Server versus Smart.
 - SSH, SMB, DNS, HTTP, HTTPS, nginx and OpenSSH alone do not identify a device, OS or Router.
 - A MAC vendor identifies the network interface, not necessarily the device.
+- type_fingerprint comes from a fixed scanner rule. Keep its type unless stronger evidence disagrees.
+- virtual_adapter means a virtual machine or container owns the card; it does not decide the type.
+- randomised_mac usually means a phone, tablet or laptop using a private Wi-Fi address.
 - Linux, SSH, ARM or Broadcom does not prove Raspberry Pi. Use Raspberry Pi only when the evidence explicitly names it.
 - Prefer Thermostat, SmartDisplay or VoiceAssistant over generic Smart when supported.
 - Running services does not by itself make an IoT appliance a Server.
