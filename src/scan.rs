@@ -319,9 +319,9 @@ async fn probe(
     open_ports.extend(scan_udp(&probes, host.ip).await?);
     let unnamed = host.hostname.is_none() && mdns::hostname(&mdns).is_none();
     let reverse_name = if options.service_detection && unnamed {
-        // A failed or timed-out lookup means the network has no name for it.
-        let name = netscli_core::dns::reverse_lookup_timeout(host.ip, DNS_TIMEOUT_MS).await;
-        name.ok().flatten()
+        // On Windows this also tries LLMNR and NetBIOS through `ping -a`; most home networks
+        // have no reverse-DNS zone, so a PTR-only lookup leaves otherwise named hosts blank.
+        netscli_core::dns::reverse_lookup_best_effort_timeout(host.ip, DNS_TIMEOUT_MS).await
     } else {
         None
     };

@@ -134,7 +134,12 @@ fn heard_names(
         .or_else(|| mdns::hostname(announced))
         .filter(|_| detect)
         .and_then(|name| clean(name, MAX_NAME));
-    let reverse_name = probed.reverse_name.as_deref().filter(|_| detect);
+    let reverse_name = host
+        .hostname
+        .as_deref()
+        .filter(|_| host.hostname_source == Some(NameSource::Reverse))
+        .or(probed.reverse_name.as_deref())
+        .filter(|_| detect);
     (
         mdns_name,
         reverse_name.and_then(|name| clean(name, MAX_NAME)),
@@ -583,6 +588,16 @@ mod tests {
         let answer = answer(&nas, home(), all(), &none()).unwrap();
         assert_eq!(answer.methods, [Method::Arp]);
         assert_eq!(answer.device.name, "nas");
+    }
+
+    #[test]
+    fn a_reverse_name_already_found_by_the_sweep_is_kept() {
+        let mut nas = host(FoundBy::Probe, Some("nas.home.arpa"));
+        nas.hostname_source = Some(NameSource::Reverse);
+        let answer = answer(&probed(nas, None), home(), all(), &none()).unwrap();
+        assert_eq!(answer.device.hostname.as_deref(), Some("nas.home.arpa"));
+        assert_eq!(answer.device.name, "nas");
+        assert!(!answer.methods.contains(&Method::Mdns));
     }
 
     #[test]
