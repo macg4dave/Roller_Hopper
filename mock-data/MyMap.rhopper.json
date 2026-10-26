@@ -1,0 +1,902 @@
+{
+  "format": "rhopper",
+  "version": 2,
+  "project": {
+    "network": {
+      "devices": [
+        {
+          "id": 1,
+          "name": "Mac101",
+          "kind": "Desktop",
+          "role": "Desktop",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 1,
+              "name": "",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.129/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "FE:89:38:83:60:BB",
+              "vendor": null,
+              "services": [
+                {
+                  "port": 22,
+                  "protocol": "Tcp",
+                  "description": "OpenSSH 9.9",
+                  "source": "Detected"
+                },
+                {
+                  "port": 88,
+                  "protocol": "Tcp",
+                  "description": "kerberos",
+                  "source": "Registry"
+                },
+                {
+                  "port": 445,
+                  "protocol": "Tcp",
+                  "description": "smb",
+                  "source": "Registry"
+                },
+                {
+                  "port": 5000,
+                  "protocol": "Tcp",
+                  "description": "upnp",
+                  "source": "Registry"
+                },
+                {
+                  "port": 5900,
+                  "protocol": "Tcp",
+                  "description": "vnc",
+                  "source": "Registry"
+                },
+                {
+                  "port": 7000,
+                  "protocol": "Tcp",
+                  "description": "cassandra",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Wi-Fi"
+            }
+          ],
+          "manufacturer": null,
+          "model": "MacBookPro15,1",
+          "hostname": "Mac101.local",
+          "os": {
+            "family": "MacOs",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [
+            "airplay",
+            "raop",
+            "sftp-ssh",
+            "smb",
+            "ssh"
+          ],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A MacBook Pro likely used for networking and remote access"
+        },
+        {
+          "id": 2,
+          "name": "lx101.lan",
+          "kind": "Server",
+          "role": "Server",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 2,
+              "name": "Ethernet",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.186/24",
+              "dhcp": true,
+              "gateway": "192.168.1.1",
+              "mac": "30:C5:99:57:59:EC",
+              "vendor": null,
+              "services": [
+                {
+                  "port": 135,
+                  "protocol": "Tcp",
+                  "description": "msrpc",
+                  "source": "Registry"
+                },
+                {
+                  "port": 139,
+                  "protocol": "Tcp",
+                  "description": "netbios-ssn",
+                  "source": "Registry"
+                },
+                {
+                  "port": 445,
+                  "protocol": "Tcp",
+                  "description": "smb",
+                  "source": "Registry"
+                },
+                {
+                  "port": 3389,
+                  "protocol": "Tcp",
+                  "description": "rdp",
+                  "source": "Registry"
+                },
+                {
+                  "port": 5357,
+                  "protocol": "Tcp",
+                  "description": "",
+                  "source": "Open"
+                }
+              ],
+              "icon": "Network cards/Ethernet"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "lx101.lan",
+          "os": {
+            "family": "Linux",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A server likely running a Linux distribution with SMB and RDP services."
+        },
+        {
+          "id": 3,
+          "name": "none",
+          "kind": "VoiceAssistant",
+          "role": "Other",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 3,
+              "name": "",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.108/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "A8:CA:77:52:2E:79",
+              "vendor": "Amazon Technologies Inc",
+              "services": [
+                {
+                  "port": 1080,
+                  "protocol": "Tcp",
+                  "description": "socks",
+                  "source": "Registry"
+                },
+                {
+                  "port": 8888,
+                  "protocol": "Tcp",
+                  "description": "http-alt",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Ethernet"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "none.local",
+          "os": {
+            "family": "Network",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [
+            "spotify-connect"
+          ],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "An Amazon voice assistant device with Spotify Connect support."
+        },
+        {
+          "id": 4,
+          "name": "pc101",
+          "kind": "Router",
+          "role": "Server",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 4,
+              "name": "enp42s0",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.1/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "04:7C:16:47:DC:0B",
+              "vendor": "Micro-Star INTL CO., LTD",
+              "services": [
+                {
+                  "port": 22,
+                  "protocol": "Tcp",
+                  "description": "OpenSSH 9.9",
+                  "source": "Detected"
+                },
+                {
+                  "port": 53,
+                  "protocol": "Tcp",
+                  "description": "dns",
+                  "source": "Registry"
+                },
+                {
+                  "port": 3389,
+                  "protocol": "Tcp",
+                  "description": "rdp",
+                  "source": "Registry"
+                },
+                {
+                  "port": 9090,
+                  "protocol": "Tcp",
+                  "description": "prometheus",
+                  "source": "Registry"
+                },
+                {
+                  "port": 10000,
+                  "protocol": "Tcp",
+                  "description": "ndmp",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Ethernet"
+            },
+            {
+              "id": 11,
+              "name": "vnet2",
+              "interface_kind": "Virtual",
+              "state": "Unknown",
+              "address": null,
+              "dhcp": false,
+              "gateway": null,
+              "mac": null,
+              "vendor": null,
+              "services": [],
+              "icon": "Network cards/Ethernet"
+            },
+            {
+              "id": 12,
+              "name": "vnet0",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": null,
+              "dhcp": false,
+              "gateway": null,
+              "mac": null,
+              "vendor": null,
+              "services": [],
+              "icon": "Network cards/Ethernet"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "pc101.lan",
+          "os": {
+            "family": "Linux",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A router running an OpenWrt-based Linux system with DNS and remote desktop services."
+        },
+        {
+          "id": 5,
+          "name": "Ruby101",
+          "kind": "Router",
+          "role": "Router",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 5,
+              "name": "",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.187/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "BC:E9:2F:6D:3B:EF",
+              "vendor": "HP Inc",
+              "services": [
+                {
+                  "port": 22,
+                  "protocol": "Tcp",
+                  "description": "OpenSSH 9.9",
+                  "source": "Detected"
+                },
+                {
+                  "port": 9090,
+                  "protocol": "Tcp",
+                  "description": "prometheus",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Ethernet"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "Ruby101.lan",
+          "os": {
+            "family": "Linux",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A router running an OpenWrt-based Linux system with monitoring services."
+        },
+        {
+          "id": 6,
+          "name": "Starlight",
+          "kind": "Nas",
+          "role": {
+            "Custom": "KVM"
+          },
+          "icon": "Virtual machines/Virtual machine",
+          "status": "Online",
+          "cards": [
+            {
+              "id": 6,
+              "name": "vnet0",
+              "interface_kind": "Virtual",
+              "state": "Unknown",
+              "address": "192.168.1.10/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "52:54:00:77:01:10",
+              "vendor": null,
+              "services": [
+                {
+                  "port": 22,
+                  "protocol": "Tcp",
+                  "description": "OpenSSH 9.2p1",
+                  "source": "Detected"
+                },
+                {
+                  "port": 80,
+                  "protocol": "Tcp",
+                  "description": "nginx",
+                  "source": "Detected"
+                },
+                {
+                  "port": 111,
+                  "protocol": "Tcp",
+                  "description": "rpcbind",
+                  "source": "Registry"
+                },
+                {
+                  "port": 139,
+                  "protocol": "Tcp",
+                  "description": "netbios-ssn",
+                  "source": "Registry"
+                },
+                {
+                  "port": 443,
+                  "protocol": "Tcp",
+                  "description": "nginx",
+                  "source": "Detected"
+                },
+                {
+                  "port": 445,
+                  "protocol": "Tcp",
+                  "description": "smb",
+                  "source": "Registry"
+                },
+                {
+                  "port": 2049,
+                  "protocol": "Tcp",
+                  "description": "nfs",
+                  "source": "Registry"
+                },
+                {
+                  "port": 5357,
+                  "protocol": "Tcp",
+                  "description": "",
+                  "source": "Open"
+                }
+              ],
+              "icon": "Network cards/Virtual"
+            }
+          ],
+          "manufacturer": null,
+          "model": "MacPro7,1@ECOLOR=226,226,224",
+          "hostname": "Starlight.local",
+          "os": {
+            "family": "Linux",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [
+            "device-info",
+            "http",
+            "smb"
+          ],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A network-attached storage device running a Linux-based system."
+        },
+        {
+          "id": 7,
+          "name": "ap",
+          "kind": "Router",
+          "role": "Router",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 7,
+              "name": "",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.220/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "80:AF:CA:4E:BD:68",
+              "vendor": "Shenzhen Cudy Technology Co., Ltd",
+              "services": [
+                {
+                  "port": 22,
+                  "protocol": "Tcp",
+                  "description": "dropbear",
+                  "source": "Detected"
+                },
+                {
+                  "port": 80,
+                  "protocol": "Tcp",
+                  "description": "http",
+                  "source": "Registry"
+                },
+                {
+                  "port": 443,
+                  "protocol": "Tcp",
+                  "description": "https",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Ethernet"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "ap.lan",
+          "os": {
+            "family": "Linux",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A router running an OpenWrt-based Linux system."
+        },
+        {
+          "id": 8,
+          "name": "Ice101.lan",
+          "kind": "Desktop",
+          "role": {
+            "Custom": "KVM"
+          },
+          "icon": "Virtual machines/Virtual desktop",
+          "status": "Online",
+          "host": 4,
+          "cards": [
+            {
+              "id": 8,
+              "name": "Ethernet",
+              "interface_kind": "Virtual",
+              "state": "Unknown",
+              "address": "192.168.1.11/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "52:54:00:77:01:11",
+              "vendor": null,
+              "services": [
+                {
+                  "port": 135,
+                  "protocol": "Tcp",
+                  "description": "msrpc",
+                  "source": "Registry"
+                },
+                {
+                  "port": 445,
+                  "protocol": "Tcp",
+                  "description": "smb",
+                  "source": "Registry"
+                },
+                {
+                  "port": 3389,
+                  "protocol": "Tcp",
+                  "description": "rdp",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Virtual"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "win11.lan",
+          "os": {
+            "family": "Windows",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "Br-lan"
+        },
+        {
+          "id": 9,
+          "name": "switch",
+          "kind": "Switch",
+          "role": "Switch",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 9,
+              "name": "",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.103/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "D8:EC:5E:C5:70:20",
+              "vendor": "Belkin International Inc",
+              "services": [
+                {
+                  "port": 22,
+                  "protocol": "Tcp",
+                  "description": "OpenSSH 5.1",
+                  "source": "Detected"
+                },
+                {
+                  "port": 23,
+                  "protocol": "Tcp",
+                  "description": "telnet",
+                  "source": "Registry"
+                },
+                {
+                  "port": 80,
+                  "protocol": "Tcp",
+                  "description": "http",
+                  "source": "Registry"
+                },
+                {
+                  "port": 8000,
+                  "protocol": "Tcp",
+                  "description": "dev-http",
+                  "source": "Registry"
+                }
+              ],
+              "icon": "Network cards/Ethernet"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "switch.lan",
+          "os": {
+            "family": "Network",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "A network switch with basic web interface and SSH access"
+        },
+        {
+          "id": 10,
+          "name": "iPhone",
+          "kind": "Phone",
+          "role": "Phone",
+          "icon": null,
+          "status": "Online",
+          "cards": [
+            {
+              "id": 10,
+              "name": "",
+              "interface_kind": "Physical",
+              "state": "Unknown",
+              "address": "192.168.1.136/24",
+              "dhcp": false,
+              "gateway": null,
+              "mac": "82:C5:00:39:61:21",
+              "vendor": null,
+              "services": [],
+              "icon": "Network cards/Wi-Fi"
+            }
+          ],
+          "manufacturer": null,
+          "model": null,
+          "hostname": "iPhone.lan",
+          "os": {
+            "family": "Ios",
+            "detail": null,
+            "clues": [
+              "Ai"
+            ]
+          },
+          "mdns_services": [],
+          "last_seen": {
+            "minutes_ago": 0
+          },
+          "notes": "An iPhone device running iOS."
+        }
+      ],
+      "links": [
+        {
+          "upstream": 9,
+          "card": 3,
+          "kind": "Inferred",
+          "relationship": "Physical"
+        },
+        {
+          "upstream": 4,
+          "card": 2,
+          "kind": "Known",
+          "relationship": "Physical"
+        },
+        {
+          "upstream": 11,
+          "card": 8,
+          "kind": "Known",
+          "relationship": "VirtualPeer"
+        },
+        {
+          "upstream": 12,
+          "card": 6,
+          "kind": "Known",
+          "relationship": "VirtualPeer"
+        }
+      ],
+      "relations": [],
+      "segments": [],
+      "memberships": [],
+      "roles": [
+        {
+          "role": "Router",
+          "renamed": null,
+          "icon": "Network/Router",
+          "group": 0
+        },
+        {
+          "role": "Switch",
+          "renamed": null,
+          "icon": "Network/Switch",
+          "group": 1
+        },
+        {
+          "role": "AccessPoint",
+          "renamed": null,
+          "icon": "Network/Access point",
+          "group": 2
+        },
+        {
+          "role": "Server",
+          "renamed": null,
+          "icon": "Computers/Server",
+          "group": 6
+        },
+        {
+          "role": "Nas",
+          "renamed": null,
+          "icon": "Computers/NAS",
+          "group": 7
+        },
+        {
+          "role": "Desktop",
+          "renamed": null,
+          "icon": "Computers/Desktop",
+          "group": 4
+        },
+        {
+          "role": "Laptop",
+          "renamed": null,
+          "icon": "Computers/Laptop",
+          "group": 3
+        },
+        {
+          "role": "Phone",
+          "renamed": null,
+          "icon": "Phones and wearables/Phone",
+          "group": 3
+        },
+        {
+          "role": "Printer",
+          "renamed": null,
+          "icon": "Other/Printer",
+          "group": 5
+        },
+        {
+          "role": "Camera",
+          "renamed": null,
+          "icon": "Smart home/Camera",
+          "group": 8
+        },
+        {
+          "role": "Iot",
+          "renamed": null,
+          "icon": "Smart home/Smart device",
+          "group": 9
+        },
+        {
+          "role": "Other",
+          "renamed": null,
+          "icon": null,
+          "group": null
+        },
+        {
+          "role": {
+            "Custom": "KVM"
+          },
+          "renamed": null,
+          "icon": "Other/Unknown",
+          "group": 10
+        }
+      ],
+      "groups": {
+        "list": [
+          {
+            "id": 0,
+            "name": {
+              "standard": "NetworkCore",
+              "renamed": null
+            },
+            "colour": "Purple",
+            "line_style": "Thick"
+          },
+          {
+            "id": 1,
+            "name": {
+              "standard": "Switching",
+              "renamed": null
+            },
+            "colour": "Blue",
+            "line_style": "Solid"
+          },
+          {
+            "id": 2,
+            "name": {
+              "standard": "WiFi",
+              "renamed": null
+            },
+            "colour": "Green",
+            "line_style": "Wavy"
+          },
+          {
+            "id": 3,
+            "name": {
+              "standard": "Mobile",
+              "renamed": null
+            },
+            "colour": "Green",
+            "line_style": "Dotted"
+          },
+          {
+            "id": 4,
+            "name": {
+              "standard": "Workstations",
+              "renamed": null
+            },
+            "colour": "Yellow",
+            "line_style": "Solid"
+          },
+          {
+            "id": 5,
+            "name": {
+              "standard": "Printing",
+              "renamed": null
+            },
+            "colour": "Yellow",
+            "line_style": "DashDot"
+          },
+          {
+            "id": 6,
+            "name": {
+              "standard": "Servers",
+              "renamed": null
+            },
+            "colour": "Red",
+            "line_style": "Thick"
+          },
+          {
+            "id": 7,
+            "name": {
+              "standard": "Storage",
+              "renamed": null
+            },
+            "colour": "Orange",
+            "line_style": "LongDashes"
+          },
+          {
+            "id": 8,
+            "name": {
+              "standard": "Security",
+              "renamed": null
+            },
+            "colour": "Red",
+            "line_style": "Zigzag"
+          },
+          {
+            "id": 9,
+            "name": {
+              "standard": "SmartHome",
+              "renamed": null
+            },
+            "colour": "Orange",
+            "line_style": "Zigzag"
+          },
+          {
+            "id": 10,
+            "name": "Virtual",
+            "colour": "Yellow",
+            "line_style": "Solid"
+          }
+        ],
+        "next_id": 11
+      }
+    },
+    "arrangement": {
+      "tiers": {
+        "4": [
+          {
+            "left": [],
+            "right": [
+              2
+            ]
+          }
+        ],
+        "12": [
+          {
+            "left": [],
+            "right": [
+              6
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -5,8 +5,8 @@ import { IconChooser } from "icon-chooser.slint";
 import { SelectableText } from "selectable-text.slint";
 
 // A network card of the device being edited: its icon, which can be changed in place
-// unless the row is read-only, with its name and a line about it. The text can be selected and
-// copied; the surrounding row and chevron open the child on its own.
+// unless the row is read-only, with its name and a line about it. Editable rows use ordinary
+// text so their whole surface opens the card; read-only rows keep copyable text.
 export component ChildRow inherits Rectangle {
     in property <IconChoice> icon;
     in property <bool> read-only;
@@ -51,12 +51,24 @@ export component ChildRow inherits Rectangle {
         VerticalLayout {
             alignment: center;
             spacing: 2px;
-            SelectableText {
+            if !root.read-only: Text {
+                text: root.name;
+                font-size: Theme.font-body;
+                color: Theme.text;
+                overflow: elide;
+            }
+            if !root.read-only: Text {
+                text: root.detail;
+                font-size: Theme.font-small;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+            if root.read-only: SelectableText {
                 text: root.name;
                 font-size: Theme.font-body;
                 color: Theme.text;
             }
-            SelectableText {
+            if root.read-only: SelectableText {
                 text: root.detail;
                 font-size: Theme.font-small;
                 color: Theme.text-muted;

@@ -265,6 +265,13 @@ fn push_card(bridge: &Bridge<'_>, labels: &Labels<'_>, state: &AppState) {
         bridge.set_upstream_choices(model);
     }
     bridge.set_card_plug_index(i32::try_from(state.plug_choice()).unwrap_or_default());
+    let bridges = state.bridge_choices().into_iter();
+    let bridge_names = bridges.map(|bridge_card| cards::socket_name(labels, network, bridge_card));
+    let bridge_choices = std::iter::once(labels.invoke_no_link()).chain(bridge_names);
+    if let Some(model) = sync(&bridge.get_bridge_choices(), bridge_choices.collect()) {
+        bridge.set_bridge_choices(model);
+    }
+    bridge.set_card_bridge_index(i32::try_from(state.bridge_choice()).unwrap_or_default());
     // Segment names are the user's own words.
     let segments = network.segments().iter().map(|s| s.name.as_str().into());
     let segment_names = std::iter::once(labels.invoke_no_segment()).chain(segments);

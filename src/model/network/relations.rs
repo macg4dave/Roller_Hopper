@@ -101,6 +101,66 @@ impl Network {
             .filter(move |relation| relation.card == card || relation.upstream == card)
     }
 
+    /// The software bridge this non-bridge card belongs to, when one is explicitly related to
+    /// it. Generic bridge-member relationships to switch ports remain separate.
+    pub(crate) fn bridge_for(&self, card: CardId) -> Option<CardId> {
+        if self.card(card)?.interface_kind == InterfaceKind::Bridge {
+            return None;
+        }
+        self.relations_for(card).find_map(|relation| {
+            if relation.relationship != RelationshipKind::BridgeMember {
+                return None;
+            }
+            let other = if relation.card == card {
+                relation.upstream
+            } else {
+                relation.card
+            };
+            (self.card(other)?.interface_kind == InterfaceKind::Bridge).then_some(other)
+        })
+    }
+
+    /// Moves a card into one software bridge, or removes it from its current bridge. Other
+    /// relationship kinds are untouched.
+    pub(crate) fn set_bridge(&mut self, card: CardId, bridge: Option<CardId>) -> bool {
+        if self.card(card).map(|c| c.interface_kind) == Some(InterfaceKind::Bridge)
+            || bridge.is_some_and(|bridge| {
+                self.card(bridge).map(|c| c.interface_kind) != Some(InterfaceKind::Bridge)
+                    || !self.can_join(card, bridge, RelationshipKind::BridgeMember)
+            })
+            || self.bridge_for(card) == bridge
+        {
+            return false;
+        }
+        let bridges: Vec<CardId> = self
+            .nodes()
+            .into_iter()
+            .filter(|&id| self.card(id).map(|c| c.interface_kind) == Some(InterfaceKind::Bridge))
+            .collect();
+        self.relations.retain(|relation| {
+            if relation.relationship != RelationshipKind::BridgeMember {
+                return true;
+            }
+            let other = if relation.card == card {
+                Some(relation.upstream)
+            } else if relation.upstream == card {
+                Some(relation.card)
+            } else {
+                None
+            };
+            other.is_none_or(|other| !bridges.contains(&other))
+        });
+        if let Some(bridge) = bridge {
+            self.relations.push(CardLink {
+                upstream: bridge,
+                card,
+                kind: ConnectionKind::Known,
+                relationship: RelationshipKind::BridgeMember,
+            });
+        }
+        true
+    }
+
     /// Removes the join at `index` in [`Self::relations_for`] `card`.
     pub(crate) fn remove_relation(&mut self, card: CardId, index: usize) -> bool {
         let Some(remove) = self
@@ -174,5 +234,39 @@ mod tests {
         assert!(network.attach_card(second, Some(first)));
         let link = network.link(second).map(|l| l.relationship);
         assert_eq!(link, Some(RelationshipKind::BridgeMember));
+    }
+
+    #[test]
+    fn a_card_moves_between_software_bridge_groups_without_losing_other_relations() {
+        let mut network = mock_data::network();
+        let device = network.devices()[0].id;
+        let member = network.device(device).unwrap().cards[0].id;
+        let first = network.add_card(device).unwrap();
+        let second = network.add_card(device).unwrap();
+        network.card_mut(first).unwrap().interface_kind = InterfaceKind::Bridge;
+        network.card_mut(second).unwrap().interface_kind = InterfaceKind::Bridge;
+        let peer = network.devices()[1].cards[0].id;
+        assert!(network.add_relation(member, peer, RelationshipKind::Routed));
+
+        assert!(network.set_bridge(member, Some(first)));
+        assert_eq!(network.bridge_for(member), Some(first));
+        assert!(network.set_bridge(member, Some(second)));
+        assert_eq!(network.bridge_for(member), Some(second));
+        assert_eq!(
+            network.relations_for(member).count(),
+            2,
+            "bridge and routed"
+        );
+        assert!(network.set_bridge(member, None));
+        assert_eq!(network.bridge_for(member), None);
+        assert_eq!(
+            network.relations_for(member).count(),
+            1,
+            "routed relation stays"
+        );
+        assert!(
+            !network.set_bridge(first, Some(second)),
+            "a bridge is not a member"
+        );
     }
 }

@@ -1418,6 +1418,21 @@ msgstr "Routed"
 msgid "details.relationship"
 msgstr "Joined by"
 
+msgid "connection.heading"
+msgstr "Connection"
+
+msgid "connection.help"
+msgstr "Choose where this card connects and which network it carries. The usual link type is selected automatically."
+
+msgid "connection.advanced"
+msgstr "Advanced connections"
+
+msgid "connection.hide-advanced"
+msgstr "Hide advanced connections"
+
+msgid "details.bridge-group"
+msgstr "Bridge group"
+
 msgid "relationships.additional"
 msgstr "Also joined to"
 

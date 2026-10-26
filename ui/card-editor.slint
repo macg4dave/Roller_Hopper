@@ -1,5 +1,5 @@
 import { Button, CheckBox, ComboBox } from "std-widgets.slint";
-import { Bridge, CardField, InterfaceKind, InterfaceState, MembershipMode, RelationshipKind } from "bridge.slint";
+import { Bridge, CardField, InterfaceKind, InterfaceState } from "bridge.slint";
 import { Labels } from "labels.slint";
 import { Theme } from "theme.slint";
 import { CardRelations } from "card-relations.slint";
@@ -41,10 +41,9 @@ component CardSetting inherits VerticalLayout {
     }
 }
 
-// While a network card is selected in map edit mode: its name (edited in its heading), kind and
-// state, IPv4 settings, parent device, upstream connection and what joins it there, its other
-// joins, its segment, open ports, and removal. A card is a child of its device, which it leads
-// back to.
+// While a network card is selected in map edit mode: its identity, addressing, one consolidated
+// connection editor, open ports, and removal. A card is a child of its device, which it leads
+// back to; that uncommon ownership change stays in the connection editor's advanced controls.
 export component CardEditor inherits VerticalLayout {
     alignment: start;
     spacing: Theme.space-xs;
@@ -161,67 +160,7 @@ export component CardEditor inherits VerticalLayout {
             label: @tr("details.mac");
         }
     }
-    DetailField {
-        label: @tr("details.child-of");
-        ComboBox {
-            // Picking replaces the binding, so keep it following Rust's state: the move may be
-            // refused, or wait to be confirmed.
-            property <int> parent-index: Bridge.card-parent-index;
-            changed parent-index => { self.current-index = self.parent-index; }
-            horizontal-stretch: 1;
-            model: Bridge.parent-choices;
-            current-index: Bridge.card-parent-index;
-            accessible-label: @tr("details.child-of");
-            selected => {
-                Bridge.set-card-parent(self.current-index);
-                self.current-index = self.parent-index;
-            }
-        }
-    }
-    DetailField {
-        label: @tr("details.plugged-into");
-        ComboBox {
-            horizontal-stretch: 1;
-            model: Bridge.upstream-choices;
-            current-index: Bridge.card-plug-index;
-            accessible-label: @tr("details.plugged-into");
-            selected => { Bridge.plug-card(self.current-index); }
-        }
-    }
-    if Bridge.card-plug-index > 0: DetailField {
-        label: @tr("details.relationship");
-        ComboBox {
-            model: Labels.relationships;
-            current-index: Bridge.card.relationship == RelationshipKind.virtual-peer ? 1
-                : Bridge.card.relationship == RelationshipKind.bridge-member ? 2
-                : Bridge.card.relationship == RelationshipKind.routed ? 3 : 0;
-            accessible-label: @tr("details.relationship");
-            selected => { Bridge.set-relationship-kind(self.current-index); }
-        }
-    }
-    DetailField {
-        label: @tr("relationships.additional");
-        CardRelations { }
-    }
-    DetailField {
-        label: @tr("details.segment");
-        ComboBox {
-            model: Bridge.segment-choices;
-            current-index: Bridge.card.segment-index;
-            accessible-label: @tr("details.segment");
-            selected => { Bridge.set-card-segment(self.current-index); }
-        }
-    }
-    if Bridge.card.segment-index > 0: DetailField {
-        label: @tr("details.vlan-mode");
-        ComboBox {
-            model: Labels.membership-modes;
-            current-index: Bridge.card.membership-mode == MembershipMode.tagged ? 1
-                : Bridge.card.membership-mode == MembershipMode.native ? 2 : 0;
-            accessible-label: @tr("details.vlan-mode");
-            selected => { Bridge.set-membership-mode(self.current-index); }
-        }
-    }
+    CardRelations { }
     DetailField {
         label: @tr("details.open-ports");
         PortEditor { }
