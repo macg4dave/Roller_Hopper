@@ -7,6 +7,7 @@ mod discovery;
 mod groups;
 mod layout;
 mod network;
+mod notes;
 mod os;
 mod probe_log;
 mod roles;
@@ -62,3 +63,5 @@ pub(crate) use os::{OsClue, OsFamily, OsHint};
 pub(crate) use probe_log::{ProbeProtocol, ProbeRecord};
 pub(crate) use services::{ServiceProtocol, ServiceSource, Services};
 pub(crate) use snap::{Snap, SnapKind, snap_target};
+
+pub(crate) use notes::{NOTE_HEIGHT, NOTE_WIDTH, NoteId, Notes};

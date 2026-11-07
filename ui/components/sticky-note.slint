@@ -1,0 +1,65 @@
+import { Button, TextEdit } from "std-widgets.slint";
+import { Bridge, MapNote } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+
+// A note's title bar moves it; the body remains an ordinary keyboard-accessible editor.
+export component StickyNote inherits Rectangle {
+    in property <MapNote> note;
+    callback moved(int, int);
+    accessible-role: groupbox;
+    accessible-label: @tr("map-note.title");
+    width: note.width * 1px;
+    height: note.height * 1px;
+    background: Theme.group-tint(note.colour);
+    border-radius: Theme.panel-radius;
+    border-width: 1px;
+    border-color: Theme.group-colour(note.colour, Theme.border).with-alpha(0.35);
+    drop-shadow-blur: Theme.space-m;
+    drop-shadow-offset-y: Theme.space-xs;
+    drop-shadow-color: Theme.note-shadow;
+
+    VerticalLayout {
+        padding: Theme.space-s;
+        spacing: Theme.space-s;
+        HorizontalLayout {
+            spacing: Theme.space-xs;
+            Rectangle {
+                horizontal-stretch: 1;
+                Text {
+                    text: @tr("map-note.title");
+                    color: Theme.text;
+                    font-size: Theme.font-body;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                drag := TouchArea {
+                    mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+                    moved => {
+                        root.moved(note.x + (self.mouse-x - self.pressed-x) / 1px,
+                            note.y + (self.mouse-y - self.pressed-y) / 1px);
+                    }
+                }
+            }
+            Button {
+                text: @tr("map-note.colour");
+                accessible-label: @tr("map-note.colour-label");
+                clicked => { Bridge.colour-map-note(note.id); }
+            }
+            Button {
+                icon: @image-url("../icons/delete.svg");
+                colorize-icon: true;
+                accessible-label: @tr("map-note.delete");
+                clicked => { Bridge.delete-map-note(note.id); }
+            }
+        }
+        TextEdit {
+            vertical-stretch: 1;
+            init => { if note.text == "" { self.focus(); } }
+            text: note.text;
+            wrap: word-wrap;
+            placeholder-text: @tr("map-note.placeholder");
+            accessible-label: @tr("map-note.body");
+            edited(text) => { Bridge.edit-map-note(note.id, text); }
+        }
+    }
+}

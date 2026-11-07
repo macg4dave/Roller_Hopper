@@ -8,7 +8,9 @@ device type, OS family and card vendor. Discovery defaults to the IPv4 adapter c
 router/default gateway; choosing another adapter fills its subnet and directs multicast through
 it. Found hosts can be added to the map one by one or imported together, and devices can be added
 by hand. New, Open, Save and Save as keep the map in a
-`.rhopper.json` project file. Settings → AI settings installs an AI
+`.rhopper.json` project file. Use **Add note** on the map to write free-standing sticky notes.
+Drag a note by its title bar, change its pastel colour with **Colour**, or delete it with the
+bin button. Notes move and zoom with the map and are saved with the project. Settings → AI settings installs an AI
 model (Qwen3-4B-Q4_K_M, 2.5 GB) into the user's application data folder,
 loads one with [Candle](https://github.com/huggingface/candle), and runs it on an editable
 prompt and sample device file. The AI runs only on an NVIDIA GPU with 8 GB or more, never on

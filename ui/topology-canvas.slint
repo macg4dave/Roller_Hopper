@@ -4,6 +4,7 @@ import { Theme } from "theme.slint";
 import { MapKey } from "map-key.slint";
 import { ViewOptions } from "view-options.slint";
 import { JoinBlob } from "components/join-blob.slint";
+import { StickyNote } from "components/sticky-note.slint";
 import { MapNode } from "components/map-node.slint";
 
 // The pannable, zoomable topology map. Pan and zoom are visual state and live here.
@@ -234,8 +235,21 @@ export component TopologyCanvas inherits Rectangle {
         }
     }
 
+    // Notes share the map transform while remaining independent of the network layout.
+    for note in Bridge.map-notes: StickyNote {
+        note: note;
+        x: pan-x + note.x * zoom * 1px;
+        y: pan-y + note.y * zoom * 1px;
+        transform-origin: { x: 0, y: 0 };
+        transform-scale: zoom;
+        moved(x, y) => {
+            Bridge.move-map-note(note.id, x, y);
+            auto-fit = false;
+        }
+    }
+
     // An empty map points to the two ways of filling it.
-    if Bridge.nodes.length == 0: Text {
+    if Bridge.nodes.length == 0 && Bridge.map-notes.length == 0: Text {
         text: @tr("map.empty");
         font-size: Theme.font-body;
         color: Theme.text-muted;
@@ -306,6 +320,18 @@ export component TopologyCanvas inherits Rectangle {
                 text: @tr("auto-map.button");
                 enabled: Bridge.nodes.length > 0;
                 clicked => { Bridge.preview-auto-map(); }
+            }
+            Button {
+                text: @tr("map-note.add");
+                clicked => {
+                    // Start at a readable size even when the topology is zoomed far out.
+                    if target-zoom < 1 {
+                        zoom-at(root.width / 2, root.height / 2, 1 / target-zoom);
+                    }
+                    auto-fit = false;
+                    Bridge.add-map-note((root.width / 2 - target-pan-x) / target-zoom / 1px,
+                        (root.height / 2 - target-pan-y) / target-zoom / 1px);
+                }
             }
             if Bridge.can-undo-auto-map: Button {
                 text: @tr("auto-map.undo");

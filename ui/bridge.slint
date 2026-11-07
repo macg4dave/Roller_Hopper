@@ -414,7 +414,23 @@ export struct LogView {
     count: int,
 }
 
+export struct MapNote {
+    id: int,
+    text: string,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    colour: GroupColour,
+}
+
 export global Bridge {
+    in property <[MapNote]> map-notes;
+    callback add-map-note(int, int);
+    callback edit-map-note(int, string);
+    callback move-map-note(int, int, int);
+    callback delete-map-note(int);
+    callback colour-map-note(int);
     // The project file's name, empty until the project is saved; and whether it has changes
     // not saved yet.
     in property <string> project-name;

@@ -15,6 +15,7 @@ mod edit;
 mod i18n;
 mod icons;
 mod map;
+mod notes;
 mod project;
 mod view;
 
@@ -53,6 +54,7 @@ enum Selection {
 /// Everything the window shows, owned by `main` and shared with the callbacks.
 pub(crate) struct AppState {
     network: Network,
+    notes: crate::model::Notes,
     /// Where the layout puts each card, and the dragged one at the pointer.
     positions: Positions,
     /// Where each card is shown, on its way to its spot in `positions`.
@@ -96,6 +98,7 @@ impl AppState {
             Project {
                 network,
                 arrangement,
+                notes: crate::model::Notes::default(),
             },
             None,
         )
@@ -109,9 +112,11 @@ impl AppState {
         let Project {
             network,
             arrangement,
+            notes,
         } = project;
         Self {
             network,
+            notes,
             motion: Motion::new(positions.clone()),
             positions,
             arrangement,
@@ -211,6 +216,7 @@ pub(crate) fn connect(
     }));
     edit::connect(ui, state);
     map::connect(ui, state);
+    notes::connect(ui, state);
     discovery::connect(ui, state);
     ai_import::connect(ui, state, worker, ai_events);
     project::connect(ui, state);

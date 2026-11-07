@@ -29,6 +29,7 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
         bridge.set_nodes(model);
     }
     map::push(&bridge, state);
+    super::notes::push(&bridge, state);
     push_auto_map(&bridge, state);
     let list = views.rows(network.filtered(&state.query));
     if let Some(model) = sync(&bridge.get_list(), list) {

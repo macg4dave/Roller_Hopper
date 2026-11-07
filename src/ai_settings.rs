@@ -277,6 +277,7 @@ fn state(error: RunError) -> ModelState {
         RunError::Unsupported => ModelState::Unsupported,
         RunError::Broken => ModelState::Broken,
         RunError::NoGpu => ModelState::NoGpu,
+        #[cfg(feature = "cuda")]
         RunError::InsufficientGpuMemory => ModelState::InsufficientGpuMemory,
         RunError::TooLong { .. } => ModelState::TooLong,
         RunError::Failed => ModelState::Failed,

@@ -11,12 +11,12 @@ use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 
 use crate::files;
-use crate::model::{Arrangement, Device, Network};
+use crate::model::{Arrangement, Device, Network, Notes};
 
 /// Marks a file as a project, whatever it is called.
 const FORMAT: &str = "rhopper";
 /// The version this build writes. Older ones would be migrated here; newer ones are refused.
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 /// What every project file's name ends with.
 pub(crate) const EXTENSION: &str = "rhopper.json";
 
@@ -35,6 +35,8 @@ const MAX_NOTES_BYTES: usize = 64 * 1024;
 pub(crate) struct Project {
     pub(crate) network: Network,
     pub(crate) arrangement: Arrangement,
+    #[serde(default)]
+    pub(crate) notes: Notes,
 }
 
 /// The document as saved: the project, with what tells it apart from any other JSON file.
@@ -101,8 +103,9 @@ fn parse(bytes: &[u8]) -> Result<Project, OpenError> {
     let Project {
         network,
         mut arrangement,
+        notes,
     } = document.project;
-    if !within_limits(&network) {
+    if !within_limits(&network) || !notes.valid() {
         return Err(OpenError::TooLarge);
     }
     // Which check failed is for the tests (see `Network::checked`); the user is told the file
@@ -112,6 +115,7 @@ fn parse(bytes: &[u8]) -> Result<Project, OpenError> {
     Ok(Project {
         network,
         arrangement,
+        notes,
     })
 }
 
@@ -174,7 +178,7 @@ fn device_within_limits(device: &Device, short: impl Fn(Option<&str>) -> bool) -
 
 /// Saves `project` at `path`, replacing what was there only once the new file is complete.
 pub(crate) fn write(path: &Path, project: &Project) -> Result<(), SaveError> {
-    if !within_limits(&project.network) {
+    if !within_limits(&project.network) || !project.notes.valid() {
         return Err(SaveError::TooLarge);
     }
     let document = Document {
@@ -221,6 +225,7 @@ mod tests {
         Project {
             network: mock_data::network(),
             arrangement: Arrangement::default(),
+            notes: Notes::default(),
         }
     }
 
@@ -247,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn version_one_projects_migrate_and_saves_are_version_two() {
+    fn older_projects_migrate_and_saves_are_version_three() {
         let project = sample();
         let mut old: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
         old["version"] = 1.into();
@@ -255,7 +260,37 @@ mod tests {
         assert_eq!(migrated, project);
 
         let written: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
-        assert_eq!(written["version"], 2);
+        assert_eq!(written["version"], 3);
+    }
+
+    #[test]
+    fn notes_round_trip_and_older_projects_start_without_notes() {
+        let mut project = sample();
+        project.notes.add(-80, 120);
+        let id = project.notes.iter().next().unwrap().id;
+        project
+            .notes
+            .edit(id, "Maintenance window\nFriday at 18:00");
+        project.notes.recolour(id);
+        assert_eq!(parse(&saved(&project)), Ok(project.clone()));
+
+        let mut old: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
+        old["version"] = 2.into();
+        old["project"].as_object_mut().unwrap().remove("notes");
+        let migrated = parse(&serde_json::to_vec(&old).unwrap()).unwrap();
+        assert_eq!(migrated.notes, Notes::default());
+        assert_eq!(migrated.network, project.network);
+
+        let mut damaged: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
+        let duplicate = damaged["project"]["notes"][0].clone();
+        damaged["project"]["notes"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
+        assert_eq!(
+            parse(&serde_json::to_vec(&damaged).unwrap()),
+            Err(OpenError::TooLarge)
+        );
     }
 
     #[test]
@@ -284,7 +319,7 @@ mod tests {
         assert_eq!(parse(b"{\"a\": 1}"), Err(OpenError::NotProject));
         let other = br#"{"format": "other", "version": 1, "project": {}}"#;
         assert_eq!(parse(other), Err(OpenError::NotProject));
-        let newer = br#"{"format": "rhopper", "version": 3, "project": {}}"#;
+        let newer = br#"{"format": "rhopper", "version": 4, "project": {}}"#;
         assert_eq!(parse(newer), Err(OpenError::Newer));
         let empty = br#"{"format": "rhopper", "version": 1, "project": {}}"#;
         assert_eq!(parse(empty), Err(OpenError::Damaged));

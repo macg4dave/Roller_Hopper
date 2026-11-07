@@ -319,7 +319,9 @@ fn push_preview(bridge: &Bridge<'_>, state: &AppState, strand: Option<&Snap>) {
     if let Some(model) = sync(&bridge.get_lines(), lines) {
         bridge.set_lines(model);
     }
-    bridge.set_bounds(convert::bounds(on_map.values().copied()));
+    bridge.set_bounds(convert::bounds(
+        on_map.values().copied().chain(state.notes.corners()),
+    ));
 }
 
 /// Each segment, with the box round its cards where they are drawn now, padded to hold their

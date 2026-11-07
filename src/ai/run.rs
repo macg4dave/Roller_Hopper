@@ -79,8 +79,12 @@ pub(crate) enum RunError {
     Unsupported,
     Broken,
     NoGpu,
+    #[cfg(feature = "cuda")]
     InsufficientGpuMemory,
-    TooLong { prompt_tokens: usize, limit: usize },
+    TooLong {
+        prompt_tokens: usize,
+        limit: usize,
+    },
     Failed,
 }
 

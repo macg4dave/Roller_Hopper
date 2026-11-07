@@ -33,12 +33,15 @@ impl AppState {
         Project {
             network: self.network.clone(),
             arrangement: self.arrangement.clone(),
+            notes: self.notes.clone(),
         }
     }
 
     /// Whether the project has changed since it was opened or last saved.
     fn unsaved(&self) -> bool {
-        self.network != self.saved.network || self.arrangement != self.saved.arrangement
+        self.network != self.saved.network
+            || self.arrangement != self.saved.arrangement
+            || self.notes != self.saved.notes
     }
 
     /// Whether `then` can go ahead now. With unsaved changes it waits while the user is asked
@@ -288,6 +291,27 @@ mod tests {
         assert_eq!(other.file, Some(path.clone()));
         assert!(!other.unsaved());
         assert_eq!(other.discovery.target_text, "10.0.0.0/24", "kept");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn note_changes_are_saved_and_new_projects_clear_them() {
+        let path = temp("notes.rhopper.json");
+        let mut state = AppState::new(Network::default());
+        state.notes.add(40, 60);
+        assert!(state.unsaved());
+        assert!(state.save_to(path.clone()));
+        assert!(!state.unsaved());
+        let id = state.notes.iter().next().unwrap().id;
+        state.notes.edit(id, "Remember to replace this switch");
+        assert!(state.unsaved());
+        assert!(state.save_to(path.clone()));
+        let saved = state.notes.clone();
+        state.replace_project(Project::default(), None);
+        assert_eq!(state.notes, crate::model::Notes::default());
+        state.open_from(path.clone());
+        assert_eq!(state.notes, saved);
+        assert!(!state.unsaved());
         std::fs::remove_file(path).unwrap();
     }
 

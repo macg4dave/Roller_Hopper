@@ -1506,3 +1506,24 @@ msgstr "Remove segment"
 msgid "map.segment-vlan"
 msgstr "{0} · VLAN {1}"
 
+
+msgid "map-note.add"
+msgstr "Add note"
+
+msgid "map-note.title"
+msgstr "Note"
+
+msgid "map-note.colour"
+msgstr "Colour"
+
+msgid "map-note.colour-label"
+msgstr "Change note colour"
+
+msgid "map-note.delete"
+msgstr "Delete note"
+
+msgid "map-note.placeholder"
+msgstr "Write a note…"
+
+msgid "map-note.body"
+msgstr "Note text"
