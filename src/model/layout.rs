@@ -7,6 +7,8 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use super::arrangement::{Arrangement, Side};
 use super::card::CardId;
 use super::network::Network;
@@ -22,7 +24,7 @@ const BUS_GAP: f32 = 14.0;
 /// A root circle sits this far below the labels of the lowest device in its branch.
 const ROOT_GAP: f32 = 12.0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub(crate) struct Point {
     pub(crate) x: f32,
     pub(crate) y: f32,
@@ -50,7 +52,36 @@ pub(crate) fn tree_layout(network: &Network, arrangement: &Arrangement) -> Posit
         tree.place(root, spot, &mut positions);
         left += shape.left + shape.right;
     }
+    arrangement.apply_positions(&mut positions);
     positions
+}
+
+/// A free-placement connection meets the actual icons even when a child is above its parent.
+pub(crate) fn manual_link_route(from: Point, to: Point) -> [Point; 3] {
+    let direction = if to.y < from.y { -1.0 } else { 1.0 };
+    let start = if (to.x - from.x).abs() < LINE_TOP_GAP * 2.0 {
+        Point {
+            x: from.x,
+            y: from.y + direction * LINE_TOP_GAP,
+        }
+    } else {
+        Point {
+            x: from.x + (to.x - from.x).signum() * LINE_TOP_GAP,
+            y: from.y,
+        }
+    };
+    let end = Point {
+        x: to.x,
+        y: to.y - direction * LINE_TOP_GAP,
+    };
+    [
+        start,
+        Point {
+            x: end.x,
+            y: start.y,
+        },
+        end,
+    ]
 }
 
 /// The line to `downstream` from `from_x`: across just above it, then down to it. It starts at

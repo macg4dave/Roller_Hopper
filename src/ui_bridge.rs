@@ -63,6 +63,10 @@ pub(crate) struct AppState {
     arrangement: Arrangement,
     /// The card being dragged on the map, until it is dropped.
     dragging: Option<CardId>,
+    /// Reconnection is deliberate; normal dragging only changes saved map positions.
+    reconnect_cards: bool,
+    /// The latest map edit, retained only for a guarded one-step undo.
+    map_undo: Option<map::MapUndo>,
     /// A deterministic topology proposal waiting for the user to review.
     auto_map: Option<AutoMapProposal>,
     /// The inferred links replaced by the latest applied proposal, for one-step undo.
@@ -121,6 +125,8 @@ impl AppState {
             positions,
             arrangement,
             dragging: None,
+            reconnect_cards: false,
+            map_undo: None,
             auto_map: None,
             auto_map_undo: None,
             selected: None,

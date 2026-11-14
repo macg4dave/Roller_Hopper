@@ -16,7 +16,7 @@ use crate::model::{Arrangement, Device, Network, Notes};
 /// Marks a file as a project, whatever it is called.
 const FORMAT: &str = "rhopper";
 /// The version this build writes. Older ones would be migrated here; newer ones are refused.
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 /// What every project file's name ends with.
 pub(crate) const EXTENSION: &str = "rhopper.json";
 
@@ -31,7 +31,7 @@ const MAX_TEXT_BYTES: usize = 4 * 1024;
 const MAX_NOTES_BYTES: usize = 64 * 1024;
 
 /// What a project holds: the network and how the user arranged its map.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub(crate) struct Project {
     pub(crate) network: Network,
     pub(crate) arrangement: Arrangement,
@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn older_projects_migrate_and_saves_are_version_three() {
+    fn older_projects_migrate_and_saves_are_version_four() {
         let project = sample();
         let mut old: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
         old["version"] = 1.into();
@@ -260,7 +260,27 @@ mod tests {
         assert_eq!(migrated, project);
 
         let written: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
-        assert_eq!(written["version"], 3);
+        assert_eq!(written["version"], 4);
+    }
+
+    #[test]
+    fn version_three_projects_default_to_tree_layout_and_invalid_positions_are_discarded() {
+        let project = sample();
+        let mut old: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
+        old["version"] = 3.into();
+        old["project"]["arrangement"]
+            .as_object_mut()
+            .unwrap()
+            .remove("positions");
+        let migrated = parse(&serde_json::to_vec(&old).unwrap()).unwrap();
+        assert_eq!(migrated, project);
+        old["version"] = 4.into();
+        old["project"]["arrangement"]["positions"] = serde_json::json!({
+            "5": {"x": 1e8, "y": 0.0},
+            "999999": {"x": 10.0, "y": 20.0}
+        });
+        let cleaned = parse(&serde_json::to_vec(&old).unwrap()).unwrap();
+        assert!(!cleaned.arrangement.has_positions());
     }
 
     #[test]
@@ -298,14 +318,14 @@ mod tests {
         let network = network_map().unwrap().network;
         assert_eq!(network.segments().len(), 3);
         let named = |name: &str| network.devices().iter().find(|d| d.name == name);
-        let host = named("pc101").map(|d| d.id);
-        for vm in ["OPNsense", "TrueNAS", "win11_gpu"] {
-            assert_eq!(named(vm).and_then(|d| d.host), host, "{vm} runs on pc101");
+        let host = named("Example host").unwrap().id;
+        for vm in ["Example firewall", "Example NAS", "Example workstation VM"] {
+            assert_eq!(named(vm).unwrap().host, Some(host), "{vm} runs on the host");
         }
         // A switch VLAN is a bridge card its ports hang from, so the tree runs through it.
-        let switch = named("Linksys switch").unwrap();
+        let switch = named("Example switch").unwrap();
         let card = |name: &str| switch.cards.iter().find(|c| c.name == name).unwrap().id;
-        let (vlan, port) = (card("VLAN 1"), card("Gi0/1"));
+        let (vlan, port) = (card("Example LAN bridge"), card("Port 1"));
         assert!(network.is_within(port, vlan));
         assert_eq!(
             network.uplink(port).map(|c| c.relationship),
@@ -319,7 +339,7 @@ mod tests {
         assert_eq!(parse(b"{\"a\": 1}"), Err(OpenError::NotProject));
         let other = br#"{"format": "other", "version": 1, "project": {}}"#;
         assert_eq!(parse(other), Err(OpenError::NotProject));
-        let newer = br#"{"format": "rhopper", "version": 4, "project": {}}"#;
+        let newer = br#"{"format": "rhopper", "version": 5, "project": {}}"#;
         assert_eq!(parse(newer), Err(OpenError::Newer));
         let empty = br#"{"format": "rhopper", "version": 1, "project": {}}"#;
         assert_eq!(parse(empty), Err(OpenError::Damaged));

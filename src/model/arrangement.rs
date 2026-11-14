@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use super::card::CardId;
+use super::layout::{Point, Positions};
 use super::network::Network;
 
 /// Which side of a trunk a device hangs on.
@@ -71,16 +72,43 @@ pub(crate) struct Slot {
 /// The tiers the user arranged under each device. Ordered by card,
 /// so a saved project lists them the same way each time. Cards no longer connected there are
 /// passed over (see [`Self::tiers`]), so any card IDs read from a file are safe.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub(crate) struct Arrangement {
     tiers: BTreeMap<CardId, Vec<Tier>>,
+    /// Explicit map positions, independent of the physical connections and tree tiers.
+    #[serde(default)]
+    positions: BTreeMap<CardId, Point>,
 }
 
 impl Arrangement {
+    pub(crate) fn has_positions(&self) -> bool {
+        !self.positions.is_empty()
+    }
+
+    /// Capture the complete visible layout so moving one card cannot rearrange the others.
+    pub(crate) fn save_positions(&mut self, positions: &Positions) {
+        self.positions = positions
+            .iter()
+            .filter(|(_, at)| valid_position(**at))
+            .map(|(&id, &at)| (id, at))
+            .collect();
+    }
+
+    pub(super) fn apply_positions(&self, positions: &mut Positions) {
+        for (id, at) in &self.positions {
+            if let Some(position) = positions.get_mut(id) {
+                *position = *at;
+            }
+        }
+    }
+
     /// Removes saved layout entries that cannot affect this network. Project files may contain
     /// stale, duplicated, or deliberately inflated arrangement data; keeping it would bloat every
     /// later save even though [`Self::tiers`] ignores it while drawing.
     pub(crate) fn retain(&mut self, network: &Network) {
+        let cards: HashSet<_> = network.nodes().into_iter().collect();
+        self.positions
+            .retain(|id, at| cards.contains(id) && valid_position(*at));
         self.tiers.retain(|parent, tiers| {
             if network.card(*parent).is_none() {
                 return false;
@@ -201,6 +229,11 @@ impl Arrangement {
     }
 }
 
+/// Keep persisted coordinates finite and inside a practical canvas range.
+pub(crate) fn valid_position(at: Point) -> bool {
+    at.x.is_finite() && at.y.is_finite() && at.x.abs() <= 1_000_000.0 && at.y.abs() <= 1_000_000.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,6 +330,7 @@ mod tests {
     fn stale_misplaced_and_duplicate_saved_entries_are_discarded() {
         let network = mock_data::network();
         let mut arrangement = Arrangement {
+            positions: BTreeMap::new(),
             tiers: BTreeMap::from([
                 (
                     ROUTER,

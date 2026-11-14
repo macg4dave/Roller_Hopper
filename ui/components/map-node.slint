@@ -43,6 +43,7 @@ export component MapNode inherits Rectangle {
     callback dragged(length, length);
     // The pointer was let go, whether or not it dragged.
     callback released;
+    callback cancelled;
 
     width: Theme.map-label-width;
     height: layout.preferred-height;
@@ -55,8 +56,11 @@ export component MapNode inherits Rectangle {
         clicked => { root.clicked(); }
         moved => { root.dragged(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y); }
         pointer-event(event) => {
-            if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+            if event.kind == PointerEventKind.up {
                 root.released();
+            }
+            if event.kind == PointerEventKind.cancel {
+                root.cancelled();
             }
         }
     }

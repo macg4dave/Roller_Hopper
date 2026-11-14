@@ -1,4 +1,4 @@
-import { Button } from "std-widgets.slint";
+import { Button, CheckBox } from "std-widgets.slint";
 import { Bridge, DeviceView } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { MapKey } from "map-key.slint";
@@ -105,7 +105,7 @@ export component TopologyCanvas inherits Rectangle {
 
     // Cards dragged out of the lists behave as if dragged on the map: while held over it, the
     // card follows the pointer (its icon centre, in map units) and previews the line it would
-    // join; dropped, it is plugged in there. Taken off the map again, it goes back.
+    // join in reconnection mode. Taken off the map again, it goes back.
     drop := DropArea {
         function move-to(card: int, x: length, y: length) {
             Bridge.move-card(card, (x - pan-x) / zoom / 1px, (y - pan-y) / zoom / 1px);
@@ -232,6 +232,7 @@ export component TopologyCanvas inherits Rectangle {
                 auto-fit = false;
             }
             released => { Bridge.drop-card(); }
+            cancelled => { Bridge.cancel-drag(); }
         }
     }
 
@@ -316,6 +317,16 @@ export component TopologyCanvas inherits Rectangle {
                 clicked => { fit(true); }
             }
             Rectangle { height: 1px; background: Theme.border; }
+            CheckBox {
+                text: @tr("map.reconnect");
+                checked: Bridge.reconnect-cards;
+                toggled => { Bridge.set-reconnect-cards(self.checked); }
+            }
+            Button {
+                text: @tr("map.arrange");
+                enabled: Bridge.nodes.length > 0;
+                clicked => { Bridge.arrange-automatically(); }
+            }
             Button {
                 text: @tr("auto-map.button");
                 enabled: Bridge.nodes.length > 0;
@@ -336,6 +347,11 @@ export component TopologyCanvas inherits Rectangle {
             if Bridge.can-undo-auto-map: Button {
                 text: @tr("auto-map.undo");
                 clicked => { Bridge.undo-auto-map(); }
+            }
+            Button {
+                text: @tr("map.undo-edit");
+                enabled: Bridge.can-undo-map-edit;
+                clicked => { Bridge.undo-map-edit(); }
             }
         }
     }

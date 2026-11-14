@@ -26,10 +26,16 @@ needs only the few files listed under [running a built copy](#running-a-built-co
 | --- | --- | --- |
 | NVIDIA CUDA Toolkit | 13.2 | `winget install --id Nvidia.CUDA --version 13.2` sets `CUDA_PATH` and puts its `bin` and `bin\x64` folders on `PATH`. |
 | `NVCC_CCBIN` user environment variable | — | The folder holding MSVC's `cl.exe`, for example `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\<version>\bin\Hostx64\x64`. Update it when Visual Studio moves MSVC to a new version folder. |
+| `NVCC_APPEND_FLAGS` user environment variable | `-Xcompiler=/Zc:preprocessor -Xcompiler=/MD` | Enables the standard MSVC preprocessor required by CUDA's headers and builds Candle's native kernels with the same dynamic C runtime as Rust and Skia. |
 | NVIDIA graphics card and driver | driver 580 or later | `nvidia-smi` tells the build which GPU to compile for. Without a card, set `CUDA_COMPUTE_CAP` (for example `120`). |
 
 cuDNN is not needed: the project does not turn on Candle's `cudnn` feature. Restart the
 terminal or editor after installing so it sees the new environment variables.
+
+If CUDA 13.5 is also installed, the pinned `cudarc` dependency does not support it. Select
+13.2 by setting the user variables `CUDA_PATH` to its installation folder, `NVCC` to
+`%CUDA_PATH%\bin\nvcc.exe` (use the full path), and `CUDARC_CUDA_VERSION` to `13020`.
+These select the compiler and matching bindings even when the system `PATH` lists 13.5 first.
 
 ### The build without CUDA
 

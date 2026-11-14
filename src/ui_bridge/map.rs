@@ -5,9 +5,13 @@
 mod drag;
 mod lines;
 mod motion;
+#[cfg(test)]
+mod placement;
+mod undo;
 
 pub(super) use drag::payload_child;
 pub(super) use motion::Motion;
+pub(super) use undo::MapUndo;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,8 +22,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel, 
 use super::view::sync;
 use super::{AppState, convert, handler};
 use crate::model::{
-    CardId, Connection, Level, Point, Positions, Segment, Snap, SnapKind, link_route, tree_layout,
-    trunks,
+    CardId, Connection, Level, Point, Positions, Segment, Snap, SnapKind, link_route,
+    manual_link_route, tree_layout, trunks,
 };
 use crate::ui::{self, AppWindow, Bridge};
 
@@ -62,6 +66,9 @@ impl AppState {
     /// dropped, and the other trunks do not stretch after it.
     /// In node order, so the lines sent to the UI only change when the map does.
     fn trunks(&self) -> Vec<(CardId, [Point; 2])> {
+        if self.manual_layout() {
+            return Vec::new();
+        }
         let shown = self.motion.shown();
         let dragged = |id| self.dragging.is_some_and(|d| self.network.is_within(id, d));
         let still: Positions = shown
@@ -88,9 +95,34 @@ impl AppState {
             .inner_neighbours(&self.network, self.dragging);
         let links = self.network.map_connections().into_iter();
         links
-            .filter(|c| Some(c.downstream) != self.dragging)
-            .filter_map(|c| Some((c, link_route(shown, &inner, c.upstream, c.downstream)?)))
+            .filter(|c| !self.reconnect_cards || Some(c.downstream) != self.dragging)
+            .filter_map(|c| {
+                let route = if self.manual_layout() {
+                    manual_link_route(*shown.get(&c.upstream)?, *shown.get(&c.downstream)?)
+                } else {
+                    link_route(shown, &inner, c.upstream, c.downstream)?
+                };
+                Some((c, route))
+            })
             .collect()
+    }
+
+    fn manual_layout(&self) -> bool {
+        !self.reconnect_cards && (self.arrangement.has_positions() || self.dragging.is_some())
+    }
+
+    fn set_reconnect_cards(&mut self, enabled: bool) {
+        self.cancel_drag();
+        self.reconnect_cards = enabled;
+        self.lay_out_at_rest();
+    }
+
+    fn arrange_automatically(&mut self) {
+        self.cancel_drag();
+        let network = self.network.clone();
+        let arrangement = std::mem::take(&mut self.arrangement);
+        self.lay_out_at_rest();
+        self.remember_map_edit(network, arrangement);
     }
 
     fn lay_out(&mut self) {
@@ -200,11 +232,32 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         drop_card(());
         drop_settle();
     });
+    let undo_map_edit = handler(ui, state, |st, ()| st.undo_map_edit());
+    bridge.on_undo_map_edit(move || undo_map_edit(()));
+    bridge.on_set_reconnect_cards(handler(ui, state, |st, enabled| {
+        st.set_reconnect_cards(enabled);
+    }));
+    let arrange = handler(ui, state, |st, ()| st.arrange_automatically());
+    bridge.on_arrange_automatically(move || arrange(()));
     let cancel = handler(ui, state, |st, ()| st.cancel_drag());
     bridge.on_cancel_drag(move || {
         cancel(());
         settle();
     });
+
+    connect_auto_map(ui, state);
+
+    // Only recognised card payloads may move a card from a list onto the map.
+    bridge.on_card_transfer(|id, child| SharedString::from(drag::card_payload(id, child)).into());
+    bridge.on_transfer_card(|data| {
+        let text = data.plain_text().unwrap_or_default();
+        drag::payload_card(&text).unwrap_or(-1)
+    });
+}
+
+/// Proposal review and undo are separate from manual placement and reconnection.
+fn connect_auto_map(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
+    let bridge = ui.global::<Bridge<'_>>();
 
     let preview_auto_map = handler(ui, state, |st, ()| {
         st.auto_map = Some(st.network.auto_map_proposal());
@@ -230,15 +283,6 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
         st.lay_out_at_rest();
     });
     bridge.on_undo_auto_map(move || undo_auto_map(()));
-
-    // A card dragged out of the lists carries its id as text, as Slint's drag payload is
-    // opaque to Slint code. The prefix keeps text dragged in from other apps from passing for
-    // a card.
-    bridge.on_card_transfer(|id, child| SharedString::from(drag::card_payload(id, child)).into());
-    bridge.on_transfer_card(|data| {
-        let text = data.plain_text().unwrap_or_default();
-        drag::payload_card(&text).unwrap_or(-1)
-    });
 }
 
 /// Steps the map's motion every frame until everything has settled (or the window closed).
@@ -372,6 +416,7 @@ mod tests {
     #[test]
     fn a_row_makes_room_for_a_device_dragged_over_it_and_closes_after() {
         let mut state = AppState::new(mock_data::network());
+        state.reconnect_cards = true;
         let (switch, access_point, nas, pc) = (CardId(2), CardId(3), CardId(4), CardId(5));
         let laid_out = state.positions.clone();
         let between = Point {
@@ -411,6 +456,7 @@ mod tests {
     fn a_delayed_frame_catches_up_in_stable_substeps() {
         let after_drop = || {
             let mut state = AppState::new(mock_data::network());
+            state.reconnect_cards = true;
             let (switch, nas) = (CardId(2), CardId(4));
             state.drag_to(nas, state.positions[&switch]);
             state.drop_dragged();

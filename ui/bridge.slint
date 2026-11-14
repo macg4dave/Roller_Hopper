@@ -469,6 +469,8 @@ export global Bridge {
     in property <[AutoMapSuggestion]> auto-map-suggestions;
     in property <int> auto-map-unresolved;
     in property <bool> can-undo-auto-map;
+    in property <bool> can-undo-map-edit;
+    in property <bool> reconnect-cards;
     // The selected device, also while one of its cards is selected.
     in property <int> selected-id: -1;
     in property <DeviceDetails> details;
@@ -661,12 +663,14 @@ export global Bridge {
     // Deleted standard groups back, with the standard roles that are in no group.
     callback restore-groups();
     // Dragging the card with this id, on the map or from the lists, so its icon is at (x, y) in
-    // map units: it moves there and previews the line it would join. Dropping it plugs it in
-    // there, or unplugs it away from every line; cancelling sends it back. Both are ignored
-    // when nothing is dragged.
+    // map units. Normally a drop only saves its position. Explicit reconnection mode previews
+    // a new uplink and plugs or unplugs on drop. Cancelling restores the saved position.
     callback move-card(int, float, float);
     callback drop-card();
     callback cancel-drag();
+    callback undo-map-edit();
+    callback set-reconnect-cards(bool);
+    callback arrange-automatically();
     callback preview-auto-map();
     callback apply-auto-map();
     callback cancel-auto-map();

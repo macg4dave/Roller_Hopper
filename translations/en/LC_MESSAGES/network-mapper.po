@@ -1527,3 +1527,12 @@ msgstr "Write a note…"
 
 msgid "map-note.body"
 msgstr "Note text"
+
+msgid "map.undo-edit"
+msgstr "Undo map edit"
+
+msgid "map.reconnect"
+msgstr "Reconnect on drop"
+
+msgid "map.arrange"
+msgstr "Arrange automatically"

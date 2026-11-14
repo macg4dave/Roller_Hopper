@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 description = "A local network mapper: real discovery scans, a hand-editable map, project files"
-license = "MIT"
+license = "GPL-3.0-or-later"
 publish = false
 
 [dependencies]

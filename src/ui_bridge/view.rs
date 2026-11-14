@@ -30,6 +30,8 @@ pub(super) fn push(ui: &AppWindow, state: &AppState) {
     }
     map::push(&bridge, state);
     super::notes::push(&bridge, state);
+    bridge.set_can_undo_map_edit(state.can_undo_map_edit());
+    bridge.set_reconnect_cards(state.reconnect_cards);
     push_auto_map(&bridge, state);
     let list = views.rows(network.filtered(&state.query));
     if let Some(model) = sync(&bridge.get_list(), list) {

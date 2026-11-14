@@ -19,6 +19,13 @@ only; another one placed in that
 `models` folder (`%APPDATA%\Network Mapper\models\` on Windows) or one folder down there is
 listed beside it.
 
+## Licence and roadmap
+
+Roller Hopper is licensed under **GPL-3.0-or-later**; see [LICENSE](LICENSE) and
+[licensing and reuse](docs/licensing.md) for third-party obligations and the previous MIT grant.
+The [roadmap](docs/roadmap.md) assigns ideas from the [reuse review](docs/github-reuse-review.md)
+to proposed milestones. No reviewed third-party implementation has been incorporated by this change.
+
 ## Run
 
 ```sh
@@ -52,6 +59,21 @@ users, is in [docs/installing.md](docs/installing.md).
 
 The models under `tools/a.i.testmodels/` are development assets for the GPU smoke tests:
 `Qwen3/` is a copy of the application AI and `Qwen3_0.6B/` a small Qwen3 for quick checks.
+
+## Arranging the map
+
+Drag a card on the map, or from the device list onto the map, to place it freely. Moving it
+keeps its existing connections and leaves the other cards in place. Positions are saved in the
+project and retained when switching pages. Use **Arrange automatically** to return to the tree
+layout, or **Undo map edit** to undo the latest move or arrangement.
+
+Enable **Reconnect on drop** when you want dragging to change connections: dropping near a
+trunk joins it, and dropping away from every trunk disconnects the card. Disable it to return
+to placement. Changing modes cancels an unfinished drag. Undo is one step, is not saved in the
+project, and becomes unavailable after another network edit.
+
+Project saves now use format version 4. Older projects still open; earlier app versions cannot
+open a version 4 save.
 
 ## Icons
 

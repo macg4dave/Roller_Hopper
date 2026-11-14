@@ -484,10 +484,10 @@ mod tests {
     #[test]
     fn a_virtual_or_randomised_mac_tells_how_the_card_connects() {
         for (mac, kind, icon) in [
-            ("52:54:00:77:01:10", InterfaceKind::Virtual, VIRTUAL_ICON),
-            ("82:C5:00:39:61:21", InterfaceKind::Physical, WIRELESS_ICON),
+            ("52:54:00:00:00:01", InterfaceKind::Virtual, VIRTUAL_ICON),
+            ("82:00:00:00:00:01", InterfaceKind::Physical, WIRELESS_ICON),
             (
-                "00:17:88:6E:6C:5C",
+                "00:17:88:00:00:01",
                 InterfaceKind::Physical,
                 NetworkCard::DEFAULT_ICON,
             ),
