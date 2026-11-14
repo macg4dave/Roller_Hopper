@@ -16,6 +16,7 @@ impl AppState {
         if self.network.card(id).is_none() || !valid_position(at) {
             return;
         }
+        self.cancel_bubble_gesture();
         self.positions.insert(id, at);
         self.motion.place(id, at);
         self.dragging = Some(id);
@@ -23,7 +24,7 @@ impl AppState {
 
     /// Ends a drag without dropping, as when a card from the lists is taken off the map again:
     /// it glides back to its spot, plugged in where it was.
-    pub(super) fn cancel_drag(&mut self) {
+    pub(in crate::ui_bridge) fn cancel_drag(&mut self) {
         if self.dragging.take().is_some() {
             self.lay_out();
         }

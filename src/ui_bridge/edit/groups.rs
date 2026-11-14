@@ -69,6 +69,7 @@ pub(super) fn connect(ui: &AppWindow, state: &Rc<RefCell<AppState>>) {
     bridge.on_set_group_line_style(move |index, choice| set_style((index, choice)));
     bridge.on_delete_group(handler(ui, state, |st, index| {
         st.edit_group(convert::index(index), Network::remove_group);
+        st.arrangement.retain(&st.network);
     }));
     let restore = handler(ui, state, |st, ()| st.network.restore_standard_groups());
     bridge.on_restore_groups(move || restore(()));

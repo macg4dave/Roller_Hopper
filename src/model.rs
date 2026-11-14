@@ -44,7 +44,7 @@ pub(super) fn fresh_ids(used: impl Iterator<Item = u32>, count: usize) -> Option
     (ids.len() == count).then_some(ids)
 }
 
-pub(crate) use arrangement::{Arrangement, Level, valid_position};
+pub(crate) use arrangement::{Arrangement, Bubble, Level, valid_position};
 pub(crate) use card::{CardId, InterfaceKind, InterfaceState, MacAddr, NetworkCard};
 pub(crate) use device::{Device, DeviceId, DeviceKind, Icon, KindClue, LastSeen, Role, Status};
 pub(crate) use discovery::{

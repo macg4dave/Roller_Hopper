@@ -16,7 +16,7 @@ use crate::model::{Arrangement, Device, Network, Notes};
 /// Marks a file as a project, whatever it is called.
 const FORMAT: &str = "rhopper";
 /// The version this build writes. Older ones would be migrated here; newer ones are refused.
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 /// What every project file's name ends with.
 pub(crate) const EXTENSION: &str = "rhopper.json";
 
@@ -252,15 +252,21 @@ mod tests {
     }
 
     #[test]
-    fn older_projects_migrate_and_saves_are_version_four() {
+    fn older_projects_migrate_and_saves_are_version_five() {
         let project = sample();
         let mut old: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
-        old["version"] = 1.into();
-        let migrated = parse(&serde_json::to_vec(&old).unwrap()).unwrap();
-        assert_eq!(migrated, project);
+        old["project"]["arrangement"]
+            .as_object_mut()
+            .unwrap()
+            .remove("bubbles");
+        for version in 1..=4 {
+            old["version"] = version.into();
+            let migrated = parse(&serde_json::to_vec(&old).unwrap()).unwrap();
+            assert_eq!(migrated, project);
+        }
 
         let written: serde_json::Value = serde_json::from_slice(&saved(&project)).unwrap();
-        assert_eq!(written["version"], 4);
+        assert_eq!(written["version"], 5);
     }
 
     #[test]
@@ -339,7 +345,7 @@ mod tests {
         assert_eq!(parse(b"{\"a\": 1}"), Err(OpenError::NotProject));
         let other = br#"{"format": "other", "version": 1, "project": {}}"#;
         assert_eq!(parse(other), Err(OpenError::NotProject));
-        let newer = br#"{"format": "rhopper", "version": 5, "project": {}}"#;
+        let newer = br#"{"format": "rhopper", "version": 6, "project": {}}"#;
         assert_eq!(parse(newer), Err(OpenError::Newer));
         let empty = br#"{"format": "rhopper", "version": 1, "project": {}}"#;
         assert_eq!(parse(empty), Err(OpenError::Damaged));

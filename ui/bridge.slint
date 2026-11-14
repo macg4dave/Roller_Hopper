@@ -424,7 +424,29 @@ export struct MapNote {
     colour: GroupColour,
 }
 
+export struct BubbleView {
+    group-index: int,
+    name: string,
+    colour: GroupColour,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    can-join: bool,
+    can-leave: bool,
+}
+
 export global Bridge {
+    in property <float> bubble-default-width;
+    in property <float> bubble-default-height;
+    in property <[BubbleView]> bubbles;
+    callback add-bubble(string, float, float);
+    callback set-bubble-member(int, bool);
+    callback change-bubble-geometry(int, float, float, bool);
+    callback finish-bubble-gesture();
+    callback cancel-bubble-gesture();
+    callback remove-bubble(int);
+    callback rename-bubble(int, string);
     in property <[MapNote]> map-notes;
     callback add-map-note(int, int);
     callback edit-map-note(int, string);

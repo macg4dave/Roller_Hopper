@@ -9,6 +9,7 @@
 //! [`icons`] reads the icon folder.
 
 mod ai_import;
+mod bubbles;
 mod convert;
 mod discovery;
 mod edit;
@@ -67,6 +68,8 @@ pub(crate) struct AppState {
     reconnect_cards: bool,
     /// The latest map edit, retained only for a guarded one-step undo.
     map_undo: Option<map::MapUndo>,
+    /// The arrangement before a continuous bubble move or resize; committed on release.
+    bubble_gesture: Option<Arrangement>,
     /// A deterministic topology proposal waiting for the user to review.
     auto_map: Option<AutoMapProposal>,
     /// The inferred links replaced by the latest applied proposal, for one-step undo.
@@ -127,6 +130,7 @@ impl AppState {
             dragging: None,
             reconnect_cards: false,
             map_undo: None,
+            bubble_gesture: None,
             auto_map: None,
             auto_map_undo: None,
             selected: None,
@@ -222,6 +226,7 @@ pub(crate) fn connect(
     }));
     edit::connect(ui, state);
     map::connect(ui, state);
+    bubbles::connect(ui, state);
     notes::connect(ui, state);
     discovery::connect(ui, state);
     ai_import::connect(ui, state, worker, ai_events);

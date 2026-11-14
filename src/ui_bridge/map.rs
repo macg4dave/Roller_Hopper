@@ -120,7 +120,8 @@ impl AppState {
     fn arrange_automatically(&mut self) {
         self.cancel_drag();
         let network = self.network.clone();
-        let arrangement = std::mem::take(&mut self.arrangement);
+        let arrangement = self.arrangement.clone();
+        self.arrangement.reset_layout(&self.network);
         self.lay_out_at_rest();
         self.remember_map_edit(network, arrangement);
     }
@@ -128,6 +129,7 @@ impl AppState {
     fn lay_out(&mut self) {
         self.arrangement.retain(&self.network);
         self.positions = tree_layout(&self.network, &self.arrangement);
+        self.arrangement.fit_bubbles(&self.network, &self.positions);
     }
 
     /// Lays the map out again at rest: it is out of sight on the edit page, where the network
@@ -364,7 +366,13 @@ fn push_preview(bridge: &Bridge<'_>, state: &AppState, strand: Option<&Snap>) {
         bridge.set_lines(model);
     }
     bridge.set_bounds(convert::bounds(
-        on_map.values().copied().chain(state.notes.corners()),
+        on_map.values().copied().chain(state.notes.corners()).chain(
+            state
+                .arrangement
+                .bubbles()
+                .iter()
+                .flat_map(crate::model::Bubble::corners),
+        ),
     ));
 }
 

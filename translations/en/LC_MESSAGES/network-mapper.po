@@ -1536,3 +1536,27 @@ msgstr "Reconnect on drop"
 
 msgid "map.arrange"
 msgstr "Arrange automatically"
+
+msgid "bubble.add"
+msgstr "Add bubble group"
+
+msgid "bubble.new-name"
+msgstr "New bubble group name"
+
+msgid "bubble.name"
+msgstr "Bubble group name"
+
+msgid "bubble.move"
+msgstr "Move group"
+
+msgid "bubble.resize"
+msgstr "Resize group"
+
+msgid "bubble.delete"
+msgstr "Remove bubble (keep devices)"
+
+msgid "bubble.join"
+msgstr "Move selected here"
+
+msgid "bubble.leave"
+msgstr "Move selected out"

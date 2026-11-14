@@ -1,4 +1,4 @@
-import { Button, CheckBox } from "std-widgets.slint";
+import { Button, CheckBox, LineEdit } from "std-widgets.slint";
 import { Bridge, DeviceView } from "bridge.slint";
 import { Theme } from "theme.slint";
 import { MapKey } from "map-key.slint";
@@ -6,6 +6,7 @@ import { ViewOptions } from "view-options.slint";
 import { JoinBlob } from "components/join-blob.slint";
 import { StickyNote } from "components/sticky-note.slint";
 import { MapNode } from "components/map-node.slint";
+import { BubbleGroup } from "components/bubble-group.slint";
 
 // The pannable, zoomable topology map. Pan and zoom are visual state and live here.
 export component TopologyCanvas inherits Rectangle {
@@ -24,6 +25,7 @@ export component TopologyCanvas inherits Rectangle {
     }
     // Keep fitting the map to the view on resize until the user pans or zooms by hand.
     property <bool> auto-fit: true;
+    property <string> bubble-name;
     property <length> grid: Theme.grid-spacing * zoom;
 
     background: Theme.background;
@@ -140,6 +142,12 @@ export component TopologyCanvas inherits Rectangle {
         height: Bridge.bounds.height * 1px;
         transform-origin: { x: 0, y: 0 };
         transform-scale: zoom;
+
+        for bubble in Bridge.bubbles: BubbleGroup {
+            bubble: bubble;
+            x: (bubble.x - Bridge.bounds.x) * 1px;
+            y: (bubble.y - Bridge.bounds.y) * 1px;
+        }
 
         // Layer 2 membership is a coloured region, separate from cable and virtual links.
         for segment in Bridge.segments: Rectangle {
@@ -342,6 +350,29 @@ export component TopologyCanvas inherits Rectangle {
                     auto-fit = false;
                     Bridge.add-map-note((root.width / 2 - target-pan-x) / target-zoom / 1px,
                         (root.height / 2 - target-pan-y) / target-zoom / 1px);
+                }
+            }
+            LineEdit {
+                placeholder-text: @tr("bubble.new-name");
+                accessible-label: @tr("bubble.new-name");
+                text <=> root.bubble-name;
+            }
+            Button {
+                text: @tr("bubble.add");
+                enabled: root.bubble-name != "";
+                clicked => {
+                    // Fit the initial frame beside the controls, with its move grip exposed.
+                    let margin = Theme.space-l;
+                    let new-zoom = clamp(min(
+                        (root.width - controls.preferred-width - 3 * margin) / (Bridge.bubble-default-width * 1px),
+                        (root.height - 2 * margin) / (Bridge.bubble-default-height * 1px)), 0.25, 1);
+                    zoom-at(root.width / 2, root.height / 2, new-zoom / target-zoom);
+                    auto-fit = false;
+                    let centre-x = controls.preferred-width + 2 * margin + Bridge.bubble-default-width * new-zoom * 1px / 2;
+                    Bridge.add-bubble(root.bubble-name,
+                        (centre-x - target-pan-x) / target-zoom / 1px,
+                        (root.height / 2 - target-pan-y) / target-zoom / 1px);
+                    root.bubble-name = "";
                 }
             }
             if Bridge.can-undo-auto-map: Button {

@@ -64,16 +64,28 @@ The models under `tools/a.i.testmodels/` are development assets for the GPU smok
 
 Drag a card on the map, or from the device list onto the map, to place it freely. Moving it
 keeps its existing connections and leaves the other cards in place. Positions are saved in the
-project and retained when switching pages. Use **Arrange automatically** to return to the tree
-layout, or **Undo map edit** to undo the latest move or arrangement.
+project and retained when switching pages. Use **Arrange automatically** to return ungrouped
+cards to the tree layout, or **Undo map edit** to undo the latest move or arrangement.
 
 Enable **Reconnect on drop** when you want dragging to change connections: dropping near a
 trunk joins it, and dropping away from every trunk disconnects the card. Disable it to return
 to placement. Changing modes cancels an unfinished drag. Undo is one step, is not saved in the
 project, and becomes unavailable after another network edit.
 
-Project saves now use format version 4. Older projects still open; earlier app versions cannot
-open a version 4 save.
+To organise machines spatially, enter a name in **New bubble group name** and click **Add bubble
+group**. Select a device, then use **Move selected here** inside a bubble to bring all its cards
+into that group. **Move selected out** places them beside it. Membership is explicit: dragging
+an individual card keeps its membership, and the bubble expands to contain it.
+
+Drag the bubble's upper-left grip to move it with all its members; use the lower-right grip to
+resize it. The frame cannot shrink over its devices. Edit its name or colour in the header.
+Removing a bubble keeps the devices and connections. Group names and colours are shared with
+the existing group editor; bubble membership is independent of roles and VM hosts. Group moves,
+resizes and membership changes support **Undo map edit**. Automatic arrangement preserves bubbles
+and their members' positions.
+
+Project saves now use format version 5. Versions 1–4 still open; earlier app versions cannot
+open a version 5 save.
 
 ## Icons
 

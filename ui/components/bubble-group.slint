@@ -1,0 +1,98 @@
+import { Button } from "std-widgets.slint";
+import { Bridge, BubbleView } from "../bridge.slint";
+import { Theme } from "../theme.slint";
+import { NameBox } from "name-box.slint";
+import { ColourPicker } from "colour-picker.slint";
+
+// Header and resize grip catch input; the interior leaves cards and panning accessible.
+export component BubbleGroup inherits Rectangle {
+    in property <BubbleView> bubble;
+    width: bubble.width * 1px;
+    height: bubble.height * 1px;
+    border-radius: Theme.panel-radius;
+    border-width: Theme.line-width;
+    border-color: Theme.group-colour(bubble.colour, Theme.accent).with-alpha(0.55);
+    background: Theme.group-colour(bubble.colour, Theme.accent).with-alpha(0.05);
+    accessible-role: groupbox;
+    accessible-label: bubble.name;
+
+    VerticalLayout {
+        height: self.preferred-height;
+        x: Theme.space-s;
+        y: Theme.space-s;
+        width: parent.width - 2 * Theme.space-s;
+        spacing: Theme.space-s;
+        HorizontalLayout {
+            spacing: Theme.space-s;
+            Rectangle {
+                width: Theme.header-height;
+                Image { source: @image-url("../icons/fit.svg"); colorize: Theme.text-muted; }
+                move := TouchArea {
+                    accessible-role: button;
+                    accessible-label: @tr("bubble.move");
+                    mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+                    moved => {
+                        Bridge.change-bubble-geometry(bubble.group-index,
+                            bubble.x + (self.mouse-x - self.pressed-x) / 1px,
+                            bubble.y + (self.mouse-y - self.pressed-y) / 1px, false);
+                    }
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.up { Bridge.finish-bubble-gesture(); }
+                        if event.kind == PointerEventKind.cancel { Bridge.cancel-bubble-gesture(); }
+                    }
+                }
+            }
+            NameBox {
+                horizontal-stretch: 1;
+                name: bubble.name;
+                field-label: @tr("bubble.name");
+                commit(text) => { Bridge.rename-bubble(bubble.group-index, text); }
+            }
+            ColourPicker {
+                selected: bubble.colour;
+                picked(colour) => { Bridge.set-group-colour(bubble.group-index, colour); }
+            }
+            Button {
+                icon: @image-url("../icons/delete.svg");
+                colorize-icon: true;
+                accessible-label: @tr("bubble.delete");
+                clicked => { Bridge.remove-bubble(bubble.group-index); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-s;
+            Button {
+                text: @tr("bubble.join");
+                enabled: bubble.can-join;
+                clicked => { Bridge.set-bubble-member(bubble.group-index, true); }
+            }
+            Button {
+                text: @tr("bubble.leave");
+                enabled: bubble.can-leave;
+                clicked => { Bridge.set-bubble-member(bubble.group-index, false); }
+            }
+        }
+    }
+    Image {
+        x: parent.width - self.width - Theme.space-xs;
+        y: parent.height - self.height - Theme.space-xs;
+        width: Theme.header-height;
+        height: self.width;
+        source: @image-url("../icons/fit.svg");
+        colorize: Theme.text-muted;
+        resize := TouchArea {
+            accessible-role: button;
+            accessible-label: @tr("bubble.resize");
+            mouse-cursor: MouseCursor.grab;
+            moved => {
+                Bridge.change-bubble-geometry(bubble.group-index,
+                    bubble.width + (self.mouse-x - self.pressed-x) / 1px,
+                    bubble.height + (self.mouse-y - self.pressed-y) / 1px, true);
+            }
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.up { Bridge.finish-bubble-gesture(); }
+                if event.kind == PointerEventKind.cancel { Bridge.cancel-bubble-gesture(); }
+            }
+        }
+    }
+}

@@ -381,7 +381,7 @@ pub(super) fn address(text: &str) -> Option<Ipv4Net> {
 }
 
 /// The group as shown to the user: as typed if the user named it, otherwise translated.
-fn group_label(labels: &Labels<'_>, name: &GroupName) -> SharedString {
+pub(super) fn group_label(labels: &Labels<'_>, name: &GroupName) -> SharedString {
     let standard = match name {
         GroupName::Named(name)
         | GroupName::Standard {

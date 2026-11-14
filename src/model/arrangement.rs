@@ -10,6 +10,9 @@ use super::card::CardId;
 use super::layout::{Point, Positions};
 use super::network::Network;
 
+mod bubbles;
+pub(crate) use bubbles::Bubble;
+
 /// Which side of a trunk a device hangs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Side {
@@ -78,6 +81,8 @@ pub(crate) struct Arrangement {
     /// Explicit map positions, independent of the physical connections and tree tiers.
     #[serde(default)]
     positions: BTreeMap<CardId, Point>,
+    #[serde(default)]
+    bubbles: Vec<Bubble>,
 }
 
 impl Arrangement {
@@ -106,6 +111,7 @@ impl Arrangement {
     /// stale, duplicated, or deliberately inflated arrangement data; keeping it would bloat every
     /// later save even though [`Self::tiers`] ignores it while drawing.
     pub(crate) fn retain(&mut self, network: &Network) {
+        self.retain_bubbles(network);
         let cards: HashSet<_> = network.nodes().into_iter().collect();
         self.positions
             .retain(|id, at| cards.contains(id) && valid_position(*at));
@@ -330,6 +336,7 @@ mod tests {
     fn stale_misplaced_and_duplicate_saved_entries_are_discarded() {
         let network = mock_data::network();
         let mut arrangement = Arrangement {
+            bubbles: Vec::new(),
             positions: BTreeMap::new(),
             tiers: BTreeMap::from([
                 (

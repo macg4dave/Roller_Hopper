@@ -13,7 +13,11 @@ pub(in crate::ui_bridge) struct MapUndo {
 }
 
 impl AppState {
-    pub(super) fn remember_map_edit(&mut self, network: Network, arrangement: Arrangement) {
+    pub(in crate::ui_bridge) fn remember_map_edit(
+        &mut self,
+        network: Network,
+        arrangement: Arrangement,
+    ) {
         if network != self.network || arrangement != self.arrangement {
             self.map_undo = Some(MapUndo {
                 before_network: network,
@@ -26,6 +30,7 @@ impl AppState {
 
     pub(in crate::ui_bridge) fn can_undo_map_edit(&self) -> bool {
         self.dragging.is_none()
+            && self.bubble_gesture.is_none()
             && self.map_undo.as_ref().is_some_and(|undo| {
                 self.network == undo.after_network && self.arrangement == undo.after_arrangement
             })
